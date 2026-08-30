@@ -234,37 +234,37 @@
 
   <div class="toast" id="toast"></div>
   <div class="auth-modal" id="authModal">
-      <div class="auth-card">
-        <div class="auth-hero">
-          <div class="brand-mark auth-mark">₽</div>
-          <div class="auth-bubble">☁</div>
-        </div>
-        <div class="overline" id="authOverline">ЛИЧНЫЙ КАБИНЕТ</div>
-        <h2 id="authTitle">Твоя зарплата. Всегда с тобой.</h2>
-        <p id="authSubtitle">Создай аккаунт, чтобы смены, календарь и статистика сохранялись в облаке и не пропадали при смене телефона.</p>
-
-        <div class="auth-tabs">
-          <button class="auth-tab active" id="tabLogin">Войти</button>
-          <button class="auth-tab" id="tabSignup">Регистрация</button>
-        </div>
-
-        <div id="signupNameWrap" class="hidden">
-          <label class="field-label">Как тебя зовут?<input id="authName" type="text" autocomplete="name" placeholder="Например, Аня" maxlength="40"></label>
-        </div>
-        <label class="field-label">Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
-        <label class="field-label">Пароль<input id="authPassword" type="password" autocomplete="new-password" placeholder="Минимум 6 символов"></label>
-        <div id="confirmPasswordWrap" class="hidden">
-          <label class="field-label">Повтори пароль<input id="authPassword2" type="password" autocomplete="new-password" placeholder="Ещё раз пароль"></label>
-        </div>
-        <label class="auth-check hidden" id="termsWrap"><input id="authTerms" type="checkbox"><span>Я согласна с тем, что мои данные хранятся в моём аккаунте.</span></label>
-
-        <button class="save-btn" id="authAction">Войти</button>
-        <button class="auth-link hidden" id="forgotBtn">Забыли пароль?</button>
-        <div class="auth-status" id="authStatus"></div>
-        <div class="auth-foot">🔒 Данные принадлежат только твоему аккаунту</div>
-      </div>
+  <div class="auth-card">
+    <div id="authWelcome">
+      <div class="auth-hero"><div class="brand-mark auth-mark">₽</div><div class="auth-bubble">☁</div></div>
+      <div class="overline">ЛИЧНЫЙ КАБИНЕТ</div>
+      <h2>Моя зарплата</h2>
+      <p>Твои смены, заработок и календарь будут сохранены в облаке.</p>
+      <button class="save-btn" id="goLogin">Войти</button>
+      <button class="auth-secondary" id="goSignup">Регистрация</button>
+      <div class="auth-foot">🔒 Данные принадлежат только твоему аккаунту</div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <div id="authForm" class="hidden">
+      <button class="back-auth" id="backAuth">‹ Назад</button>
+      <div class="overline" id="authOverline">ВХОД</div>
+      <h2 id="authTitle">С возвращением ✨</h2>
+      <p id="authSubtitle">Введи логин и пароль, чтобы открыть приложение.</p>
+      <div id="signupNameWrap" class="hidden">
+        <label class="field-label">Имя<input id="authName" type="text" autocomplete="name" placeholder="Например, Аня" maxlength="40"></label>
+      </div>
+      <label class="field-label">Логин<input id="authLogin" type="text" autocomplete="username" autocapitalize="none" placeholder="Придумай логин" maxlength="32"></label>
+      <label class="field-label">Пароль<input id="authPassword" type="password" autocomplete="new-password" placeholder="Минимум 6 символов"></label>
+      <div id="confirmPasswordWrap" class="hidden">
+        <label class="field-label">Повтори пароль<input id="authPassword2" type="password" autocomplete="new-password" placeholder="Ещё раз пароль"></label>
+      </div>
+      <button class="save-btn" id="authAction">Войти</button>
+      <div class="auth-status" id="authStatus"></div>
+      <div class="auth-switch" id="authSwitch">Нет аккаунта? <button id="switchAuth">Зарегистрироваться</button></div>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
 </body>
 </html>
