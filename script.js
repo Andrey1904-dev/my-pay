@@ -24,14 +24,6 @@ function plural(n,a,b,c){n=Math.abs(n)%100;const x=n%10;return n>10&&n<20?c:x>1&
 function showToast(t){const x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(showToast.t);showToast.t=setTimeout(()=>x.classList.remove("show"),2200)}
 function setStatus(t){$("authStatus").textContent=t||""}
 
-function usernameEmail(username){
-  const clean=username.trim().toLowerCase();
-  const bytes=new TextEncoder().encode(clean);
-  let hex="";for(const b of bytes)hex+=b.toString(16).padStart(2,"0");
-  return `u.${hex}@dyixwxxpjmyycgigcbtx.supabase.co`;
-}
-function validUsername(u){return /^[a-zA-Zа-яА-ЯёЁ0-9._-]{3,32}$/.test(u.trim())}
-
 function showAuth(show){$("authModal").classList.toggle("hidden",!show)}
 function setAuthMode(mode){
   authMode=mode;
@@ -49,38 +41,44 @@ function setAuthMode(mode){
 function backAuth(){$("authForm").classList.add("hidden");$("authWelcome").classList.remove("hidden");setStatus("")}
 
 async function authAction(){
-  const username=$("authLogin").value.trim(),password=$("authPassword").value;
-  if(!validUsername(username)){setStatus("Логин: 3–32 символа. Можно буквы, цифры, точку, _ и -.");return}
-  if(password.length<6){setStatus("Пароль должен быть не короче 6 символов.");return}
-  $("authAction").disabled=true;$("authAction").textContent="Секунду…";
-  const email=usernameEmail(username);
+  const email=$('authEmail').value.trim().toLowerCase(),password=$('authPassword').value;
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setStatus('Укажи корректный email.');return}
+  if(password.length<6){setStatus('Пароль должен быть минимум 6 символов.');return}
+  $('authAction').disabled=true;$('authAction').textContent='Секунду…';
   try{
-    if(authMode==="login"){
+    if(authMode==='login'){
       const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
       if(error){
-        if(error.status===0 || /fetch|network|failed to fetch/i.test(error.message||"")) throw new Error("Нет соединения с сервером.");
-        throw new Error("Неверный логин или пароль.");
+        const m=(error.message||'').toLowerCase();
+        if(error.status===0 || /fetch|network|failed to fetch/i.test(m)) throw new Error('Нет соединения с сервером.');
+        if(/email not confirmed/i.test(m)) throw new Error('Подтверждение email включено. Отключи Confirm email в настройках Supabase.');
+        throw new Error('Неверный email или пароль.');
       }
-      currentUser=data.user;await afterLogin();setStatus("");
+      currentUser=data.user;await afterLogin();setStatus('');
     }else{
-      const name=$("authName").value.trim(),p2=$("authPassword2").value;
-      if(name.length<2)throw new Error("Напиши имя.");
-      if(password!==p2)throw new Error("Пароли не совпадают.");
-      const {data,error}=await supabaseClient.auth.signUp({email,password,data:{name:name.trim(),username:username.toLowerCase()}});
+      const name=$('authName').value.trim(),p2=$('authPassword2').value;
+      if(name.length<2)throw new Error('Напиши имя.');
+      if(password!==p2)throw new Error('Пароли не совпадают.');
+      const {data,error}=await supabaseClient.auth.signUp({email,password,data:{name:name.trim()}});
       if(error){
-        const m=(error.message||"").toLowerCase();
-        if(/already registered|already been registered|user already registered/i.test(m)) throw new Error("Этот логин уже занят.");
-        if(/email provider is disabled|email signups are disabled/i.test(m)) throw new Error("Регистрация отключена в настройках Supabase. Включи Authentication → Providers → Email.");
-        if(/password.*(6|characters)|weak password/i.test(m)) throw new Error("Пароль должен быть минимум 6 символов.");
-        if(/fetch|network|failed to fetch/i.test(m)) throw new Error("Нет соединения с сервером.");
-        throw new Error(error.message||"Не удалось создать аккаунт.");
+        const m=(error.message||'').toLowerCase();
+        if(/already registered|already been registered|user already registered/i.test(m)) throw new Error('Этот email уже зарегистрирован.');
+        if(/email provider is disabled|email signups are disabled/i.test(m)) throw new Error('Регистрация отключена. Включи Authentication → Providers → Email.');
+        if(/invalid.*email|email.*invalid/i.test(m)) throw new Error('Укажи корректный email.');
+        if(/password.*(6|characters)|weak password/i.test(m)) throw new Error('Пароль должен быть минимум 6 символов.');
+        if(/fetch|network|failed to fetch/i.test(m)) throw new Error('Нет соединения с сервером.');
+        throw new Error(error.message||'Не удалось создать аккаунт.');
       }
-      if(!data.user)throw new Error("Не удалось создать аккаунт.");
-      if(!data.session)throw new Error("В Supabase включено подтверждение email. Отключи Confirm email в Authentication → Providers → Email.");
+      if(!data.user)throw new Error('Не удалось создать аккаунт.');
+      if(!data.session)throw new Error('Подтверждение email включено. Отключи Confirm email в Authentication → Providers → Email.');
       currentUser=data.user;
-      await cloudSaveProfile(name,username);await ensureCloudDefaults();await afterLogin();showToast("Аккаунт создан. Добро пожаловать ✨");
+      const profileResult=await cloudSaveProfile(name);
+      if(!profileResult)throw new Error('Аккаунт создан, но не удалось сохранить профиль. Проверь SQL-схему и RLS.');
+      const settingsResult=await ensureCloudDefaults();
+      if(!settingsResult)throw new Error('Аккаунт создан, но не удалось сохранить настройки. Проверь SQL-схему и RLS.');
+      await afterLogin();showToast('Аккаунт создан. Добро пожаловать ✨');
     }
-  }catch(e){setStatus(e.message||"Что-то пошло не так.")}finally{$("authAction").disabled=false;$("authAction").textContent=authMode==="signup"?"Создать аккаунт":"Войти"}
+  }catch(e){setStatus(e.message||'Что-то пошло не так.')}finally{$('authAction').disabled=false;$('authAction').textContent=authMode==='signup'?'Создать аккаунт':'Войти'}
 }
 async function afterLogin(){showAuth(false);await cloudLoad();updateProfileUI();updateHome();renderCalendar();renderStats()}
 
@@ -97,13 +95,15 @@ async function cloudLoad(){
   currentProfile=c.data||{id:currentUser.id,name:currentUser.user_metadata?.name||""};save()
 }
 async function ensureCloudDefaults(){
-  if(!currentUser)return;
-  await supabaseClient.from("settings").upsert({user_id:currentUser.id,base_pay:state.settings.basePay,holiday_pay:state.settings.holidayPay,case_price:state.settings.casePrice,piece_percent:state.settings.percent,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:"user_id"});
+  if(!currentUser)return false;
+  const {error}=await supabaseClient.from('settings').upsert({user_id:currentUser.id,base_pay:state.settings.basePay,holiday_pay:4050,case_price:state.settings.casePrice,piece_percent:state.settings.percent,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:'user_id'});
+  return !error;
 }
-async function cloudSaveProfile(name,username){
-  if(!currentUser)return;
-  const {data,error}=await supabaseClient.from("profiles").upsert({id:currentUser.id,name:name.trim(),username:username.trim().toLowerCase()},{onConflict:"id"}).select().single();
-  if(!error)currentProfile=data
+async function cloudSaveProfile(name){
+  if(!currentUser)return false;
+  const {data,error}=await supabaseClient.from('profiles').upsert({id:currentUser.id,name:name.trim()},{onConflict:'id'}).select().single();
+  if(!error)currentProfile=data;
+  return !error;
 }
 async function cloudSaveSettings(){
   if(!currentUser)return;
