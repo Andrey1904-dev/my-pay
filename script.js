@@ -28,7 +28,7 @@ function usernameEmail(username){
   const clean=username.trim().toLowerCase();
   const bytes=new TextEncoder().encode(clean);
   let hex="";for(const b of bytes)hex+=b.toString(16).padStart(2,"0");
-  return `u.${hex}@login.my-pay.app`;
+  return `u.${hex}@dyixwxxpjmyycgigcbtx.supabase.co`;
 }
 function validUsername(u){return /^[a-zA-Zа-яА-ЯёЁ0-9._-]{3,32}$/.test(u.trim())}
 
