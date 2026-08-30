@@ -1,0 +1,10 @@
+{
+  "name": "Моя зарплата",
+  "short_name": "Моя зарплата",
+  "description": "Личный калькулятор зарплаты и графика 2/2",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#0d0f14",
+  "lang": "ru"
+}

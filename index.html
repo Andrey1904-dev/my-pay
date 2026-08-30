@@ -3,173 +3,235 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111827">
+  <meta name="theme-color" content="#0d0f14">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Моя зарплата">
+  <meta name="description" content="Личный калькулятор зарплаты и графика 2/2">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <title>Моя зарплата</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
+  <div class="app-shell">
     <header class="topbar">
-      <div>
-        <div class="eyebrow">ЛИЧНЫЙ КАЛЬКУЛЯТОР</div>
-        <h1>Моя зарплата</h1>
+      <div class="brand">
+        <div class="brand-mark">₽</div>
+        <div>
+          <div class="brand-title">Моя зарплата</div>
+          <div class="brand-subtitle">Личный расчёт • 2/2</div>
+        </div>
       </div>
-      <button class="icon-btn" id="settingsBtn" aria-label="Настройки">⚙️</button>
+      <button class="round-icon" id="settingsBtn" aria-label="Настройки">⚙</button>
     </header>
 
-    <main>
-      <section class="tab-panel active" id="homePanel">
-        <div class="hero-card">
-          <div class="hero-label">ЗА СМЕНУ</div>
-          <div class="hero-value" id="shiftTotal">0 ₽</div>
-          <div class="hero-note" id="shiftHint">Введи количество чехлов ниже</div>
-        </div>
-
-        <div class="input-card">
-          <label for="casesInput">📦 Чехлов упаковано</label>
-          <div class="number-row">
-            <button class="round-btn" data-step="-100">−</button>
-            <input id="casesInput" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
-            <button class="round-btn" data-step="100">+</button>
+    <main class="content">
+      <section class="screen active" id="homeScreen">
+        <div class="greeting">
+          <div>
+            <div class="overline" id="todayLabel">СЕГОДНЯ</div>
+            <h1 id="greetingTitle">Моя смена</h1>
           </div>
+          <div class="today-badge" id="todayBadge">—</div>
         </div>
 
-        <div class="stats-grid">
-          <div class="stat-card">
-            <span>Ставка</span>
-            <strong id="basePay">2 150 ₽</strong>
+        <article class="earnings-card">
+          <div class="earnings-top">
+            <span id="earningsCaption">ЗА СМЕНУ</span>
+            <span class="holiday-chip hidden" id="holidayChip">ПРАЗДНИК ×2</span>
           </div>
-          <div class="stat-card">
-            <span>Сделка</span>
-            <strong id="piecePay">0 ₽</strong>
+          <div class="earnings-total" id="shiftTotal">0 ₽</div>
+          <div class="earnings-breakdown">
+            <span>Ставка <b id="homeBase">2 150 ₽</b></span>
+            <span>Сделка <b id="homePiece">0 ₽</b></span>
           </div>
+          <div class="earnings-glow"></div>
+        </article>
+
+        <div class="section-label">Сколько упаковано?</div>
+        <article class="cases-card">
+          <div class="stepper">
+            <button class="step-btn" data-step="-100" aria-label="Уменьшить">−</button>
+            <div class="cases-input-wrap">
+              <input id="casesInput" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+              <span>чехлов</span>
+            </div>
+            <button class="step-btn" data-step="100" aria-label="Увеличить">+</button>
+          </div>
+          <div class="quick-row">
+            <button data-add="100">+100</button>
+            <button data-add="500">+500</button>
+            <button data-add="1000">+1000</button>
+            <button data-add="5000">+5000</button>
+          </div>
+        </article>
+
+        <article class="holiday-card" id="holidayCard">
+          <div class="holiday-icon">★</div>
+          <div class="holiday-copy">
+            <b>Праздничная смена</b>
+            <span>Ставка будет <strong>4 050 ₽</strong></span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="holidayInput">
+            <span></span>
+          </label>
+        </article>
+
+        <div class="section-label">Твой результат</div>
+        <div class="mini-grid">
+          <article class="mini-card">
+            <span>За 1 чехол</span>
+            <strong id="perCase">1,40 ₽</strong>
+          </article>
+          <article class="mini-card">
+            <span>За 1000 чехлов</span>
+            <strong id="perThousand">1 400 ₽</strong>
+          </article>
         </div>
 
-        <div class="formula-card">
-          <div class="formula-title">Как считается</div>
-          <div class="formula-line"><span>1 чехол</span><b id="pricePerCaseText">7 ₽</b></div>
-          <div class="formula-line"><span>Тебе идёт</span><b id="percentText">20%</b></div>
-          <div class="formula-example" id="formulaExample">1000 × 7 ₽ × 20% = 1 400 ₽</div>
-        </div>
-
-        <button class="primary-btn" id="saveShiftBtn">Сохранить смену</button>
-        <div class="saved-message" id="savedMessage"></div>
+        <button class="save-btn" id="saveShiftBtn">
+          <span>Сохранить смену</span>
+          <span>→</span>
+        </button>
+        <div class="save-note" id="saveNote"></div>
       </section>
 
-      <section class="tab-panel" id="calendarPanel">
-        <div class="section-heading">
+      <section class="screen" id="calendarScreen">
+        <div class="page-head">
           <div>
-            <div class="eyebrow">ГРАФИК</div>
+            <div class="overline">ГРАФИК 2/2</div>
             <h2>Календарь</h2>
           </div>
-          <div class="month-controls">
-            <button class="small-btn" id="prevMonth">‹</button>
-            <span id="monthTitle"></span>
-            <button class="small-btn" id="nextMonth">›</button>
+          <div class="month-nav">
+            <button id="prevMonth">‹</button>
+            <strong id="monthTitle">—</strong>
+            <button id="nextMonth">›</button>
           </div>
         </div>
 
-        <div class="legend">
-          <span><i class="dot work"></i> Работа</span>
-          <span><i class="dot off"></i> Выходной</span>
-          <span><i class="dot saved"></i> Есть смена</span>
+        <div class="calendar-legend">
+          <span><i class="legend-dot work"></i>Работа</span>
+          <span><i class="legend-dot off"></i>Выходной</span>
+          <span><i class="legend-dot saved"></i>Смена внесена</span>
         </div>
 
-        <div class="calendar-card">
-          <div class="weekdays">
-            <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
-          </div>
-          <div class="days" id="calendarDays"></div>
-        </div>
+        <article class="calendar-card">
+          <div class="weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+          <div class="calendar-days" id="calendarDays"></div>
+        </article>
 
-        <div class="selected-day-card" id="selectedDayCard">
-          <div>
-            <div class="eyebrow">ВЫБРАННЫЙ ДЕНЬ</div>
+        <article class="selected-card" id="selectedCard">
+          <div class="selected-main">
+            <div class="overline">ВЫБРАННЫЙ ДЕНЬ</div>
             <h3 id="selectedDate">—</h3>
+            <span id="selectedStatus">—</span>
           </div>
-          <div class="selected-day-value" id="selectedDayValue">—</div>
-        </div>
+          <div class="selected-money" id="selectedMoney">—</div>
+        </article>
+
+        <button class="outline-btn" id="editSelectedBtn">✎ Внести / изменить смену</button>
       </section>
 
-      <section class="tab-panel" id="statsPanel">
-        <div class="section-heading">
+      <section class="screen" id="statsScreen">
+        <div class="page-head">
           <div>
-            <div class="eyebrow">СТАТИСТИКА</div>
-            <h2>Месяц</h2>
+            <div class="overline">ТВОЯ СТАТИСТИКА</div>
+            <h2>Результат</h2>
           </div>
-          <span class="month-pill" id="statsMonth"></span>
+          <span class="month-tag" id="statsMonth">—</span>
         </div>
 
-        <div class="big-stat">
-          <span>Заработано</span>
+        <article class="month-total-card">
+          <span>ЗАРАБОТАНО ЗА МЕСЯЦ</span>
           <strong id="monthTotal">0 ₽</strong>
+          <div class="month-meta"><span id="monthShiftsLabel">0 смен</span><span id="monthCasesLabel">0 чехлов</span></div>
+        </article>
+
+        <div class="stat-grid">
+          <article class="stat-box"><span>Средняя смена</span><strong id="avgShift">0 ₽</strong></article>
+          <article class="stat-box"><span>Сделка</span><strong id="monthPiece">0 ₽</strong></article>
+          <article class="stat-box"><span>Ставка</span><strong id="monthBase">0 ₽</strong></article>
+          <article class="stat-box"><span>Чехлов / смена</span><strong id="avgCases">0</strong></article>
         </div>
-        <div class="stats-grid">
-          <div class="stat-card">
-            <span>Смен</span>
-            <strong id="monthShifts">0</strong>
-          </div>
-          <div class="stat-card">
-            <span>Чехлов</span>
-            <strong id="monthCases">0</strong>
+
+        <article class="progress-card">
+          <div class="progress-head"><b>До цели месяца</b><strong id="goalPercent">0%</strong></div>
+          <div class="progress-track"><div id="goalBar"></div></div>
+          <div class="progress-bottom"><span id="goalCurrent">0 ₽</span><span id="goalText">Цель 60 000 ₽</span></div>
+        </article>
+
+        <article class="history-card">
+          <div class="history-head"><h3>Последние смены</h3><button class="text-btn" id="clearMonthBtn">Очистить</button></div>
+          <div id="historyList"></div>
+        </article>
+      </section>
+
+      <section class="screen" id="moreScreen">
+        <div class="page-head">
+          <div>
+            <div class="overline">ДАННЫЕ</div>
+            <h2>Ещё</h2>
           </div>
         </div>
 
-        <div class="breakdown-card">
-          <div class="breakdown-row"><span>Ставка</span><b id="monthBase">0 ₽</b></div>
-          <div class="breakdown-row"><span>Сделка</span><b id="monthPiece">0 ₽</b></div>
-          <div class="breakdown-row total"><span>Итого</span><b id="monthTotal2">0 ₽</b></div>
+        <article class="profile-card">
+          <div class="profile-avatar">₽</div>
+          <div><b>Мой расчёт</b><span>Все данные хранятся только на этом устройстве</span></div>
+        </article>
+
+        <div class="menu-list">
+          <button class="menu-item" id="openSettingsFromMore"><span class="menu-icon">⚙</span><span><b>Настройки расчёта</b><small>Ставка, сделка, график 2/2</small></span><i>›</i></button>
+          <button class="menu-item" id="exportBtn"><span class="menu-icon">↥</span><span><b>Сохранить резервную копию</b><small>Скачать данные в файл</small></span><i>›</i></button>
+          <button class="menu-item" id="importBtn"><span class="menu-icon">↧</span><span><b>Восстановить данные</b><small>Загрузить ранее сохранённую копию</small></span><i>›</i></button>
+          <button class="menu-item" id="installBtn"><span class="menu-icon">＋</span><span><b>Добавить на экран телефона</b><small>Работает как отдельное приложение</small></span><i>›</i></button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
         </div>
 
-        <div class="history-card">
-          <div class="card-title-row"><h3>Смены</h3><button class="text-btn" id="clearMonthBtn">Очистить месяц</button></div>
-          <div id="shiftHistory" class="history-list"></div>
-        </div>
+        <article class="tip-card">
+          <span>💡</span>
+          <div><b>Маленький лайфхак</b><p>Вводи количество чехлов сразу после смены. Так статистика будет точной, а деньги не придётся вспоминать по памяти.</p></div>
+        </article>
       </section>
     </main>
 
     <nav class="bottom-nav">
-      <button class="nav-btn active" data-tab="homePanel"><span>💰</span><small>Смена</small></button>
-      <button class="nav-btn" data-tab="calendarPanel"><span>📅</span><small>Календарь</small></button>
-      <button class="nav-btn" data-tab="statsPanel"><span>📊</span><small>Статистика</small></button>
+      <button class="nav-item active" data-screen="homeScreen"><span>⌂</span><small>Смена</small></button>
+      <button class="nav-item" data-screen="calendarScreen"><span>▦</span><small>Календарь</small></button>
+      <button class="nav-item" data-screen="statsScreen"><span>◒</span><small>Статистика</small></button>
+      <button class="nav-item" data-screen="moreScreen"><span>•••</span><small>Ещё</small></button>
     </nav>
   </div>
 
-  <div class="modal hidden" id="settingsModal">
-    <div class="modal-box">
-      <div class="modal-head">
-        <h2>Настройки</h2>
-        <button class="icon-btn" id="closeSettings">✕</button>
-      </div>
-      <p class="modal-subtitle">Измени параметры, если условия работы поменяются.</p>
-
-      <label>Ставка за смену, ₽
-        <input id="baseInput" type="number" min="0" step="50">
-      </label>
-      <label>Цена одного чехла, ₽
-        <input id="casePriceInput" type="number" min="0" step="0.1">
-      </label>
-      <label>Твоя доля от сделки, %
-        <input id="percentInput" type="number" min="0" max="100" step="1">
-      </label>
-
-      <div class="modal-divider"></div>
-      <div class="modal-head">
-        <div>
-          <h3>График 2/2</h3>
-          <p class="modal-subtitle">Укажи первый рабочий день. Дальше календарь построит 2 рабочих / 2 выходных.</p>
-        </div>
-      </div>
-      <label>Первый рабочий день
-        <input id="scheduleStartInput" type="date">
-      </label>
-
-      <button class="primary-btn" id="saveSettingsBtn">Сохранить настройки</button>
+  <div class="modal hidden" id="shiftModal">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><div><div class="overline">СМЕНА</div><h2 id="modalDate">—</h2></div><button class="close-btn" data-close="shiftModal">✕</button></div>
+      <label class="field-label">Количество чехлов<input id="modalCases" type="number" inputmode="numeric" min="0" step="1"></label>
+      <label class="modal-holiday"><span><b>Праздничная смена</b><small>Ставка 4 050 ₽</small></span><label class="switch"><input type="checkbox" id="modalHoliday"><span></span></label></label>
+      <div class="modal-preview"><span>Итого за смену</span><strong id="modalTotal">0 ₽</strong></div>
+      <button class="save-btn" id="modalSave">Сохранить</button>
+      <button class="delete-btn" id="modalDelete">Удалить смену</button>
     </div>
   </div>
 
+  <div class="modal hidden" id="settingsModal">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><div><div class="overline">ПАРАМЕТРЫ</div><h2>Настройки</h2></div><button class="close-btn" data-close="settingsModal">✕</button></div>
+      <p class="sheet-description">Здесь можно изменить условия, если на работе что-то поменяется.</p>
+      <label class="field-label">Обычная ставка, ₽<input id="settingBase" type="number" min="0" step="50"></label>
+      <label class="field-label">Праздничная ставка, ₽<input id="settingHoliday" type="number" min="0" step="50"></label>
+      <label class="field-label">Цена одного чехла, ₽<input id="settingPrice" type="number" min="0" step="0.1"></label>
+      <label class="field-label">Твоя доля от сделки, %<input id="settingPercent" type="number" min="0" max="100" step="1"></label>
+      <label class="field-label">Первый рабочий день<input id="settingStart" type="date"></label>
+      <label class="field-label">Цель на месяц, ₽<input id="settingGoal" type="number" min="0" step="1000"></label>
+      <button class="save-btn" id="settingsSave">Сохранить настройки</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
   <script src="script.js"></script>
 </body>
 </html>
