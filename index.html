@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Моя зарплата</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">ЛИЧНЫЙ КАЛЬКУЛЯТОР</div>
+        <h1>Моя зарплата</h1>
+      </div>
+      <button class="icon-btn" id="settingsBtn" aria-label="Настройки">⚙️</button>
+    </header>
+
+    <main>
+      <section class="tab-panel active" id="homePanel">
+        <div class="hero-card">
+          <div class="hero-label">ЗА СМЕНУ</div>
+          <div class="hero-value" id="shiftTotal">0 ₽</div>
+          <div class="hero-note" id="shiftHint">Введи количество чехлов ниже</div>
+        </div>
+
+        <div class="input-card">
+          <label for="casesInput">📦 Чехлов упаковано</label>
+          <div class="number-row">
+            <button class="round-btn" data-step="-100">−</button>
+            <input id="casesInput" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+            <button class="round-btn" data-step="100">+</button>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span>Ставка</span>
+            <strong id="basePay">2 150 ₽</strong>
+          </div>
+          <div class="stat-card">
+            <span>Сделка</span>
+            <strong id="piecePay">0 ₽</strong>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-title">Как считается</div>
+          <div class="formula-line"><span>1 чехол</span><b id="pricePerCaseText">7 ₽</b></div>
+          <div class="formula-line"><span>Тебе идёт</span><b id="percentText">20%</b></div>
+          <div class="formula-example" id="formulaExample">1000 × 7 ₽ × 20% = 1 400 ₽</div>
+        </div>
+
+        <button class="primary-btn" id="saveShiftBtn">Сохранить смену</button>
+        <div class="saved-message" id="savedMessage"></div>
+      </section>
+
+      <section class="tab-panel" id="calendarPanel">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">ГРАФИК</div>
+            <h2>Календарь</h2>
+          </div>
+          <div class="month-controls">
+            <button class="small-btn" id="prevMonth">‹</button>
+            <span id="monthTitle"></span>
+            <button class="small-btn" id="nextMonth">›</button>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span><i class="dot work"></i> Работа</span>
+          <span><i class="dot off"></i> Выходной</span>
+          <span><i class="dot saved"></i> Есть смена</span>
+        </div>
+
+        <div class="calendar-card">
+          <div class="weekdays">
+            <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+          </div>
+          <div class="days" id="calendarDays"></div>
+        </div>
+
+        <div class="selected-day-card" id="selectedDayCard">
+          <div>
+            <div class="eyebrow">ВЫБРАННЫЙ ДЕНЬ</div>
+            <h3 id="selectedDate">—</h3>
+          </div>
+          <div class="selected-day-value" id="selectedDayValue">—</div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="statsPanel">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">СТАТИСТИКА</div>
+            <h2>Месяц</h2>
+          </div>
+          <span class="month-pill" id="statsMonth"></span>
+        </div>
+
+        <div class="big-stat">
+          <span>Заработано</span>
+          <strong id="monthTotal">0 ₽</strong>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span>Смен</span>
+            <strong id="monthShifts">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Чехлов</span>
+            <strong id="monthCases">0</strong>
+          </div>
+        </div>
+
+        <div class="breakdown-card">
+          <div class="breakdown-row"><span>Ставка</span><b id="monthBase">0 ₽</b></div>
+          <div class="breakdown-row"><span>Сделка</span><b id="monthPiece">0 ₽</b></div>
+          <div class="breakdown-row total"><span>Итого</span><b id="monthTotal2">0 ₽</b></div>
+        </div>
+
+        <div class="history-card">
+          <div class="card-title-row"><h3>Смены</h3><button class="text-btn" id="clearMonthBtn">Очистить месяц</button></div>
+          <div id="shiftHistory" class="history-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="homePanel"><span>💰</span><small>Смена</small></button>
+      <button class="nav-btn" data-tab="calendarPanel"><span>📅</span><small>Календарь</small></button>
+      <button class="nav-btn" data-tab="statsPanel"><span>📊</span><small>Статистика</small></button>
+    </nav>
+  </div>
+
+  <div class="modal hidden" id="settingsModal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2>Настройки</h2>
+        <button class="icon-btn" id="closeSettings">✕</button>
+      </div>
+      <p class="modal-subtitle">Измени параметры, если условия работы поменяются.</p>
+
+      <label>Ставка за смену, ₽
+        <input id="baseInput" type="number" min="0" step="50">
+      </label>
+      <label>Цена одного чехла, ₽
+        <input id="casePriceInput" type="number" min="0" step="0.1">
+      </label>
+      <label>Твоя доля от сделки, %
+        <input id="percentInput" type="number" min="0" max="100" step="1">
+      </label>
+
+      <div class="modal-divider"></div>
+      <div class="modal-head">
+        <div>
+          <h3>График 2/2</h3>
+          <p class="modal-subtitle">Укажи первый рабочий день. Дальше календарь построит 2 рабочих / 2 выходных.</p>
+        </div>
+      </div>
+      <label>Первый рабочий день
+        <input id="scheduleStartInput" type="date">
+      </label>
+
+      <button class="primary-btn" id="saveSettingsBtn">Сохранить настройки</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
