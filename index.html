@@ -186,6 +186,7 @@
           <button class="menu-item" id="exportBtn"><span class="menu-icon">↥</span><span><b>Сохранить резервную копию</b><small>Скачать данные в файл</small></span><i>›</i></button>
           <button class="menu-item" id="importBtn"><span class="menu-icon">↧</span><span><b>Восстановить данные</b><small>Загрузить ранее сохранённую копию</small></span><i>›</i></button>
           <button class="menu-item" id="installBtn"><span class="menu-icon">＋</span><span><b>Добавить на экран телефона</b><small>Работает как отдельное приложение</small></span><i>›</i></button>
+          <button class="menu-item" id="logoutBtn"><span class="menu-icon">↪</span><span><b>Выйти из аккаунта</b><small>Останусь на этом устройстве</small></span><i>›</i></button>
           <input type="file" id="importFile" accept=".json,application/json" hidden>
         </div>
 
@@ -232,6 +233,20 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="script.js"></script>
+  <div class="auth-modal" id="authModal">
+      <div class="auth-card">
+        <div class="brand-mark auth-mark">₽</div>
+        <div class="overline">ОБЛАЧНАЯ СИНХРОНИЗАЦИЯ</div>
+        <h2>Моя зарплата</h2>
+        <p>Войди, чтобы смены и настройки сохранялись в облаке и были доступны с любого телефона.</p>
+        <label class="field-label">Email<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
+        <label class="field-label">Пароль<input id="authPassword" type="password" autocomplete="current-password" placeholder="Минимум 6 символов"></label>
+        <button class="save-btn" id="loginBtn">Войти</button>
+        <button class="auth-secondary" id="signupBtn">Создать аккаунт</button>
+        <div class="auth-status" id="authStatus"></div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js"></script>
 </body>
 </html>
