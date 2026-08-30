@@ -170,6 +170,22 @@
           <article class="stat-box"><span>Ставка</span><strong id="monthBase">0 ₽</strong></article>
           <article class="stat-box"><span>Чехлов / смена</span><strong id="avgCases">0</strong></article>
         </div>
+        <article class="insight-card" id="smartGoalCard">
+          <div class="insight-icon">🎯</div>
+          <div><span>УМНАЯ ЦЕЛЬ</span><b id="smartGoalTitle">—</b><small id="smartGoalMeta">—</small></div>
+        </article>
+
+        <article class="chart-card">
+          <div class="chart-head"><div><span>ДИНАМИКА</span><b>Заработок по сменам</b></div><span id="bestShiftBadge">—</span></div>
+          <div class="bar-chart" id="earningsChart"></div>
+        </article>
+
+        <div class="stat-grid">
+          <article class="stat-box"><span>🏆 Рекорд</span><strong id="recordShift">0 ₽</strong></article>
+          <article class="stat-box"><span>🔥 Серия</span><strong id="shiftStreak">0</strong></article>
+          <article class="stat-box"><span>📦 Всего чехлов</span><strong id="recordCases">0</strong></article>
+          <article class="stat-box"><span>📅 Лучший день</span><strong id="bestDay">—</strong></article>
+        </div>
 
         <article class="progress-card">
           <div class="progress-head"><b>До цели месяца</b><strong id="goalPercent">0%</strong></div>
@@ -178,7 +194,7 @@
         </article>
 
         <article class="history-card">
-          <div class="history-head"><h3>Последние смены</h3><button class="text-btn" id="clearMonthBtn">Очистить</button></div>
+          <div class="history-head"><h3>Последние смены</h3><button class="text-btn" id="clearMonthBtn">Очистить месяц</button></div>
           <div id="historyList"></div>
         </article>
       </section>
@@ -201,6 +217,7 @@
           <button class="menu-item" id="exportBtn"><span class="menu-icon">↥</span><span><b>Сохранить резервную копию</b><small>Скачать данные в файл</small></span><i>›</i></button>
           <button class="menu-item" id="importBtn"><span class="menu-icon">↧</span><span><b>Восстановить данные</b><small>Загрузить ранее сохранённую копию</small></span><i>›</i></button>
           <button class="menu-item" id="installBtn"><span class="menu-icon">＋</span><span><b>Добавить на экран телефона</b><small>Работает как отдельное приложение</small></span><i>›</i></button>
+          <button class="menu-item" id="enableNotificationsMenu"><span class="menu-icon">🔔</span><span><b>Уведомления</b><small id="notificationMenuStatus">Напоминания о сменах</small></span><i>›</i></button>
           <button class="menu-item" id="logoutBtn"><span class="menu-icon">↪</span><span><b>Выйти из аккаунта</b><small>Останусь на этом устройстве</small></span><i>›</i></button>
           <input type="file" id="importFile" accept=".json,application/json" hidden>
         </div>
@@ -208,6 +225,11 @@
         <article class="tip-card">
           <span>💡</span>
           <div><b>Маленький лайфхак</b><p>Вводи количество чехлов сразу после смены. Так статистика будет точной, а деньги не придётся вспоминать по памяти.</p></div>
+        </article>
+        <article class="tip-card notification-tip" id="notificationTip">
+          <span>🔔</span>
+          <div><b>Напоминания о сменах</b><p id="notificationTipText">Разреши уведомления, чтобы приложение могло напоминать о ближайшей смене.</p>
+          <button class="text-btn" id="enableNotificationsBtn">Включить уведомления</button></div>
         </article>
       </section>
     </main>
@@ -281,5 +303,10 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+}
+</script>
 </body>
 </html>

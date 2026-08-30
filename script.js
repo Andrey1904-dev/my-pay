@@ -130,7 +130,7 @@ function updateHome(){
 }
 async function saveHomeShift(){
   const c=Math.max(0,Math.floor(Number($("casesInput").value)||0)),h=$("holidayInput").checked,k=state.selectedDate||dateKey(new Date()),v={cases:c,holiday:h,base:base(h),piece:piece(c),total:total(c,h)};
-  state.shifts[k]=v;save();await cloudSaveShift(k,v);renderCalendar();renderStats();showToast("Смена сохранена ✓")
+  state.shifts[k]=v;save();await cloudSaveShift(k,v);renderCalendar();renderStats();renderInsights();updateHomeDashboard();showToast("Смена сохранена ✓")
 }
 function renderCalendar(){
   const d=state.calendarDate;$("monthTitle").textContent=dateText(d,{month:"long",year:"numeric"});const first=new Date(d.getFullYear(),d.getMonth(),1),offset=(first.getDay()+6)%7,days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(),box=$("calendarDays");box.innerHTML="";
@@ -144,10 +144,130 @@ function openShiftModal(k){state.modalDate=k;const s=state.shifts[k];$("modalDat
 function updateModal(){const c=Math.max(0,Number($("modalCases").value)||0),h=$("modalHoliday").checked;$("modalTotal").textContent=money(c?total(c,h):base(h))}
 async function saveModal(){const c=Math.max(0,Math.floor(Number($("modalCases").value)||0)),h=$("modalHoliday").checked,k=state.modalDate,v={cases:c,holiday:h,base:base(h),piece:piece(c),total:total(c,h)};state.shifts[k]=v;save();await cloudSaveShift(k,v);selectCalendarDate(k);renderStats();closeModal("shiftModal");showToast("Смена сохранена ✓")}
 async function deleteModal(){if(!state.modalDate)return;const k=state.modalDate;delete state.shifts[k];save();await cloudDeleteShift(k);selectCalendarDate(k);renderStats();closeModal("shiftModal");showToast("Смена удалена")}
+
+function monthForecast(){
+  const now=new Date(), es=monthEntries(now), workedDays=es.length;
+  if(!workedDays)return null;
+  const sum=es.reduce((a,v)=>a+Number(v.total||0),0);
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const day=Math.max(1,now.getDate());
+  return Math.round(sum/day*daysInMonth);
+}
+function analyticsForMonth(d=state.calendarDate){
+  const es=monthEntries(d).sort((a,b)=>a.k.localeCompare(b.k));
+  const sum=es.reduce((a,v)=>a+Number(v.total||0),0);
+  const goal=Number(state.settings.goal)||0;
+  const best=es.reduce((a,v)=>!a||Number(v.total)>Number(a.total)?v:a,null);
+  const remaining=Math.max(0,goal-sum);
+  const avg=es.length?sum/es.length:0;
+  const shiftsNeeded=remaining>0&&avg>0?Math.ceil(remaining/avg):0;
+  let streak=0,bestStreak=0,prev=null;
+  es.forEach(v=>{
+    const d=fromKey(v.k);
+    if(prev){
+      const delta=Math.round((d-prev)/86400000);
+      if(delta<=4)streak++; else streak=1;
+    }else streak=1;
+    bestStreak=Math.max(bestStreak,streak); prev=d;
+  });
+  return {es,sum,goal,best,remaining,avg,shiftsNeeded,bestStreak};
+}
+function renderInsights(){
+  const a=analyticsForMonth();
+  if(!a.es.length){
+    $("smartGoalTitle").textContent="Внеси первую смену";
+    $("smartGoalMeta").textContent=a.goal?`Цель ${money(a.goal)} — начнём считать темп`:"Установи цель в настройках";
+    $("recordShift").textContent="0 ₽";$("shiftStreak").textContent="0";$("recordCases").textContent="0";$("bestDay").textContent="—";
+    $("bestShiftBadge").textContent="Нет данных";$("earningsChart").innerHTML='<div class="chart-empty">Здесь появится график после первой смены</div>';
+    return;
+  }
+  const forecast=monthForecast();
+  if(a.remaining<=0){
+    $("smartGoalTitle").textContent="Цель выполнена 🎉";
+    $("smartGoalMeta").textContent=`${money(a.sum)} из ${money(a.goal)}`;
+  }else if(a.avg>0){
+    $("smartGoalTitle").textContent=`Ещё ${money(a.remaining)}`;
+    $("smartGoalMeta").textContent=`≈ ${a.shiftsNeeded} ${plural(a.shiftsNeeded,"смена","смены","смен")} до цели • прогноз ${money(forecast||0)}`;
+  }else{
+    $("smartGoalTitle").textContent=`Цель ${money(a.goal)}`;
+    $("smartGoalMeta").textContent=`Заработано ${money(a.sum)}`;
+  }
+  $("recordShift").textContent=money(a.best?.total||0);
+  $("shiftStreak").textContent=`${a.bestStreak}`;
+  $("recordCases").textContent=integer(a.es.reduce((s,v)=>s+Number(v.cases||0),0));
+  $("bestDay").textContent=a.best?dateText(fromKey(a.best.k),{day:"numeric",month:"short"}):"—";
+  $("bestShiftBadge").textContent=a.best?`🏆 ${money(a.best.total)}`:"—";
+  const max=Math.max(...a.es.map(v=>Number(v.total)||0),1);
+  $("earningsChart").innerHTML=a.es.slice(-12).map(v=>{
+    const h=Math.max(7,Math.round((Number(v.total||0)/max)*92));
+    const day=fromKey(v.k).getDate();
+    return `<div class="bar-col"><div class="bar-value">${money(v.total).replace(" ₽","")}</div><div class="bar" style="height:${h}px" title="${dateText(fromKey(v.k),{day:"numeric",month:"long"})}: ${money(v.total)}"></div><small>${day}</small></div>`;
+  }).join("");
+}
+async function deleteHistoryShift(k){
+  const s=state.shifts[k];
+  if(!s)return;
+  const d=dateText(fromKey(k),{day:"numeric",month:"long"});
+  if(!confirm(`Удалить смену за ${d}?`))return;
+  delete state.shifts[k];
+  save();
+  await cloudDeleteShift(k);
+  renderCalendar();
+  renderStats();
+  updateHome();
+  showToast("Смена удалена ✓");
+}
+async function enableNotifications(){
+  if(!("Notification" in window)){
+    showToast("Этот браузер не поддерживает уведомления");
+    return;
+  }
+  if(!window.isSecureContext){
+    showToast("Для уведомлений нужен HTTPS");
+    return;
+  }
+  const permission=await Notification.requestPermission();
+  if(permission==="granted"){
+    $("notificationTipText").textContent="Уведомления включены. Напоминания будут работать после установки приложения на экран «Домой».";
+    $("enableNotificationsBtn").textContent="Уведомления включены ✓";
+    $("enableNotificationsBtn").disabled=true;
+    scheduleShiftReminder();
+  }else{
+    $("notificationTipText").textContent="Уведомления запрещены. Их можно разрешить в настройках сайта.";
+    showToast("Уведомления не разрешены");
+  }
+}
+function scheduleShiftReminder(){
+  // Web Push on iPhone needs a server-side push subscription. This local fallback
+  // only reminds while the app is open; the PWA/service worker is prepared for Push API.
+  if(!("Notification" in window) || Notification.permission!=="granted")return;
+  const now=new Date();
+  for(let i=1;i<=7;i++){
+    const d=new Date(now); d.setDate(now.getDate()+i); d.setHours(9,0,0,0);
+    if(isWork(d)){
+      const key="myPayReminder_"+dateKey(d);
+      if(!localStorage.getItem(key) && d-now>0){
+        const ms=d-now;
+        setTimeout(()=>{
+          if(Notification.permission==="granted"){
+            try{new Notification("Моя зарплата",{body:`Сегодня рабочая смена — ${dateText(d,{day:"numeric",month:"long"})}.`});}
+            catch{}
+          }
+          localStorage.setItem(key,"1");
+        },Math.min(ms,2147483647));
+      }
+      break;
+    }
+  }
+}
 function renderStats(){
  const es=monthEntries(),sum=es.reduce((a,v)=>a+v.total,0),bs=es.reduce((a,v)=>a+v.base,0),ps=es.reduce((a,v)=>a+v.piece,0),cs=es.reduce((a,v)=>a+v.cases,0),goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;
  $("statsMonth").textContent=dateText(state.calendarDate,{month:"long",year:"numeric"});$("monthTotal").textContent=money(sum);$("monthShiftsLabel").textContent=`${integer(es.length)} ${plural(es.length,"смена","смены","смен")}`;$("monthCasesLabel").textContent=`${integer(cs)} чехлов`;$("avgShift").textContent=money(es.length?sum/es.length:0);$("monthPiece").textContent=money(ps);$("monthBase").textContent=money(bs);$("avgCases").textContent=integer(es.length?Math.round(cs/es.length):0);$("goalPercent").textContent=pct+"%";$("goalBar").style.width=pct+"%";$("goalCurrent").textContent=money(sum);$("goalText").textContent=`Цель ${money(goal)}`;
- const list=$("historyList");if(!es.length)list.innerHTML='<div class="empty-history">Пока нет сохранённых смен.</div>';else{es.sort((a,b)=>b.k.localeCompare(a.k));list.innerHTML=es.map(v=>`<div class="history-item"><div class="history-left"><b>${dateText(fromKey(v.k),{day:"numeric",month:"long"})}${v.holiday?" ★":""}</b><small>${integer(v.cases)} чехлов • сделка ${money(v.piece)}</small></div><div class="history-right"><b>${money(v.total)}</b><small>${v.holiday?"Праздник":"Обычная смена"}</small></div></div>`).join("")}
+ const list=$("historyList");if(!es.length)list.innerHTML='<div class="empty-history">Пока нет сохранённых смен.</div>';else{es.sort((a,b)=>b.k.localeCompare(a.k));list.innerHTML=es.map(v=>`<div class="history-item"><div class="history-left"><b>${dateText(fromKey(v.k),{day:"numeric",month:"long"})}${v.holiday?" ★":""}</b><small>${integer(v.cases)} чехлов • сделка ${money(v.piece)}</small></div><div class="history-right"><b>${money(v.total)}</b><small>${v.holiday?"Праздник":"Обычная смена"}</small></div><button class="history-delete" data-delete-shift="${v.k}" aria-label="Удалить смену">×</button></div>`).join("");list.querySelectorAll("[data-delete-shift]").forEach(b=>b.onclick=()=>deleteHistoryShift(b.dataset.deleteShift))}
+ const forecast=monthForecast();
+ if(forecast && state.calendarDate.getMonth()===new Date().getMonth() && state.calendarDate.getFullYear()===new Date().getFullYear()){
+   $("goalText").textContent=`Цель ${money(goal)} • прогноз ${money(forecast)}`;
+ }
 }
 function openSettings(){$("settingBase").value=state.settings.basePay;$("settingHoliday").value=state.settings.holidayPay;$("settingPrice").value=state.settings.casePrice;$("settingPercent").value=state.settings.percent;$("settingStart").value=state.settings.scheduleStart;$("settingGoal").value=state.settings.goal;$("settingsModal").classList.remove("hidden")}
 async function saveSettings(){state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=4050;state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();await cloudSaveSettings();updateHome();renderCalendar();renderStats();closeModal("settingsModal");showToast("Настройки обновлены ✓")}
@@ -159,7 +279,7 @@ document.querySelectorAll(".nav-item").forEach(b=>b.onclick=()=>{document.queryS
 $("casesInput").oninput=updateHome;$("holidayInput").onchange=updateHome;document.querySelectorAll(".step-btn").forEach(b=>b.onclick=()=>{$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.step));updateHome()});document.querySelectorAll(".quick-row button").forEach(b=>b.onclick=()=>{$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.add));updateHome()});
 $("saveShiftBtn").onclick=saveHomeShift;$("settingsBtn").onclick=openSettings;$("openSettingsFromMore").onclick=openSettings;$("prevMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);renderCalendar();renderStats()};$("nextMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);renderCalendar();renderStats()};$("editSelectedBtn").onclick=()=>openShiftModal(state.selectedDate);
 $("modalCases").oninput=updateModal;$("modalHoliday").onchange=updateModal;$("modalSave").onclick=saveModal;$("modalDelete").onclick=deleteModal;$("settingsSave").onclick=saveSettings;
-$("clearMonthBtn").onclick=async()=>{const es=Object.keys(state.shifts).filter(k=>k.startsWith(`${state.calendarDate.getFullYear()}-${String(state.calendarDate.getMonth()+1).padStart(2,"0")}-`));if(!es.length){showToast("В этом месяце нечего удалять");return}if(confirm("Удалить все смены за этот месяц?")){await Promise.all(es.map(cloudDeleteShift));es.forEach(k=>delete state.shifts[k]);save();renderCalendar();renderStats();showToast("Месяц очищен")}};
+$("clearMonthBtn").onclick=async()=>{const es=Object.keys(state.shifts).filter(k=>k.startsWith(`${state.calendarDate.getFullYear()}-${String(state.calendarDate.getMonth()+1).padStart(2,"0")}-`));if(!es.length){showToast("В этом месяце нечего удалять");return}if(confirm("Удалить все смены за этот месяц?")){await Promise.all(es.map(cloudDeleteShift));es.forEach(k=>delete state.shifts[k]);save();renderCalendar();renderStats();renderInsights();updateHomeDashboard();showToast("Месяц очищен")}};
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
 $("exportBtn").onclick=exportData;$("importBtn").onclick=()=>$("importFile").click();$("importFile").onchange=e=>e.target.files[0]&&importData(e.target.files[0]);
 let deferredPrompt=null;window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e});$("installBtn").onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null}else showToast("Открой меню браузера → «Добавить на экран»")};
@@ -170,5 +290,15 @@ async function initCloudAuth(){
  if(session?.user){currentUser=session.user;await afterLogin()}else showAuth(true);
  supabaseClient.auth.onAuthStateChange(async(_event,session)=>{if(session?.user&&!currentUser){currentUser=session.user;await afterLogin()}else if(!session){currentUser=null;currentProfile=null;showAuth(true);backAuth()}});
 }
-state.selectedDate=dateKey(new Date());selectCalendarDate(state.selectedDate);updateHome();renderCalendar();renderStats();initCloudAuth();
+state.selectedDate=dateKey(new Date());selectCalendarDate(state.selectedDate);updateHome();renderCalendar();renderStats();renderInsights();initCloudAuth();
 $("logoutBtn").onclick=async()=>{await supabaseClient.auth.signOut();showToast("Вы вышли из аккаунта")};
+$("enableNotificationsBtn").onclick=enableNotifications;
+if("Notification" in window && Notification.permission==="granted"){ $("notificationTipText").textContent="Уведомления включены. Для фоновых push-уведомлений нужен серверный push."; $("enableNotificationsBtn").textContent="Уведомления включены ✓"; $("enableNotificationsBtn").disabled=true; scheduleShiftReminder(); }
+
+
+$("enableNotificationsMenu").onclick=enableNotifications;
+function refreshNotificationUI(){
+  const ok="Notification" in window && Notification.permission==="granted";
+  $("notificationMenuStatus").textContent=ok?"Включены ✓":"Напоминания о сменах";
+}
+refreshNotificationUI();
