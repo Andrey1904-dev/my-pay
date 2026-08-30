@@ -3,6 +3,7 @@ const SUPABASE_PUBLISHABLE_KEY="sb_publishable_NFxxL8WDGpG-ASXo2LasmQ_wskniL6r";
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
 const DEFAULTS={basePay:2150,holidayPay:4050,casePrice:7,percent:20,scheduleStart:new Date().toISOString().slice(0,10),goal:60000};
 const state={settings:load("myPaySettings",DEFAULTS),shifts:load("myPayShifts",{}),calendarDate:new Date(),selectedDate:dateKey(new Date()),modalDate:null};
+state.settings.holidayPay=4050;
 let currentUser=null,currentProfile=null,authMode="login";
 
 function load(k,f){try{const x=localStorage.getItem(k);return x?JSON.parse(x):{...f}}catch{return{...f}}}
@@ -14,6 +15,8 @@ function dateKey(d){d=new Date(d);return `${d.getFullYear()}-${String(d.getMonth
 function fromKey(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d)}
 function dateText(d,opt){return new Intl.DateTimeFormat("ru-RU",opt||{day:"numeric",month:"long"}).format(d)}
 function piece(c){return Number(c||0)*Number(state.settings.casePrice)*Number(state.settings.percent)/100}
+function monthEntries(d=state.calendarDate){const prefix=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-`;return Object.entries(state.shifts).filter(([k])=>k.startsWith(prefix)).map(([k,v])=>({k,...v}))}
+function updateHomeDashboard(){const es=monthEntries(),sum=es.reduce((a,v)=>a+Number(v.total||0),0),cases=es.reduce((a,v)=>a+Number(v.cases||0),0),avg=es.length?sum/es.length:0,goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;$("homeMonthTotal").textContent=money(sum);$("homeMonthShifts").textContent=integer(es.length);$("homeMonthCases").textContent=integer(cases);$("homeAvgShift").textContent=money(avg);$("homeGoalPercent").textContent=pct+"%";$("homeGoalBar").style.width=pct+"%";let d=new Date();for(let i=0;i<366;i++){if(isWork(d)){const k=dateKey(d),s=state.shifts[k];if(!s||i===0){$("nextShiftDate").textContent=dateText(d,{weekday:"long",day:"numeric",month:"long"});$("nextShiftMeta").textContent=s?money(s.total):"Смена ещё не внесена";break}}d.setDate(d.getDate()+1)}}
 function base(h){return h?Number(state.settings.holidayPay):Number(state.settings.basePay)}
 function total(c,h){return base(h)+piece(c)}
 function isWork(d){const start=fromKey(state.settings.scheduleStart);const t=new Date(d.getFullYear(),d.getMonth(),d.getDate());const diff=Math.floor((t-start)/86400000);return ((diff%4)+4)%4<2}
@@ -54,19 +57,26 @@ async function authAction(){
   try{
     if(authMode==="login"){
       const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
-      if(error)throw new Error("Неверный логин или пароль.");
+      if(error){
+        if(error.status===0 || /fetch|network|failed to fetch/i.test(error.message||"")) throw new Error("Нет соединения с сервером.");
+        throw new Error("Неверный логин или пароль.");
+      }
       currentUser=data.user;await afterLogin();setStatus("");
     }else{
       const name=$("authName").value.trim(),p2=$("authPassword2").value;
       if(name.length<2)throw new Error("Напиши имя.");
       if(password!==p2)throw new Error("Пароли не совпадают.");
-      const {data,error}=await supabaseClient.auth.signUp({email,password,data:{name,username}});
+      const {data,error}=await supabaseClient.auth.signUp({email,password,data:{name:name.trim(),username:username.toLowerCase()}});
       if(error){
-        if(/already registered|already been registered/i.test(error.message)) throw new Error("Этот логин уже занят.");
-        throw new Error("Не удалось создать аккаунт. Попробуй другой логин.");
+        const m=(error.message||"").toLowerCase();
+        if(/already registered|already been registered|user already registered/i.test(m)) throw new Error("Этот логин уже занят.");
+        if(/email provider is disabled|email signups are disabled/i.test(m)) throw new Error("Регистрация отключена в настройках Supabase. Включи Authentication → Providers → Email.");
+        if(/password.*(6|characters)|weak password/i.test(m)) throw new Error("Пароль должен быть минимум 6 символов.");
+        if(/fetch|network|failed to fetch/i.test(m)) throw new Error("Нет соединения с сервером.");
+        throw new Error(error.message||"Не удалось создать аккаунт.");
       }
       if(!data.user)throw new Error("Не удалось создать аккаунт.");
-      if(!data.session)throw new Error("В Supabase включено подтверждение email. Отключи его в Authentication → Providers → Email.");
+      if(!data.session)throw new Error("В Supabase включено подтверждение email. Отключи Confirm email в Authentication → Providers → Email.");
       currentUser=data.user;
       await cloudSaveProfile(name,username);await ensureCloudDefaults();await afterLogin();showToast("Аккаунт создан. Добро пожаловать ✨");
     }
@@ -81,8 +91,8 @@ async function cloudLoad(){
     supabaseClient.from("shifts").select("*").eq("user_id",currentUser.id),
     supabaseClient.from("profiles").select("*").eq("id",currentUser.id).maybeSingle()
   ]);
-  if(a.error||b.error){showToast("Не удалось загрузить часть данных");return}
-  if(a.data)state.settings={...state.settings,basePay:Number(a.data.base_pay),holidayPay:Number(a.data.holiday_pay),casePrice:Number(a.data.case_price),percent:Number(a.data.piece_percent),scheduleStart:a.data.schedule_start,goal:Number(a.data.monthly_goal)};
+  if(a.error||b.error||c.error){showToast("Не удалось загрузить данные. Проверь соединение и RLS.");return}
+  if(a.data)state.settings={...state.settings,basePay:Number(a.data.base_pay),holidayPay:4050,casePrice:Number(a.data.case_price),percent:Number(a.data.piece_percent),scheduleStart:a.data.schedule_start,goal:Number(a.data.monthly_goal)};
   if(Array.isArray(b.data)){state.shifts={};b.data.forEach(s=>state.shifts[s.work_date]={cases:Number(s.cases),holiday:Boolean(s.is_holiday),base:Number(s.base_pay),piece:Number(s.piece_pay),total:Number(s.total_pay)})}
   currentProfile=c.data||{id:currentUser.id,name:currentUser.user_metadata?.name||""};save()
 }
@@ -112,6 +122,7 @@ function updateProfileUI(){
 }
 
 function updateHome(){
+  updateHomeDashboard();
   const c=Math.max(0,Math.floor(Number($("casesInput").value)||0)),h=$("holidayInput").checked,p=piece(c);
   $("shiftTotal").textContent=money(c?base(h)+p:0);$("homeBase").textContent=money(base(h));$("homePiece").textContent=money(p);$("perCase").textContent=money(Number(state.settings.casePrice)*Number(state.settings.percent)/100);$("perThousand").textContent=money(piece(1000));$("holidayChip").classList.toggle("hidden",!h);
   $("todayLabel").textContent=dateText(new Date(),{weekday:"long",day:"numeric",month:"long"}).toUpperCase();$("todayBadge").textContent=isWork(new Date())?"РАБОТА":"ВЫХОДНОЙ";
@@ -125,7 +136,7 @@ function renderCalendar(){
   const d=state.calendarDate;$("monthTitle").textContent=dateText(d,{month:"long",year:"numeric"});const first=new Date(d.getFullYear(),d.getMonth(),1),offset=(first.getDay()+6)%7,days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(),box=$("calendarDays");box.innerHTML="";
   for(let i=0;i<offset;i++){const e=document.createElement("div");e.className="day empty";box.appendChild(e)}
   const today=dateKey(new Date());
-  for(let n=1;n<=days;n++){const x=new Date(d.getFullYear(),d.getMonth(),n),k=dateKey(x),b=document.createElement("button");b.className="day "+(isWork(x)?"work ":"")+(state.shifts[k]?"saved ":"")+(k===today?"today ":"")+(k===state.selectedDate?"selected":"");b.textContent=n;
+  for(let n=1;n<=days;n++){const x=new Date(d.getFullYear(),d.getMonth(),n),k=dateKey(x),b=document.createElement("button");b.className="day "+(isWork(x)?"work ":"")+(state.shifts[k]?.holiday?"holiday ":"")+(state.shifts[k]?"saved ":"")+(k===today?"today ":"")+(k===state.selectedDate?"selected":"");b.textContent=n;
     if(state.shifts[k]){const i=document.createElement("i");i.className="tiny";b.appendChild(i)}b.onclick=()=>selectCalendarDate(k);box.appendChild(b)}
 }
 function selectCalendarDate(k){state.selectedDate=k;const d=fromKey(k),s=state.shifts[k];$("selectedDate").textContent=dateText(d,{weekday:"long",day:"numeric",month:"long"});$("selectedStatus").textContent=s?(s.holiday?"Праздничная смена":"Сохранённая смена"):(isWork(d)?"Рабочий день":"Выходной");$("selectedMoney").textContent=s?money(s.total):"—";renderCalendar()}
@@ -134,12 +145,12 @@ function updateModal(){const c=Math.max(0,Number($("modalCases").value)||0),h=$(
 async function saveModal(){const c=Math.max(0,Math.floor(Number($("modalCases").value)||0)),h=$("modalHoliday").checked,k=state.modalDate,v={cases:c,holiday:h,base:base(h),piece:piece(c),total:total(c,h)};state.shifts[k]=v;save();await cloudSaveShift(k,v);selectCalendarDate(k);renderStats();closeModal("shiftModal");showToast("Смена сохранена ✓")}
 async function deleteModal(){if(!state.modalDate)return;const k=state.modalDate;delete state.shifts[k];save();await cloudDeleteShift(k);selectCalendarDate(k);renderStats();closeModal("shiftModal");showToast("Смена удалена")}
 function renderStats(){
- const es=Object.entries(state.shifts).filter(([k])=>k.startsWith(`${state.calendarDate.getFullYear()}-${String(state.calendarDate.getMonth()+1).padStart(2,"0")}-`)).map(([k,v])=>({k,...v})),sum=es.reduce((a,v)=>a+v.total,0),bs=es.reduce((a,v)=>a+v.base,0),ps=es.reduce((a,v)=>a+v.piece,0),cs=es.reduce((a,v)=>a+v.cases,0),goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;
+ const es=monthEntries(),sum=es.reduce((a,v)=>a+v.total,0),bs=es.reduce((a,v)=>a+v.base,0),ps=es.reduce((a,v)=>a+v.piece,0),cs=es.reduce((a,v)=>a+v.cases,0),goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;
  $("statsMonth").textContent=dateText(state.calendarDate,{month:"long",year:"numeric"});$("monthTotal").textContent=money(sum);$("monthShiftsLabel").textContent=`${integer(es.length)} ${plural(es.length,"смена","смены","смен")}`;$("monthCasesLabel").textContent=`${integer(cs)} чехлов`;$("avgShift").textContent=money(es.length?sum/es.length:0);$("monthPiece").textContent=money(ps);$("monthBase").textContent=money(bs);$("avgCases").textContent=integer(es.length?Math.round(cs/es.length):0);$("goalPercent").textContent=pct+"%";$("goalBar").style.width=pct+"%";$("goalCurrent").textContent=money(sum);$("goalText").textContent=`Цель ${money(goal)}`;
  const list=$("historyList");if(!es.length)list.innerHTML='<div class="empty-history">Пока нет сохранённых смен.</div>';else{es.sort((a,b)=>b.k.localeCompare(a.k));list.innerHTML=es.map(v=>`<div class="history-item"><div class="history-left"><b>${dateText(fromKey(v.k),{day:"numeric",month:"long"})}${v.holiday?" ★":""}</b><small>${integer(v.cases)} чехлов • сделка ${money(v.piece)}</small></div><div class="history-right"><b>${money(v.total)}</b><small>${v.holiday?"Праздник":"Обычная смена"}</small></div></div>`).join("")}
 }
 function openSettings(){$("settingBase").value=state.settings.basePay;$("settingHoliday").value=state.settings.holidayPay;$("settingPrice").value=state.settings.casePrice;$("settingPercent").value=state.settings.percent;$("settingStart").value=state.settings.scheduleStart;$("settingGoal").value=state.settings.goal;$("settingsModal").classList.remove("hidden")}
-async function saveSettings(){state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=Math.max(0,Number($("settingHoliday").value)||0);state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();await cloudSaveSettings();updateHome();renderCalendar();renderStats();closeModal("settingsModal");showToast("Настройки обновлены ✓")}
+async function saveSettings(){state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=4050;state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();await cloudSaveSettings();updateHome();renderCalendar();renderStats();closeModal("settingsModal");showToast("Настройки обновлены ✓")}
 function closeModal(id){$(id).classList.add("hidden")}
 function exportData(){const blob=new Blob([JSON.stringify({settings:state.settings,shifts:state.shifts},null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`my-pay-backup-${dateKey(new Date())}.json`;a.click();URL.revokeObjectURL(url);showToast("Резервная копия скачана ✓")}
 function importData(file){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.settings||!d.shifts)throw 0;state.settings=d.settings;state.shifts=d.shifts;save();updateHome();renderCalendar();renderStats();showToast("Данные восстановлены ✓")}catch{showToast("Не удалось прочитать файл")}};r.readAsText(file)}

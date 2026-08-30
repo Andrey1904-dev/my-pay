@@ -28,6 +28,21 @@
 
     <main class="content">
       <section class="screen active" id="homeScreen">
+        <article class="month-snapshot">
+          <div class="snapshot-head"><div><span class="snapshot-kicker">ЭТОТ МЕСЯЦ</span><strong id="homeMonthTotal">0 ₽</strong></div><span class="snapshot-percent" id="homeGoalPercent">0%</span></div>
+          <div class="snapshot-track"><div id="homeGoalBar"></div></div>
+          <div class="snapshot-stats">
+            <span><b id="homeMonthShifts">0</b> смен</span>
+            <span><b id="homeMonthCases">0</b> чехлов</span>
+            <span><b id="homeAvgShift">0 ₽</b> / смена</span>
+          </div>
+        </article>
+
+        <article class="next-shift-card" id="nextShiftCard">
+          <div class="next-shift-icon">→</div>
+          <div><span>БЛИЖАЙШАЯ СМЕНА</span><b id="nextShiftDate">—</b><small id="nextShiftMeta">—</small></div>
+        </article>
+
         <div class="greeting">
           <div>
             <div class="overline" id="todayLabel">СЕГОДНЯ</div>
@@ -178,7 +193,7 @@
 
         <article class="profile-card">
           <div class="profile-avatar">₽</div>
-          <div><b>Мой расчёт</b><span>Все данные хранятся только на этом устройстве</span></div>
+          <div><b>Мой расчёт</b><span>Смены и настройки синхронизируются с твоим аккаунтом</span></div>
         </article>
 
         <div class="menu-list">
@@ -223,7 +238,7 @@
       <div class="sheet-head"><div><div class="overline">ПАРАМЕТРЫ</div><h2>Настройки</h2></div><button class="close-btn" data-close="settingsModal">✕</button></div>
       <p class="sheet-description">Здесь можно изменить условия, если на работе что-то поменяется.</p>
       <label class="field-label">Обычная ставка, ₽<input id="settingBase" type="number" min="0" step="50"></label>
-      <label class="field-label">Праздничная ставка, ₽<input id="settingHoliday" type="number" min="0" step="50"></label>
+      <label class="field-label">Праздничная ставка, ₽<input id="settingHoliday" type="number" value="4050" readonly></label>
       <label class="field-label">Цена одного чехла, ₽<input id="settingPrice" type="number" min="0" step="0.1"></label>
       <label class="field-label">Твоя доля от сделки, %<input id="settingPercent" type="number" min="0" max="100" step="1"></label>
       <label class="field-label">Первый рабочий день<input id="settingStart" type="date"></label>
@@ -251,7 +266,7 @@
       <h2 id="authTitle">С возвращением ✨</h2>
       <p id="authSubtitle">Введи логин и пароль, чтобы открыть приложение.</p>
       <div id="signupNameWrap" class="hidden">
-        <label class="field-label">Имя<input id="authName" type="text" autocomplete="name" placeholder="Например, Женя" maxlength="40"></label>
+        <label class="field-label">Имя<input id="authName" type="text" autocomplete="name" placeholder="Например: Евгения" maxlength="40"></label>
       </div>
       <label class="field-label">Логин<input id="authLogin" type="text" autocomplete="username" autocapitalize="none" placeholder="Придумай логин" maxlength="32"></label>
       <label class="field-label">Пароль<input id="authPassword" type="password" autocomplete="new-password" placeholder="Минимум 6 символов"></label>
