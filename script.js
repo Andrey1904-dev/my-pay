@@ -289,10 +289,73 @@ function renderStats(){
  }
 }
 function openSettings(){$("settingBase").value=state.settings.basePay;$("settingHoliday").value=state.settings.holidayPay;$("settingPrice").value=state.settings.casePrice;$("settingPercent").value=state.settings.percent;$("settingStart").value=state.settings.scheduleStart;$("settingGoal").value=state.settings.goal;$("settingsModal").classList.remove("hidden")}
-async function saveSettings(){state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=4050;state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();await cloudSaveSettings();updateHome();renderCalendar();renderStats();closeModal("settingsModal");showToast("Настройки обновлены ✓")}
+async function saveSettings(){
+  state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);
+  state.settings.holidayPay=4050;
+  state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);
+  state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));
+  state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;
+  state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);
+  save();
+  const ok=await cloudSaveSettings();
+  updateHome();renderCalendar();renderStats();
+  if(ok){
+    closeModal("settingsModal");
+    showToast("Настройки обновлены ✓");
+  }else{
+    showToast("Настройки сохранены на устройстве, но не в облако.");
+  }
+}
 function closeModal(id){$(id).classList.add("hidden")}
 function exportData(){const blob=new Blob([JSON.stringify({settings:state.settings,shifts:state.shifts},null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`my-pay-backup-${dateKey(new Date())}.json`;a.click();URL.revokeObjectURL(url);showToast("Резервная копия скачана ✓")}
-function importData(file){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.settings||!d.shifts)throw 0;state.settings=d.settings;state.shifts=d.shifts;save();updateHome();renderCalendar();renderStats();showToast("Данные восстановлены ✓")}catch{showToast("Не удалось прочитать файл")}};r.readAsText(file)}
+async function importData(file){
+  const r=new FileReader();
+  r.onload=async()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!d.settings||!d.shifts||typeof d.shifts!=="object")throw 0;
+
+      const oldSettings={...state.settings};
+      const oldShifts={...state.shifts};
+
+      state.settings={
+        basePay:Number(d.settings.basePay)||0,
+        holidayPay:Number(d.settings.holidayPay)||4050,
+        casePrice:Number(d.settings.casePrice)||0,
+        percent:Number(d.settings.percent)||0,
+        scheduleStart:d.settings.scheduleStart||state.settings.scheduleStart,
+        goal:Number(d.settings.goal)||0
+      };
+      state.shifts=d.shifts;
+      state.settings.holidayPay=4050;
+      save();
+      updateHome();renderCalendar();renderStats();renderInsights();
+
+      if(currentUser){
+        const settingsOk=await cloudSaveSettings();
+        if(!settingsOk){
+          state.settings=oldSettings;state.shifts=oldShifts;save();
+          updateHome();renderCalendar();renderStats();renderInsights();
+          showToast("Восстановлено только на этом устройстве: не удалось сохранить настройки в облако.");
+          return;
+        }
+
+        const entries=Object.entries(state.shifts);
+        const results=await Promise.all(entries.map(([k,v])=>cloudSaveShift(k,v)));
+        if(results.some(ok=>!ok)){
+          showToast("Данные восстановлены, но часть смен не удалось синхронизировать.");
+          return;
+        }
+        showToast("Данные восстановлены и синхронизированы ✓");
+      }else{
+        showToast("Данные восстановлены ✓");
+      }
+    }catch{
+      showToast("Не удалось прочитать файл");
+    }
+  };
+  r.readAsText(file);
+}
 
 document.querySelectorAll(".nav-item").forEach(b=>b.onclick=()=>{document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.screen).classList.add("active");if(b.dataset.screen==="calendarScreen")renderCalendar();if(b.dataset.screen==="statsScreen")renderStats()});
 $("casesInput").oninput=updateHome;$("holidayInput").onchange=updateHome;document.querySelectorAll(".step-btn").forEach(b=>b.onclick=()=>{$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.step));updateHome()});document.querySelectorAll(".quick-row button").forEach(b=>b.onclick=()=>{$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.add));updateHome()});
