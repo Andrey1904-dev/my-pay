@@ -84,24 +84,18 @@ async function afterLogin(){const synced=await cloudLoad();if(!synced){showAuth(
 
 async function cloudLoad(){
   if(!currentUser)return false;
-  try{
-    const [a,b,c]=await Promise.all([
-      supabaseClient.from("settings").select("*").eq("user_id",currentUser.id).maybeSingle(),
-      supabaseClient.from("shifts").select("*").eq("user_id",currentUser.id),
-      supabaseClient.from("profiles").select("*").eq("id",currentUser.id).maybeSingle()
-    ]);
-    if(a.error)throw new Error("Не удалось загрузить настройки.");
-    if(b.error)throw new Error("Не удалось загрузить смены.");
-    if(c.error)throw new Error("Не удалось загрузить профиль.");
-    if(a.data)state.settings={...state.settings,basePay:Number(a.data.base_pay),holidayPay:Number(a.data.holiday_pay||4050),casePrice:Number(a.data.case_price),percent:Number(a.data.piece_percent),scheduleStart:a.data.schedule_start,goal:Number(a.data.monthly_goal)};
-    const cloudShifts={};
-    if(Array.isArray(b.data))b.data.forEach(row=>cloudShifts[row.work_date]={cases:Number(row.cases),holiday:Boolean(row.is_holiday),base:Number(row.base_pay),piece:Number(row.piece_pay),total:Number(row.total_pay)});
-    state.shifts=cloudShifts;
-    currentProfile=c.data||{id:currentUser.id,name:currentUser.user_metadata?.name||""};
-    save();
-    localStorage.setItem(`myPayLastCloudSync:${currentUser.id}`,new Date().toISOString());
-    return true;
-  }catch(error){showToast(error.message||"Не удалось синхронизировать данные.");return false}
+  const {data:sd,error:se}=await supabase.from("settings").select("*").eq("user_id",currentUser.id).maybeSingle();
+  if(se){console.error("cloudLoad settings:",se);return false;}
+  const {data:rows,error:re}=await supabase.from("shifts").select("*").eq("user_id",currentUser.id).order("work_date",{ascending:true});
+  if(re){console.error("cloudLoad shifts:",re);return false;}
+  if(sd) state.settings={basePay:Number(sd.base_pay)||0,holidayPay:Number(sd.holiday_pay)||4050,casePrice:Number(sd.case_price)||0,percent:Number(sd.piece_percent)||0,scheduleStart:sd.schedule_start||state.settings.scheduleStart,goal:Number(sd.monthly_goal)||0};
+  if(Array.isArray(rows)&&rows.length){
+    const cs={};
+    for(const x of rows) cs[x.work_date]={cases:Number(x.cases)||0,holiday:!!x.is_holiday,base:Number(x.base_pay)||0,piece:Number(x.piece_pay)||0,total:Number(x.total_pay)||0};
+    state.shifts=cs;
+  }
+  save();updateHome();renderCalendar();renderStats();if(typeof renderInsights==="function")renderInsights();
+  return true;
 }
 async function ensureCloudDefaults(){
   if(!currentUser)return false;
@@ -115,16 +109,19 @@ async function cloudSaveProfile(name){
   return !error;
 }
 async function cloudSaveSettings(){
-  if(!currentUser)return false;
-  const {error}=await supabaseClient.from("settings").upsert({user_id:currentUser.id,base_pay:state.settings.basePay,holiday_pay:state.settings.holidayPay,case_price:state.settings.casePrice,piece_percent:state.settings.percent,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:"user_id"});
-  if(error){showToast("Не удалось сохранить настройки в облако.");return false}
-  save();return true;
+  if(!currentUser) return false;
+  const s=state.settings||{};
+  const payload={user_id:currentUser.id,base_pay:Number(s.basePay)||0,holiday_pay:Number(s.holidayPay)||4050,case_price:Number(s.casePrice)||0,piece_percent:Number(s.percent)||0,schedule_start:s.scheduleStart||new Date().toISOString().slice(0,10),monthly_goal:Number(s.goal)||0};
+  const {error}=await supabase.from("settings").upsert(payload,{onConflict:"user_id"});
+  if(error){console.error("cloudSaveSettings:",error);return false;}
+  return true;
 }
-async function cloudSaveShift(k,v){
-  if(!currentUser)return false;
-  const {error}=await supabaseClient.from("shifts").upsert({user_id:currentUser.id,work_date:k,cases:v.cases,is_holiday:v.holiday,base_pay:v.base,piece_pay:v.piece,total_pay:v.total},{onConflict:"user_id,work_date"});
-  if(error){showToast("Не удалось сохранить смену в облако.");return false}
-  save();return true;
+async function cloudSaveShift(date,shift){
+  if(!currentUser||!date||!shift)return false;
+  const payload={user_id:currentUser.id,work_date:date,cases:Number(shift.cases)||0,is_holiday:!!shift.holiday,base_pay:Number(shift.base)||0,piece_pay:Number(shift.piece)||0,total_pay:Number(shift.total)||0};
+  const {error}=await supabase.from("shifts").upsert(payload,{onConflict:"user_id,work_date"});
+  if(error){console.error("cloudSaveShift:",date,error);return false;}
+  return true;
 }
 async function cloudDeleteShift(k){
   if(!currentUser)return false;
@@ -290,69 +287,29 @@ function renderStats(){
 }
 function openSettings(){$("settingBase").value=state.settings.basePay;$("settingHoliday").value=state.settings.holidayPay;$("settingPrice").value=state.settings.casePrice;$("settingPercent").value=state.settings.percent;$("settingStart").value=state.settings.scheduleStart;$("settingGoal").value=state.settings.goal;$("settingsModal").classList.remove("hidden")}
 async function saveSettings(){
-  state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);
-  state.settings.holidayPay=4050;
-  state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);
-  state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));
-  state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;
-  state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);
-  save();
-  const ok=await cloudSaveSettings();
-  updateHome();renderCalendar();renderStats();
-  if(ok){
-    closeModal("settingsModal");
-    showToast("Настройки обновлены ✓");
-  }else{
-    showToast("Настройки сохранены на устройстве, но не в облако.");
-  }
+  state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=4050;state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();
+  const ok=await cloudSaveSettings();updateHome();renderCalendar();renderStats();
+  if(ok){closeModal("settingsModal");showToast("Настройки обновлены ✓");}else showToast("Настройки сохранены на устройстве, но не в облако.");
 }
 function closeModal(id){$(id).classList.add("hidden")}
 function exportData(){const blob=new Blob([JSON.stringify({settings:state.settings,shifts:state.shifts},null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`my-pay-backup-${dateKey(new Date())}.json`;a.click();URL.revokeObjectURL(url);showToast("Резервная копия скачана ✓")}
-async function importData(file){
+function importData(file){
   const r=new FileReader();
   r.onload=async()=>{
     try{
       const d=JSON.parse(r.result);
-      if(!d.settings||!d.shifts||typeof d.shifts!=="object")throw 0;
-
-      const oldSettings={...state.settings};
-      const oldShifts={...state.shifts};
-
-      state.settings={
-        basePay:Number(d.settings.basePay)||0,
-        holidayPay:Number(d.settings.holidayPay)||4050,
-        casePrice:Number(d.settings.casePrice)||0,
-        percent:Number(d.settings.percent)||0,
-        scheduleStart:d.settings.scheduleStart||state.settings.scheduleStart,
-        goal:Number(d.settings.goal)||0
-      };
+      if(!d.settings||!d.shifts||typeof d.shifts!=="object")throw new Error("invalid backup");
+      state.settings={basePay:Number(d.settings.basePay)||0,holidayPay:4050,casePrice:Number(d.settings.casePrice)||0,percent:Number(d.settings.percent)||0,scheduleStart:d.settings.scheduleStart||state.settings.scheduleStart,goal:Number(d.settings.goal)||0};
       state.shifts=d.shifts;
-      state.settings.holidayPay=4050;
-      save();
-      updateHome();renderCalendar();renderStats();renderInsights();
-
-      if(currentUser){
-        const settingsOk=await cloudSaveSettings();
-        if(!settingsOk){
-          state.settings=oldSettings;state.shifts=oldShifts;save();
-          updateHome();renderCalendar();renderStats();renderInsights();
-          showToast("Восстановлено только на этом устройстве: не удалось сохранить настройки в облако.");
-          return;
-        }
-
-        const entries=Object.entries(state.shifts);
-        const results=await Promise.all(entries.map(([k,v])=>cloudSaveShift(k,v)));
-        if(results.some(ok=>!ok)){
-          showToast("Данные восстановлены, но часть смен не удалось синхронизировать.");
-          return;
-        }
-        showToast("Данные восстановлены и синхронизированы ✓");
-      }else{
-        showToast("Данные восстановлены ✓");
-      }
-    }catch{
-      showToast("Не удалось прочитать файл");
-    }
+      save();updateHome();renderCalendar();renderStats();if(typeof renderInsights==="function")renderInsights();
+      if(!currentUser){showToast("Данные восстановлены ✓");return;}
+      if(!await cloudSaveSettings()){showToast("Данные восстановлены на устройстве, но настройки не синхронизированы.");return;}
+      const entries=Object.entries(state.shifts);
+      for(const [date,shift] of entries) if(!await cloudSaveShift(date,shift)){showToast("Данные восстановлены, но часть смен не синхронизирована.");return;}
+      const {data:verify,error}=await supabase.from("shifts").select("work_date").eq("user_id",currentUser.id);
+      if(error||!verify||verify.length<entries.length){console.error("sync verify",error,verify);showToast("Данные восстановлены, но облачная проверка не прошла.");return;}
+      showToast("Данные восстановлены и синхронизированы ✓");
+    }catch(err){console.error("importData:",err);showToast("Не удалось прочитать файл");}
   };
   r.readAsText(file);
 }

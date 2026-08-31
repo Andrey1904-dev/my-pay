@@ -40,7 +40,5 @@ The app can be installed as a PWA and request notification permission. True back
 5. A scheduled job/cron to send reminders.
 
 
-## v7 fix — cloud synchronization of restored backups
-- Restoring a JSON backup while logged in now uploads the restored settings and every restored shift to Supabase.
-- The app no longer reports "restored" as if everything were cloud-saved when the cloud write fails.
-- Settings save now reports a cloud-sync failure instead of silently closing the settings dialog as successful.
+## v8 final sync
+Backup import now syncs settings and every shift to Supabase and verifies the cloud result. Cloud loading no longer replaces local shifts with an empty cloud result.
