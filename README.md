@@ -53,3 +53,10 @@ Backup import now syncs settings and every shift to Supabase and verifies the cl
 - The application now uses one unambiguous client variable: `db`.
 - All `.from()`, `.auth`, `.rpc()`, and `.storage` calls use `db`.
 - Added a startup assertion so a client initialization problem produces a specific diagnostic instead of `supabase.from is not a function`.
+
+
+## v11 cache/service-worker fix
+- Bumped the service-worker cache to `my-pay-v11`.
+- App files use network-first fetching so old JavaScript cannot remain stuck in the PWA cache.
+- `script.js` is cache-busted with `?v=11`.
+- Legacy service-worker registrations/caches are cleared on startup.

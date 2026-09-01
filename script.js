@@ -1,3 +1,16 @@
+// v11: clear legacy service-worker registrations/caches once so stale JS cannot survive an update.
+(async()=>{
+  try{
+    if("serviceWorker" in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+    if("caches" in window){
+      const keys=await caches.keys();
+      await Promise.all(keys.filter(k=>k!=="my-pay-v11").map(k=>caches.delete(k)));
+    }
+  }catch(e){console.warn("Cache cleanup:",e);}
+})();
 const SUPABASE_URL="https://dyixwxxpjmyycgigcbtx.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_NFxxL8WDGpG-ASXo2LasmQ_wskniL6r";
 const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
