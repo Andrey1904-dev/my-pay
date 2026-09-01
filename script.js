@@ -1,6 +1,6 @@
 const SUPABASE_URL="https://dyixwxxpjmyycgigcbtx.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_NFxxL8WDGpG-ASXo2LasmQ_wskniL6r";
-const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
 const DEFAULTS={basePay:2150,holidayPay:4050,casePrice:7,percent:20,scheduleStart:new Date().toISOString().slice(0,10),goal:60000};
 const state={settings:load("myPaySettings",DEFAULTS),shifts:load("myPayShifts",{}),calendarDate:new Date(),selectedDate:dateKey(new Date()),modalDate:null};
 state.settings.holidayPay=4050;
@@ -47,7 +47,7 @@ async function authAction(){
   $('authAction').disabled=true;$('authAction').textContent='Секунду…';
   try{
     if(authMode==='login'){
-      const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
+      const {data,error}=await db.auth.signInWithPassword({email,password});
       if(error){
         const m=(error.message||'').toLowerCase();
         if(error.status===0 || /fetch|network|failed to fetch/i.test(m)) throw new Error('Нет соединения с сервером.');
@@ -59,7 +59,7 @@ async function authAction(){
       const name=$('authName').value.trim(),p2=$('authPassword2').value;
       if(name.length<2)throw new Error('Напиши имя.');
       if(password!==p2)throw new Error('Пароли не совпадают.');
-      const {data,error}=await supabaseClient.auth.signUp({email,password,data:{name:name.trim()}});
+      const {data,error}=await db.auth.signUp({email,password,data:{name:name.trim()}});
       if(error){
         const m=(error.message||'').toLowerCase();
         if(/already registered|already been registered|user already registered/i.test(m)) throw new Error('Этот email уже зарегистрирован.');
@@ -84,9 +84,9 @@ async function afterLogin(){const synced=await cloudLoad();if(!synced){showAuth(
 
 async function cloudLoad(){
   if(!currentUser)return false;
-  const {data:sd,error:se}=await supabaseClient.from("settings").select("*").eq("user_id",currentUser.id).maybeSingle();
+  const {data:sd,error:se}=await db.from("settings").select("*").eq("user_id",currentUser.id).maybeSingle();
   if(se){console.error("cloudLoad settings:",se);return false;}
-  const {data:rows,error:re}=await supabaseClient.from("shifts").select("*").eq("user_id",currentUser.id).order("work_date",{ascending:true});
+  const {data:rows,error:re}=await db.from("shifts").select("*").eq("user_id",currentUser.id).order("work_date",{ascending:true});
   if(re){console.error("cloudLoad shifts:",re);return false;}
   if(sd) state.settings={basePay:Number(sd.base_pay)||0,holidayPay:Number(sd.holiday_pay)||4050,casePrice:Number(sd.case_price)||0,percent:Number(sd.piece_percent)||0,scheduleStart:sd.schedule_start||state.settings.scheduleStart,goal:Number(sd.monthly_goal)||0};
   if(Array.isArray(rows)&&rows.length){
@@ -99,12 +99,12 @@ async function cloudLoad(){
 }
 async function ensureCloudDefaults(){
   if(!currentUser)return false;
-  const {error}=await supabaseClient.from('settings').upsert({user_id:currentUser.id,base_pay:state.settings.basePay,holiday_pay:4050,case_price:state.settings.casePrice,piece_percent:state.settings.percent,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:'user_id'});
+  const {error}=await db.from('settings').upsert({user_id:currentUser.id,base_pay:state.settings.basePay,holiday_pay:4050,case_price:state.settings.casePrice,piece_percent:state.settings.percent,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:'user_id'});
   return !error;
 }
 async function cloudSaveProfile(name){
   if(!currentUser)return false;
-  const {data,error}=await supabaseClient.from('profiles').upsert({id:currentUser.id,name:name.trim()},{onConflict:'id'}).select().single();
+  const {data,error}=await db.from('profiles').upsert({id:currentUser.id,name:name.trim()},{onConflict:'id'}).select().single();
   if(!error)currentProfile=data;
   return !error;
 }
@@ -112,20 +112,20 @@ async function cloudSaveSettings(){
   if(!currentUser) return false;
   const s=state.settings||{};
   const payload={user_id:currentUser.id,base_pay:Number(s.basePay)||0,holiday_pay:Number(s.holidayPay)||4050,case_price:Number(s.casePrice)||0,piece_percent:Number(s.percent)||0,schedule_start:s.scheduleStart||new Date().toISOString().slice(0,10),monthly_goal:Number(s.goal)||0};
-  const {error}=await supabaseClient.from("settings").upsert(payload,{onConflict:"user_id"});
+  const {error}=await db.from("settings").upsert(payload,{onConflict:"user_id"});
   if(error){console.error("cloudSaveSettings:",error);return false;}
   return true;
 }
 async function cloudSaveShift(date,shift){
   if(!currentUser||!date||!shift)return false;
   const payload={user_id:currentUser.id,work_date:date,cases:Number(shift.cases)||0,is_holiday:!!shift.holiday,base_pay:Number(shift.base)||0,piece_pay:Number(shift.piece)||0,total_pay:Number(shift.total)||0};
-  const {error}=await supabaseClient.from("shifts").upsert(payload,{onConflict:"user_id,work_date"});
+  const {error}=await db.from("shifts").upsert(payload,{onConflict:"user_id,work_date"});
   if(error){console.error("cloudSaveShift:",date,error);return false;}
   return true;
 }
 async function cloudDeleteShift(k){
   if(!currentUser)return false;
-  const {error}=await supabaseClient.from("shifts").delete().eq("user_id",currentUser.id).eq("work_date",k);
+  const {error}=await db.from("shifts").delete().eq("user_id",currentUser.id).eq("work_date",k);
   if(error){showToast("Не удалось удалить смену из облака.");return false}
   save();return true;
 }
@@ -306,7 +306,7 @@ function importData(file){
       if(!await cloudSaveSettings()){showToast("Данные восстановлены на устройстве, но настройки не синхронизированы.");return;}
       const entries=Object.entries(state.shifts);
       for(const [date,shift] of entries) if(!await cloudSaveShift(date,shift)){showToast("Данные восстановлены, но часть смен не синхронизирована.");return;}
-      const {data:verify,error}=await supabaseClient.from("shifts").select("work_date").eq("user_id",currentUser.id);
+      const {data:verify,error}=await db.from("shifts").select("work_date").eq("user_id",currentUser.id);
       if(error||!verify||verify.length<entries.length){console.error("sync verify",error,verify);showToast("Данные восстановлены, но облачная проверка не прошла.");return;}
       showToast("Данные восстановлены и синхронизированы ✓");
     }catch(err){console.error("importData:",err);showToast("Не удалось прочитать файл");}
@@ -325,12 +325,12 @@ let deferredPrompt=null;window.addEventListener("beforeinstallprompt",e=>{e.prev
 $("goLogin").onclick=()=>setAuthMode("login");$("goSignup").onclick=()=>setAuthMode("signup");$("backAuth").onclick=backAuth;$("authAction").onclick=authAction;
 
 async function initCloudAuth(){
- const {data:{session}}=await supabaseClient.auth.getSession();
+ const {data:{session}}=await db.auth.getSession();
  if(session?.user){currentUser=session.user;await afterLogin()}else showAuth(true);
- supabaseClient.auth.onAuthStateChange(async(_event,session)=>{if(session?.user&&!currentUser){currentUser=session.user;await afterLogin()}else if(!session){currentUser=null;currentProfile=null;showAuth(true);backAuth()}});
+ db.auth.onAuthStateChange(async(_event,session)=>{if(session?.user&&!currentUser){currentUser=session.user;await afterLogin()}else if(!session){currentUser=null;currentProfile=null;showAuth(true);backAuth()}});
 }
 state.selectedDate=dateKey(new Date());selectCalendarDate(state.selectedDate);updateHome();renderCalendar();renderStats();renderInsights();initCloudAuth();
-$("logoutBtn").onclick=async()=>{await supabaseClient.auth.signOut();showToast("Вы вышли из аккаунта")};
+$("logoutBtn").onclick=async()=>{await db.auth.signOut();showToast("Вы вышли из аккаунта")};
 $("enableNotificationsBtn").onclick=enableNotifications;
 if("Notification" in window && Notification.permission==="granted"){ $("notificationTipText").textContent="Уведомления включены. Для фоновых push-уведомлений нужен серверный push."; $("enableNotificationsBtn").textContent="Уведомления включены ✓"; $("enableNotificationsBtn").disabled=true; scheduleShiftReminder(); }
 

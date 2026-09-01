@@ -47,3 +47,9 @@ Backup import now syncs settings and every shift to Supabase and verifies the cl
 ## v9 login fix
 - Fixed a JavaScript client-name mismatch introduced in v8.
 - All database queries now use the initialized `supabaseClient`.
+
+
+## v10 Supabase client fix
+- The application now uses one unambiguous client variable: `db`.
+- All `.from()`, `.auth`, `.rpc()`, and `.storage` calls use `db`.
+- Added a startup assertion so a client initialization problem produces a specific diagnostic instead of `supabase.from is not a function`.
