@@ -1,16 +1,13 @@
-// v11: clear legacy service-worker registrations/caches once so stale JS cannot survive an update.
+/// v12: stale-cache protection; keep the current service worker and refresh app assets safely.
 (async()=>{
+  // Remove caches from older releases, but do not unregister the active worker on every launch.
   try{
-    if("serviceWorker" in navigator){
-      const regs=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r=>r.unregister()));
-    }
     if("caches" in window){
       const keys=await caches.keys();
-      await Promise.all(keys.filter(k=>k!=="my-pay-v11").map(k=>caches.delete(k)));
+      await Promise.all(keys.filter(k=>k.startsWith("my-pay-v")&&k!=="my-pay-v12").map(k=>caches.delete(k)));
     }
   }catch(e){console.warn("Cache cleanup:",e);}
-})();
+})();;
 const SUPABASE_URL="https://dyixwxxpjmyycgigcbtx.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_NFxxL8WDGpG-ASXo2LasmQ_wskniL6r";
 const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
@@ -102,11 +99,20 @@ async function cloudLoad(){
   const {data:rows,error:re}=await db.from("shifts").select("*").eq("user_id",currentUser.id).order("work_date",{ascending:true});
   if(re){console.error("cloudLoad shifts:",re);return false;}
   if(sd) state.settings={basePay:Number(sd.base_pay)||0,holidayPay:Number(sd.holiday_pay)||4050,casePrice:Number(sd.case_price)||0,percent:Number(sd.piece_percent)||0,scheduleStart:sd.schedule_start||state.settings.scheduleStart,goal:Number(sd.monthly_goal)||0};
-  if(Array.isArray(rows)&&rows.length){
-    const cs={};
-    for(const x of rows) cs[x.work_date]={cases:Number(x.cases)||0,holiday:!!x.is_holiday,base:Number(x.base_pay)||0,piece:Number(x.piece_pay)||0,total:Number(x.total_pay)||0};
-    state.shifts=cs;
+  else await ensureCloudDefaults();
+
+  const {data:profile,error:pe}=await db.from("profiles").select("id,name").eq("id",currentUser.id).maybeSingle();
+  if(pe){console.error("cloudLoad profile:",pe);return false;}
+  currentProfile=profile||null;
+
+  // Cloud is the source of truth for an authenticated account. An empty cloud result
+  // must clear old device data so one account can never see another account's shifts.
+  const cs={};
+  if(Array.isArray(rows)) for(const x of rows){
+    const key=String(x.work_date).slice(0,10);
+    cs[key]={cases:Number(x.cases)||0,holiday:!!x.is_holiday,base:Number(x.base_pay)||0,piece:Number(x.piece_pay)||0,total:Number(x.total_pay)||0};
   }
+  state.shifts=cs;
   save();updateHome();renderCalendar();renderStats();if(typeof renderInsights==="function")renderInsights();
   return true;
 }
@@ -140,7 +146,7 @@ async function cloudDeleteShift(k){
   if(!currentUser)return false;
   const {error}=await db.from("shifts").delete().eq("user_id",currentUser.id).eq("work_date",k);
   if(error){showToast("Не удалось удалить смену из облака.");return false}
-  save();return true;
+  return true;
 }
 
 function updateProfileUI(){
@@ -239,8 +245,13 @@ async function deleteHistoryShift(k){
   const d=dateText(fromKey(k),{day:"numeric",month:"long"});
   if(!confirm(`Удалить смену за ${d}?`))return;
   delete state.shifts[k];
-  save();
-  await cloudDeleteShift(k);
+  if(currentUser){
+    if(!await cloudDeleteShift(k)){
+      state.shifts[k]=s;
+      save();
+      return;
+    }
+  }else save();
   renderCalendar();
   renderStats();
   updateHome();
@@ -261,6 +272,7 @@ async function enableNotifications(){
     $("enableNotificationsBtn").textContent="Уведомления включены ✓";
     $("enableNotificationsBtn").disabled=true;
     scheduleShiftReminder();
+    refreshNotificationUI();
   }else{
     $("notificationTipText").textContent="Уведомления запрещены. Их можно разрешить в настройках сайта.";
     showToast("Уведомления не разрешены");
@@ -312,8 +324,23 @@ function importData(file){
     try{
       const d=JSON.parse(r.result);
       if(!d.settings||!d.shifts||typeof d.shifts!=="object")throw new Error("invalid backup");
-      state.settings={basePay:Number(d.settings.basePay)||0,holidayPay:4050,casePrice:Number(d.settings.casePrice)||0,percent:Number(d.settings.percent)||0,scheduleStart:d.settings.scheduleStart||state.settings.scheduleStart,goal:Number(d.settings.goal)||0};
-      state.shifts=d.shifts;
+      const importedSettings=d.settings||{};
+      state.settings={
+        basePay:Math.max(0,Number(importedSettings.basePay)||0),
+        holidayPay:4050,
+        casePrice:Math.max(0,Number(importedSettings.casePrice)||0),
+        percent:Math.min(100,Math.max(0,Number(importedSettings.percent)||0)),
+        scheduleStart:/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(importedSettings.scheduleStart)?importedSettings.scheduleStart:state.settings.scheduleStart,
+        goal:Math.max(0,Number(importedSettings.goal)||0)
+      };
+      const importedShifts={};
+      for(const [date,raw] of Object.entries(d.shifts)){
+        if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!raw||typeof raw!=="object")continue;
+        const cases=Math.max(0,Math.floor(Number(raw.cases)||0));
+        const holiday=!!raw.holiday;
+        importedShifts[date]={cases,holiday,base:base(holiday),piece:piece(cases),total:total(cases,holiday)};
+      }
+      state.shifts=importedShifts;
       save();updateHome();renderCalendar();renderStats();if(typeof renderInsights==="function")renderInsights();
       if(!currentUser){showToast("Данные восстановлены ✓");return;}
       if(!await cloudSaveSettings()){showToast("Данные восстановлены на устройстве, но настройки не синхронизированы.");return;}
@@ -327,15 +354,28 @@ function importData(file){
   r.readAsText(file);
 }
 
-document.querySelectorAll(".nav-item").forEach(b=>b.onclick=()=>{document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.screen).classList.add("active");if(b.dataset.screen==="calendarScreen")renderCalendar();if(b.dataset.screen==="statsScreen")renderStats()});
+document.querySelectorAll(".modal").forEach(m=>m.addEventListener("click",e=>{if(e.target===m)closeModal(m.id)}));
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.querySelectorAll(".modal:not(.hidden)").forEach(m=>closeModal(m.id))});
+
+document.querySelectorAll(".nav-item").forEach(b=>b.onclick=()=>{document.querySelectorAll(".modal").forEach(m=>m.addEventListener("click",e=>{if(e.target===m)closeModal(m.id)}));
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.querySelectorAll(".modal:not(.hidden)").forEach(m=>closeModal(m.id))});
+
+document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.screen).classList.add("active");if(b.dataset.screen==="calendarScreen")renderCalendar();if(b.dataset.screen==="statsScreen")renderStats()});
 $("casesInput").oninput=updateHome;$("holidayInput").onchange=updateHome;document.querySelectorAll(".step-btn").forEach(b=>b.onclick=()=>{$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.step));updateHome()});document.querySelectorAll(".quick-row button").forEach(b=>b.onclick=()=>{$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.add));updateHome()});
 $("saveShiftBtn").onclick=saveHomeShift;$("settingsBtn").onclick=openSettings;$("openSettingsFromMore").onclick=openSettings;$("prevMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);renderCalendar();renderStats()};$("nextMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);renderCalendar();renderStats()};$("editSelectedBtn").onclick=()=>openShiftModal(state.selectedDate);
 $("modalCases").oninput=updateModal;$("modalHoliday").onchange=updateModal;$("modalSave").onclick=saveModal;$("modalDelete").onclick=deleteModal;$("settingsSave").onclick=saveSettings;
-$("clearMonthBtn").onclick=async()=>{const es=Object.keys(state.shifts).filter(k=>k.startsWith(`${state.calendarDate.getFullYear()}-${String(state.calendarDate.getMonth()+1).padStart(2,"0")}-`));if(!es.length){showToast("В этом месяце нечего удалять");return}if(confirm("Удалить все смены за этот месяц?")){await Promise.all(es.map(cloudDeleteShift));es.forEach(k=>delete state.shifts[k]);save();renderCalendar();renderStats();renderInsights();updateHomeDashboard();showToast("Месяц очищен")}};
+$("clearMonthBtn").onclick=async()=>{const es=Object.keys(state.shifts).filter(k=>k.startsWith(`${state.calendarDate.getFullYear()}-${String(state.calendarDate.getMonth()+1).padStart(2,"0")}-`));if(!es.length){showToast("В этом месяце нечего удалять");return}if(confirm("Удалить все смены за этот месяц?")){
+  const results=await Promise.all(es.map(async k=>[k,await cloudDeleteShift(k)]));
+  const failed=results.filter(([,ok])=>!ok).map(([k])=>k);
+  results.filter(([,ok])=>ok).forEach(([k])=>delete state.shifts[k]);
+  save();renderCalendar();renderStats();renderInsights();updateHomeDashboard();
+  showToast(failed.length?`Удалено не всё: ${failed.length} смен не удалось удалить.`:"Месяц очищен");
+}};
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
 $("exportBtn").onclick=exportData;$("importBtn").onclick=()=>$("importFile").click();$("importFile").onchange=e=>e.target.files[0]&&importData(e.target.files[0]);
 let deferredPrompt=null;window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e});$("installBtn").onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null}else showToast("Открой меню браузера → «Добавить на экран»")};
 $("goLogin").onclick=()=>setAuthMode("login");$("goSignup").onclick=()=>setAuthMode("signup");$("backAuth").onclick=backAuth;$("authAction").onclick=authAction;
+$("authPassword").setAttribute("autocomplete","current-password");
 
 async function initCloudAuth(){
  const {data:{session}}=await db.auth.getSession();
@@ -343,7 +383,14 @@ async function initCloudAuth(){
  db.auth.onAuthStateChange(async(_event,session)=>{if(session?.user&&!currentUser){currentUser=session.user;await afterLogin()}else if(!session){currentUser=null;currentProfile=null;showAuth(true);backAuth()}});
 }
 state.selectedDate=dateKey(new Date());selectCalendarDate(state.selectedDate);updateHome();renderCalendar();renderStats();renderInsights();initCloudAuth();
-$("logoutBtn").onclick=async()=>{await db.auth.signOut();showToast("Вы вышли из аккаунта")};
+$("logoutBtn").onclick=async()=>{
+  await db.auth.signOut();
+  currentUser=null;currentProfile=null;
+  state.shifts={};
+  state.settings={...DEFAULTS,holidayPay:4050,scheduleStart:new Date().toISOString().slice(0,10)};
+  save();updateHome();renderCalendar();renderStats();renderInsights();
+  showToast("Вы вышли из аккаунта");
+};
 $("enableNotificationsBtn").onclick=enableNotifications;
 if("Notification" in window && Notification.permission==="granted"){ $("notificationTipText").textContent="Уведомления включены. Для фоновых push-уведомлений нужен серверный push."; $("enableNotificationsBtn").textContent="Уведомления включены ✓"; $("enableNotificationsBtn").disabled=true; scheduleShiftReminder(); }
 

@@ -55,8 +55,15 @@ Backup import now syncs settings and every shift to Supabase and verifies the cl
 - Added a startup assertion so a client initialization problem produces a specific diagnostic instead of `supabase.from is not a function`.
 
 
-## v11 cache/service-worker fix
-- Bumped the service-worker cache to `my-pay-v11`.
+## v12 stability and data-safety fix
+- Previous release used cache `my-pay-v11`; current release uses `my-pay-v12`.
 - App files use network-first fetching so old JavaScript cannot remain stuck in the PWA cache.
 - `script.js` is cache-busted with `?v=11`.
 - Legacy service-worker registrations/caches are cleared on startup.
+
+- Исправлен критический синтаксический дефект в `script.js`, из-за которого JavaScript мог вообще не запускаться.
+- Исправлен вход: профиль теперь действительно загружается, а отсутствующие DOM-элементы больше не ломают `afterLogin()`.
+- Данные авторизованного аккаунта теперь берутся из облака; пустой облачный аккаунт очищает старые локальные смены, чтобы аккаунты не смешивались на одном устройстве.
+- Удаление смены и очистка месяца теперь откатываются при ошибке Supabase вместо тихой потери данных.
+- Исправлена регистрация service worker: приложение больше не снимает активный worker при каждом запуске.
+- Добавлено закрытие модальных окон по Esc/клику вне листа и улучшена доступность кнопок календаря.

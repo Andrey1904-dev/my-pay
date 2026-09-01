@@ -120,9 +120,9 @@
             <h2>Календарь</h2>
           </div>
           <div class="month-nav">
-            <button id="prevMonth">‹</button>
+            <button id="prevMonth" aria-label="Предыдущий месяц">‹</button>
             <strong id="monthTitle">—</strong>
-            <button id="nextMonth">›</button>
+            <button id="nextMonth" aria-label="Следующий месяц">›</button>
           </div>
         </div>
 
@@ -208,8 +208,8 @@
         </div>
 
         <article class="profile-card">
-          <div class="profile-avatar">₽</div>
-          <div><b>Мой расчёт</b><span>Смены и настройки синхронизируются с твоим аккаунтом</span></div>
+          <div class="profile-avatar" id="profileAvatar">₽</div>
+          <div><b id="profileName">Мой расчёт</b><span>Смены и настройки синхронизируются с твоим аккаунтом</span></div>
         </article>
 
         <div class="menu-list">
@@ -302,7 +302,7 @@
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="script.js?v=11"></script>
+    <script src="script.js?v=12"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
