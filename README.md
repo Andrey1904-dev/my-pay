@@ -42,3 +42,8 @@ The app can be installed as a PWA and request notification permission. True back
 
 ## v8 final sync
 Backup import now syncs settings and every shift to Supabase and verifies the cloud result. Cloud loading no longer replaces local shifts with an empty cloud result.
+
+
+## v9 login fix
+- Fixed a JavaScript client-name mismatch introduced in v8.
+- All database queries now use the initialized `supabaseClient`.
