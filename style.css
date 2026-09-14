@@ -279,3 +279,23 @@ h1,h2{font-weight:900;color:#171717}
 input,textarea,select{color:#171717!important;background:#fff!important}
 input::placeholder,textarea::placeholder{color:#8a8a86!important;opacity:1}
 @media(prefers-color-scheme:dark){html,body{background:#171717;color:#f7f7f5}.topbar{background:#171717;border-color:#363636}.brand-title,h1,h2{color:#fff}.round-icon,.cases-card,.holiday-card,.mini-card,.stat-box,.progress-card,.history-card,.profile-card,.menu-list,.calendar-card,.month-nav button,.outline-btn{background:#242424;color:#fff;border-color:#3c3c3c}.step-btn{background:#333;color:#fff}.day{background:#333;color:#eee}.day.work{background:#542515;color:#ffb59a}.day.saved{background:#fff;color:#171717}.menu-item{background:#242424!important;color:#fff!important;border-color:#3c3c3c!important}input,textarea,select{background:#242424!important;color:#fff!important;border-color:#444!important}}
+
+/* CASE.PLACE SALARY — final layout corrections */
+.brand-mark{background:#ff5a1f!important;color:#fff!important;border-radius:11px!important;box-shadow:none!important;position:relative;overflow:hidden}
+.brand-mark:after{content:"";position:absolute;inset:0;border:0!important;background:transparent!important;transform:none!important}
+.brand-mark{display:grid;place-items:center;font-size:22px;font-weight:950}
+.next-shift-card{min-height:92px!important}
+.next-shift-card.current-shift{background:#171717!important;border-color:#ff5a1f!important}
+.next-shift-card.current-shift .next-shift-icon{background:#ff5a1f!important;color:#fff!important}
+@media(min-width:800px){
+  .screen.active>.earnings-card{grid-column:span 8!important}
+  .screen.active>.next-shift-card{grid-column:span 4!important}
+  .screen.active>.cases-card{grid-column:span 8!important}
+  .screen.active>.holiday-card{grid-column:span 4!important}
+}
+.cases-card{width:100%!important}
+.cases-input-wrap input{min-width:0!important;font-variant-numeric:tabular-nums}
+.cases-input-wrap{min-width:0!important}
+.stepper{gap:12px!important}
+.step-btn{flex-basis:64px!important;width:64px!important}
+@media(max-width:420px){.step-btn{flex-basis:54px!important;width:54px!important}.stepper{gap:8px!important}.cases-input-wrap input{font-size:28px!important}}

@@ -28,7 +28,40 @@ function fromKey(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1
 function dateText(d,opt){return new Intl.DateTimeFormat("ru-RU",opt||{day:"numeric",month:"long"}).format(d)}
 function piece(c){return Number(c||0)*Number(state.settings.casePrice)*Number(state.settings.percent)/100}
 function monthEntries(d=state.calendarDate){const prefix=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-`;return Object.entries(state.shifts).filter(([k])=>k.startsWith(prefix)).map(([k,v])=>({k,...v}))}
-function updateHomeDashboard(){const es=monthEntries(new Date()),sum=es.reduce((a,v)=>a+Number(v.total||0),0),cases=es.reduce((a,v)=>a+Number(v.cases||0),0),avg=es.length?sum/es.length:0,goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;$("homeMonthTotal").textContent=money(sum);$("homeMonthShifts").textContent=integer(es.length);$("homeMonthCases").textContent=integer(cases);$("homeAvgShift").textContent=money(avg);$("homeGoalPercent").textContent=pct+"%";$("homeGoalBar").style.width=pct+"%";let d=new Date();for(let i=0;i<366;i++){if(isWork(d)){const k=dateKey(d),s=state.shifts[k];if(!s||i===0){$("nextShiftDate").textContent=dateText(d,{weekday:"long",day:"numeric",month:"long"});$("nextShiftMeta").textContent=s?money(s.total):"Смена ещё не внесена";break}}d.setDate(d.getDate()+1)}}
+function updateHomeDashboard(){
+  const es=monthEntries(new Date()),sum=es.reduce((a,v)=>a+Number(v.total||0),0),cases=es.reduce((a,v)=>a+Number(v.cases||0),0),avg=es.length?sum/es.length:0,goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;
+  $("homeMonthTotal").textContent=money(sum);$("homeMonthShifts").textContent=integer(es.length);$("homeMonthCases").textContent=integer(cases);$("homeAvgShift").textContent=money(avg);$("homeGoalPercent").textContent=pct+"%";$("homeGoalBar").style.width=pct+"%";
+  updateNextShiftCard();
+}
+function updateNextShiftCard(){
+  const now=new Date(), minutes=now.getHours()*60+now.getMinutes(), start=8*60, end=19*60;
+  if(isWork(now) && minutes>=start && minutes<end){
+    const left=end-minutes, h=Math.floor(left/60), m=left%60;
+    $("nextShiftCard").classList.add("current-shift");
+    $("nextShiftCard").querySelector("span").textContent="СМЕНА ИДЁТ";
+    $("nextShiftDate").textContent=`До конца смены ${h} ч ${String(m).padStart(2,"0")} мин`;
+    $("nextShiftMeta").textContent="Рабочее время до 19:00";
+    return;
+  }
+  $("nextShiftCard").classList.remove("current-shift");
+  let d=new Date(now);
+  if(isWork(d) && minutes<start){
+    $("nextShiftCard").querySelector("span").textContent="БЛИЖАЙШАЯ СМЕНА";
+    $("nextShiftDate").textContent="Сегодня";
+    $("nextShiftMeta").textContent="Начало в 08:00";
+    return;
+  }
+  d.setDate(d.getDate()+1);
+  for(let i=0;i<366;i++){
+    if(isWork(d)){
+      $("nextShiftCard").querySelector("span").textContent="БЛИЖАЙШАЯ СМЕНА";
+      $("nextShiftDate").textContent=dateText(d,{weekday:"long",day:"numeric",month:"long"});
+      $("nextShiftMeta").textContent="Начало в 08:00";
+      return;
+    }
+    d.setDate(d.getDate()+1);
+  }
+}
 function base(h){return h?Number(state.settings.holidayPay):Number(state.settings.basePay)}
 function total(c,h){return base(h)+piece(c)}
 function isWork(d){const start=fromKey(state.settings.scheduleStart);const t=new Date(d.getFullYear(),d.getMonth(),d.getDate());const diff=Math.floor((t-start)/86400000);return ((diff%4)+4)%4<2}
@@ -509,3 +542,6 @@ async function generateTelegramCode(){
 $("telegramBotBtn")?.addEventListener("click",openTelegramModal);
 $("telegramGenerateBtn")?.addEventListener("click",generateTelegramCode);
 $("telegramHelpBtn")?.addEventListener("click",()=>showToast("Инструкция: telegram_bot_setup.md"));
+
+// Обновляем таймер текущей смены без перезагрузки страницы.
+setInterval(()=>{if(typeof updateNextShiftCard==='function')updateNextShiftCard();},60000);
