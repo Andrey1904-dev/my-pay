@@ -299,3 +299,11 @@ input::placeholder,textarea::placeholder{color:#8a8a86!important;opacity:1}
 .stepper{gap:12px!important}
 .step-btn{flex-basis:64px!important;width:64px!important}
 @media(max-width:420px){.step-btn{flex-basis:54px!important;width:54px!important}.stepper{gap:8px!important}.cases-input-wrap input{font-size:28px!important}}
+
+/* v3 interaction and CASE.PLACE contrast fixes */
+.cases-card,.stepper,.quick-row,.step-btn,.quick-row button{position:relative;z-index:5;pointer-events:auto}
+.step-btn,.quick-row button{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.next-shift-card.current-shift span,.next-shift-card.current-shift b,.next-shift-card.current-shift small{color:#ff5a1f!important}
+.next-shift-card.current-shift b{color:#ff5a1f!important}
+.cases-input-wrap input{min-width:0;font-variant-numeric:tabular-nums}
+@media(min-width:800px){.screen.active>.cases-card{grid-column:span 8!important}.screen.active>.holiday-card{grid-column:span 4!important}}
