@@ -1,10 +1,10 @@
-/// v13: stale-cache protection; keep the current service worker and refresh app assets safely.
+/// v14: stale-cache protection; keep the current service worker and refresh app assets safely.
 (async()=>{
   // Remove caches from older releases, but do not unregister the active worker on every launch.
   try{
     if("caches" in window){
       const keys=await caches.keys();
-      await Promise.all(keys.filter(k=>k.startsWith("my-pay-v")&&k!=="my-pay-v13").map(k=>caches.delete(k)));
+      await Promise.all(keys.filter(k=>k.startsWith("my-pay-v")&&k!=="my-pay-v14").map(k=>caches.delete(k)));
     }
   }catch(e){console.warn("Cache cleanup:",e);}
 })();;
@@ -173,7 +173,12 @@ function syncHomeInputsFromCloud(){
 }
 function updateHome(){
   updateHomeDashboard();
-  const c=Math.max(0,Math.floor(Number($("casesInput").value)||0)),h=$("holidayInput").checked,p=piece(c);
+  const todayKey=dateKey(new Date());
+  const cloudToday=state.shifts[todayKey];
+  const c=Math.max(0,Math.floor(Number(cloudToday?cloudToday.cases:$("casesInput").value)||0));
+  const h=cloudToday?Boolean(cloudToday.holiday):$("holidayInput").checked;
+  if(cloudToday){$("casesInput").value=String(c);$("holidayInput").checked=h;}
+  const p=piece(c);
   $("shiftTotal").textContent=money(c?base(h)+p:0);$("homeBase").textContent=money(base(h));$("homePiece").textContent=money(p);$("perCase").textContent=money(Number(state.settings.casePrice)*Number(state.settings.percent)/100);$("perThousand").textContent=money(piece(1000));$("holidayChip").classList.toggle("hidden",!h);
   $("todayLabel").textContent=dateText(new Date(),{weekday:"long",day:"numeric",month:"long"}).toUpperCase();$("todayBadge").textContent=isWork(new Date())?"РАБОТА":"ВЫХОДНОЙ";
   $("greetingTitle").textContent="Моя смена";
