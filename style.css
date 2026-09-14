@@ -65,3 +65,23 @@ h1,h2,h3,p{margin:0}h1{font-size:27px;letter-spacing:-.055em;margin-top:3px}h2{f
 
 /* iOS Safari/PWA: prevent automatic zoom when focusing form fields. */
 .field-label input,.field-label textarea,.auth-card input[type="text"],.auth-card input[type="email"],.auth-card input[type="password"],.auth-card input[type="number"],.auth-card select{font-size:16px;}
+
+
+/* Premium visual layer */
+:root{--bg:#eef1f6;--card:rgba(255,255,255,.86);--line:rgba(20,27,45,.09);--shadow:0 18px 55px rgba(28,38,65,.09)}
+body{background:radial-gradient(circle at 10% 0%,#e5eaff 0,transparent 34%),radial-gradient(circle at 100% 10%,#dff7ee 0,transparent 30%),var(--bg);background-attachment:fixed}
+.app-shell{animation:appReveal .65s cubic-bezier(.2,.8,.2,1)}
+@keyframes appReveal{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+.earnings-card{background:linear-gradient(135deg,#111522 0%,#252b42 55%,#3d356d 100%);box-shadow:0 22px 55px rgba(25,29,55,.22)}
+.earnings-glow{width:280px;height:280px;background:rgba(129,111,255,.28);filter:blur(22px);animation:floatGlow 8s ease-in-out infinite}
+@keyframes floatGlow{50%{transform:translate(-25px,18px) scale(1.12)}}
+.cases-card,.mini-card,.month-snapshot,.chart-card,.menu-list,.profile-card,.holiday-card,.insight-card{backdrop-filter:blur(18px);transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
+.cases-card:hover,.mini-card:hover,.month-snapshot:hover,.chart-card:hover,.insight-card:hover{transform:translateY(-2px);box-shadow:0 18px 45px rgba(28,38,65,.11);border-color:rgba(112,86,217,.22)}
+.save-btn{background:linear-gradient(110deg,#171b29,#343b59);transition:transform .2s ease,box-shadow .2s ease}
+.save-btn:hover{transform:translateY(-2px);box-shadow:0 15px 30px rgba(25,30,52,.25)}
+.step-btn,.quick-row button,.round-icon,.month-nav button{transition:transform .18s ease,background .18s ease}
+.step-btn:hover,.quick-row button:hover,.round-icon:hover,.month-nav button:hover{transform:translateY(-2px);background:#e9eafa}
+.auth-modal{background:linear-gradient(135deg,rgba(10,13,24,.88),rgba(47,39,83,.86));backdrop-filter:blur(18px)}
+.auth-card{background:rgba(255,255,255,.96);box-shadow:0 35px 100px rgba(0,0,0,.3);animation:authReveal .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes authReveal{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}

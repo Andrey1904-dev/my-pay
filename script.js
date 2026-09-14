@@ -69,7 +69,7 @@ async function authAction(){
       const name=$('authName').value.trim(),p2=$('authPassword2').value;
       if(name.length<2)throw new Error('Напиши имя.');
       if(password!==p2)throw new Error('Пароли не совпадают.');
-      const {data,error}=await db.auth.signUp({email,password,data:{name:name.trim()}});
+      const {data,error}=await db.auth.signUp({email,password,options:{data:{name:name.trim()}}});
       if(error){
         const m=(error.message||'').toLowerCase();
         if(/already registered|already been registered|user already registered/i.test(m)) throw new Error('Этот email уже зарегистрирован.');
@@ -80,7 +80,7 @@ async function authAction(){
         throw new Error(error.message||'Не удалось создать аккаунт.');
       }
       if(!data.user)throw new Error('Не удалось создать аккаунт.');
-      if(!data.session)throw new Error('Подтверждение email включено. Отключи Confirm email в Authentication → Providers → Email.');
+      if(!data.session){ setStatus('Аккаунт создан. Проверь почту и подтверди email, затем войди.'); return; }
       currentUser=data.user;
       const profileResult=await cloudSaveProfile(name);
       if(!profileResult)throw new Error('Аккаунт создан, но не удалось сохранить профиль. Проверь SQL-схему и RLS.');
