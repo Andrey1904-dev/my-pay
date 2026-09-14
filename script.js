@@ -92,7 +92,15 @@ async function authAction(){
     }
   }catch(e){setStatus(e.message||'Что-то пошло не так.')}finally{$('authAction').disabled=false;$('authAction').textContent=authMode==='signup'?'Создать аккаунт':'Войти'}
 }
-async function afterLogin(){const synced=await cloudLoad();if(!synced){if(!navigator.onLine){showAuth(false);updateProfileUI();updateHome();renderCalendar();renderStats();renderFinance();showToast("Офлайн-режим: данные сохраняются на устройстве");return true}showAuth(true);setStatus("Не удалось синхронизировать данные. Проверь интернет и попробуй войти снова.");return false}showAuth(false);updateProfileUI();updateHome();renderCalendar();renderStats();renderFinance();flushCloudQueue();return true}
+let cloudRefreshTimer=null;
+function startCloudRefresh(){
+  if(cloudRefreshTimer)clearInterval(cloudRefreshTimer);
+  cloudRefreshTimer=setInterval(async()=>{
+    if(!currentUser||document.hidden||document.querySelector(".modal:not(.hidden)"))return;
+    await cloudLoad();
+  },15000);
+}
+async function afterLogin(){const synced=await cloudLoad();if(!synced){if(!navigator.onLine){showAuth(false);updateProfileUI();updateHome();renderCalendar();renderStats();renderFinance();showToast("Офлайн-режим: данные сохраняются на устройстве");return true}showAuth(true);setStatus("Не удалось синхронизировать данные. Проверь интернет и попробуй войти снова.");return false}showAuth(false);updateProfileUI();updateHome();renderCalendar();renderStats();renderFinance();flushCloudQueue();startCloudRefresh();return true}
 
 async function cloudLoad(){
   if(!currentUser)return false;
