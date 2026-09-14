@@ -129,3 +129,11 @@ input,select,textarea{border-radius:15px!important}
 @media(min-width:800px){.content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.screen{grid-column:1/-1}.screen.active{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:18px}.screen.active>*{grid-column:span 12}.screen.active>.month-snapshot,.screen.active>.earnings-card,.screen.active>.finance-hero{grid-column:span 7}.screen.active>.next-shift-card,.screen.active>.cases-card,.screen.active>.holiday-card,.screen.active>.mini-grid,.screen.active>.stat-grid{grid-column:span 5}.screen.active>.page-head,.screen.active>.chart-card,.screen.active>.history-card{grid-column:span 12}.screen.active>.section-label{grid-column:span 12}}
 @media(prefers-reduced-motion:no-preference){.screen.active>*{animation:riseIn .45s both}.screen.active>*:nth-child(2){animation-delay:.04s}.screen.active>*:nth-child(3){animation-delay:.08s}.screen.active>*:nth-child(4){animation-delay:.12s}@keyframes riseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}}
 body.dark .topbar{background:rgba(14,17,24,.8)!important}body.dark .month-snapshot{background:linear-gradient(135deg,#1b2130,#252b43)!important}body.dark .step-btn,body.dark .round-icon{background:#1b202c!important;color:#fff!important}
+
+/* MY PAY X FIX — stable quick actions and neutral heading */
+.greeting h1{max-width:100%;overflow-wrap:anywhere}
+.quick-row{grid-template-columns:repeat(4,minmax(0,1fr));min-width:0;overflow:hidden}
+.quick-row button{min-width:0;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:11px 4px!important;font-size:clamp(9px,1.4vw,11px)!important}
+.cases-card{min-width:0;overflow:hidden}
+@media(max-width:520px){.quick-row{gap:7px}.quick-row button{font-size:10px!important;padding:10px 2px!important}}
+@media(max-width:380px){.quick-row{grid-template-columns:repeat(2,minmax(0,1fr))}}

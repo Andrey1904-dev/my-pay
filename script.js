@@ -154,7 +154,7 @@ async function cloudDeleteShift(k){
 
 function updateProfileUI(){
   const n=currentProfile?.name?.trim()||"Мой расчёт";$("profileName").textContent=n;$("profileAvatar").textContent=(n[0]||"₽").toUpperCase();
-  const first=n.split(/\s+/)[0];if(currentUser&&first!=="Мой")$("greetingTitle").textContent=isWork(new Date())?`Смена, ${first}`:`Сегодня выходной, ${first}`;
+  const first=n.split(/\s+/)[0];$("greetingTitle").textContent="Моя смена";
 }
 
 function updateHome(){
@@ -162,7 +162,7 @@ function updateHome(){
   const c=Math.max(0,Math.floor(Number($("casesInput").value)||0)),h=$("holidayInput").checked,p=piece(c);
   $("shiftTotal").textContent=money(c?base(h)+p:0);$("homeBase").textContent=money(base(h));$("homePiece").textContent=money(p);$("perCase").textContent=money(Number(state.settings.casePrice)*Number(state.settings.percent)/100);$("perThousand").textContent=money(piece(1000));$("holidayChip").classList.toggle("hidden",!h);
   $("todayLabel").textContent=dateText(new Date(),{weekday:"long",day:"numeric",month:"long"}).toUpperCase();$("todayBadge").textContent=isWork(new Date())?"РАБОТА":"ВЫХОДНОЙ";
-  if(!currentUser)$("greetingTitle").textContent=isWork(new Date())?"Моя смена":"Сегодня выходной";
+  $("greetingTitle").textContent="Моя смена";
 }
 async function saveHomeShift(){
   const c=Math.max(0,Math.floor(Number($("casesInput").value)||0)),h=$("holidayInput").checked,k=state.selectedDate||dateKey(new Date()),v={cases:c,holiday:h,base:base(h),piece:piece(c),total:total(c,h)},previous=state.shifts[k];
