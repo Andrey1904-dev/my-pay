@@ -466,3 +466,8 @@ body.dark .cases-input-wrap input{color:#fff!important}
   .quick-row{gap:5px!important}
   .quick-row button{font-size:11px!important;padding-left:2px!important;padding-right:2px!important}
 }
+
+/* Final requested alignment: income amount in «Моя смена» matches «Этот месяц». */
+.earnings-total{
+  font-size:clamp(34px,4.4vw,53px)!important;
+}
