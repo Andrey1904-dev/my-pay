@@ -307,3 +307,54 @@ input::placeholder,textarea::placeholder{color:#8a8a86!important;opacity:1}
 .next-shift-card.current-shift b{color:#ff5a1f!important}
 .cases-input-wrap input{min-width:0;font-variant-numeric:tabular-nums}
 @media(min-width:800px){.screen.active>.cases-card{grid-column:span 8!important}.screen.active>.holiday-card{grid-column:span 4!important}}
+
+/* v4 typography polish: keep currency on one line and improve current-shift hierarchy */
+.snapshot-head strong,
+.earnings-total,
+#shiftTotal,
+#homeMonthTotal,
+#homeAvgShift,
+#homeBase,
+#homePiece{
+  white-space:nowrap!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+  font-variant-numeric:tabular-nums;
+}
+.snapshot-head strong{font-size:clamp(28px,4.6vw,46px)!important;line-height:1.02!important}
+.earnings-total{
+  display:block!important;
+  width:max-content!important;
+  max-width:100%!important;
+  font-size:clamp(42px,6.5vw,72px)!important;
+  line-height:.98!important;
+  letter-spacing:-.055em!important;
+}
+.next-shift-card.current-shift{align-items:center!important;gap:14px!important}
+.next-shift-card.current-shift>div:last-child{gap:4px!important}
+.next-shift-card.current-shift span{
+  font-size:10px!important;
+  line-height:1.15!important;
+  letter-spacing:.16em!important;
+  font-weight:950!important;
+  color:#ff5a1f!important;
+}
+.next-shift-card.current-shift b{
+  font-size:17px!important;
+  line-height:1.12!important;
+  letter-spacing:-.025em!important;
+  font-weight:900!important;
+  color:#ff5a1f!important;
+}
+.next-shift-card.current-shift small{
+  font-size:11px!important;
+  line-height:1.2!important;
+  font-weight:700!important;
+  color:#ff8a62!important;
+}
+.next-shift-card.current-shift .next-shift-icon{flex:0 0 38px!important;width:38px!important;height:38px!important}
+@media(max-width:520px){
+  .earnings-total{font-size:clamp(38px,10vw,58px)!important}
+  .snapshot-head strong{font-size:clamp(27px,8vw,40px)!important}
+  .next-shift-card.current-shift b{font-size:15px!important}
+}
