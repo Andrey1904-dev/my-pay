@@ -167,3 +167,75 @@ h1,h2{font-weight:900;letter-spacing:-.065em}
 .bottom-nav{background:#1d2024!important;border-radius:0!important;color:#fff!important}
 .nav-item.active{background:#ff5a1f!important}.nav-item.active svg{color:#fff!important}
 @media(min-width:800px){.app-shell{max-width:1100px;margin:auto}.content{padding-left:28px;padding-right:28px}}
+
+/* CASE.PLACE SALARY — contrast and readability patch */
+:root{
+  --cp-orange:#ff5a1f;
+  --cp-orange-dark:#c83b0b;
+  --cp-orange-soft:#fff1eb;
+  --cp-graphite:#1d2024;
+  --cp-text:#17191d;
+  --cp-muted:#626873;
+  --cp-border:#dedfe3;
+  --cp-surface:#ffffff;
+  --cp-soft:#f5f5f6;
+}
+html,body{color:var(--cp-text)}
+body{background:linear-gradient(var(--cp-graphite) 0 92px,#f2f2f2 92px 100%)}
+.app-shell{background:#f2f2f2;color:var(--cp-text)}
+.topbar{background:var(--cp-graphite)!important;color:#fff!important}
+.brand-title,.brand-subtitle{color:#fff}.brand-subtitle{color:#c7c9ce}
+.content{color:var(--cp-text)}
+.overline,.section-label{color:#5f6670!important}
+.today-badge,.month-tag{background:var(--cp-orange)!important;color:#fff!important}
+.month-tag{background:var(--cp-graphite)!important}
+.month-snapshot,.cases-card,.holiday-card,.mini-card,.calendar-card,.stat-box,.progress-card,.history-card,.profile-card,.menu-list,.chart-card,.insight-card,.goal-card,.expense-card,.template-card,.next-shift-card{background:var(--cp-surface)!important;color:var(--cp-text)!important;border-color:var(--cp-border)!important}
+.month-snapshot *,.cases-card *,.holiday-card *,.mini-card *,.calendar-card *,.stat-box *,.progress-card *,.history-card *,.profile-card *,.menu-list *,.chart-card *,.insight-card *,.goal-card *,.expense-card *,.template-card *,.next-shift-card *{text-shadow:none}
+.snapshot-kicker,.snapshot-stats,.snapshot-stats span,.mini-card span,.stat-box span,.holiday-copy span,.history-left small,.history-right small,.progress-bottom,.next-shift-card span,.next-shift-card small{color:var(--cp-muted)!important}
+.snapshot-head strong,.mini-card strong,.stat-box strong,.history-left b,.history-right b,.holiday-copy b,.next-shift-card b{color:var(--cp-text)!important}
+.snapshot-track,.progress-track{background:#e1e3e7!important}
+.snapshot-track>div,.progress-track>div,.goal-track i{background:var(--cp-orange)!important}
+.earnings-card{background:var(--cp-graphite)!important;color:#fff!important;border:0!important}
+.earnings-card .earnings-total,.earnings-card .earnings-breakdown b{color:#fff!important}
+.earnings-card .earnings-breakdown,.earnings-card .earnings-top>span:first-child{color:#c7cbd2!important}
+.earnings-card .holiday-chip{background:#fff!important;color:var(--cp-graphite)!important}
+.cases-input-wrap input{color:var(--cp-text)!important}
+.step-btn,.quick-row button,.template-chip,.mini-action,.tiny-btn{background:#eeeeef!important;color:var(--cp-text)!important;border:1px solid #e0e1e4!important}
+.step-btn:active,.quick-row button:active,.template-chip:active{background:#dedfe2!important}
+.holiday-icon{background:var(--cp-orange-soft)!important;color:var(--cp-orange-dark)!important}
+.switch span{background:#c8ccd2!important}.switch input:checked+span{background:var(--cp-orange)!important}
+.save-btn{background:var(--cp-orange)!important;color:#fff!important}
+.save-note{color:var(--cp-orange-dark)!important}
+.month-nav button,.round-icon,.outline-btn{background:#fff!important;color:var(--cp-text)!important;border-color:var(--cp-border)!important}
+.day{background:#e9eaed!important;color:#343941!important}
+.day.work{background:var(--cp-orange-soft)!important;color:var(--cp-orange-dark)!important}
+.day.saved{background:#ffd9c9!important;color:#a93209!important}
+.day.today{box-shadow:inset 0 0 0 2px var(--cp-orange)!important}
+.selected-card,.month-total-card{background:var(--cp-graphite)!important;color:#fff!important}
+.selected-card .overline,.selected-card span,.month-total-card>span,.month-meta{color:#c3c7ce!important}
+.selected-money,.selected-main h3,.month-total-card strong{color:#fff!important}
+.text-btn{color:var(--cp-orange-dark)!important}
+.profile-avatar{background:var(--cp-orange)!important;color:#fff!important}
+.menu-item{color:var(--cp-text)!important;background:#fff!important;border-color:var(--cp-border)!important}
+.menu-item span,.menu-item small{color:var(--cp-muted)!important}
+.bottom-nav{background:var(--cp-graphite)!important;color:#d7d9de!important}
+.nav-item{color:#c6c9cf!important}.nav-item.active{background:var(--cp-orange)!important;color:#fff!important}.nav-item.active svg{color:#fff!important}
+input,select,textarea{color:var(--cp-text)!important;background:#fff!important;border-color:var(--cp-border)!important}
+input::placeholder,textarea::placeholder{color:#8a9099!important;opacity:1}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgba(255,90,31,.38);outline-offset:2px}
+
+/* Dark theme: never use low-contrast gray-on-gray text */
+body.dark{background:#101216!important;color:#f5f6f8!important}
+body.dark .app-shell{background:#101216!important;color:#f5f6f8!important}
+body.dark .content{color:#f5f6f8!important}
+body.dark .month-snapshot,body.dark .cases-card,body.dark .holiday-card,body.dark .mini-card,body.dark .calendar-card,body.dark .stat-box,body.dark .progress-card,body.dark .history-card,body.dark .profile-card,body.dark .menu-list,body.dark .chart-card,body.dark .insight-card,body.dark .goal-card,body.dark .expense-card,body.dark .template-card,body.dark .next-shift-card{background:#1b1e24!important;color:#f5f6f8!important;border-color:#343943!important}
+body.dark .overline,body.dark .section-label,body.dark .snapshot-kicker,body.dark .snapshot-stats,body.dark .snapshot-stats span,body.dark .mini-card span,body.dark .stat-box span,body.dark .holiday-copy span,body.dark .history-left small,body.dark .history-right small,body.dark .progress-bottom,body.dark .next-shift-card span,body.dark .next-shift-card small{color:#b7bdc8!important}
+body.dark .snapshot-head strong,body.dark .mini-card strong,body.dark .stat-box strong,body.dark .history-left b,body.dark .history-right b,body.dark .holiday-copy b,body.dark .next-shift-card b,body.dark .cases-input-wrap input{color:#fff!important}
+body.dark .step-btn,body.dark .quick-row button,body.dark .template-chip,body.dark .mini-action,body.dark .tiny-btn{background:#292e37!important;color:#fff!important;border-color:#414754!important}
+body.dark .month-nav button,body.dark .round-icon,body.dark .outline-btn,body.dark input,body.dark select,body.dark textarea{background:#242932!important;color:#fff!important;border-color:#414754!important}
+body.dark .day{background:#303641!important;color:#f2f4f7!important}.day.work{background:#4a2418!important;color:#ffb49b!important}.day.saved{background:#4b2a20!important;color:#ffc0a8!important}
+body.dark .menu-item{background:#1b1e24!important;color:#fff!important;border-color:#343943!important}
+body.dark .menu-item span,body.dark .menu-item small{color:#b7bdc8!important}
+body.dark .holiday-icon{background:#4a2418!important;color:#ffb49b!important}
+body.dark .snapshot-track,body.dark .progress-track{background:#343943!important}
+@media(max-width:520px){.brand-title{font-size:14px!important}.content{padding-left:14px!important;padding-right:14px!important}.earnings-total{font-size:44px!important}}
