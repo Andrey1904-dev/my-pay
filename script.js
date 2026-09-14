@@ -123,6 +123,7 @@ async function cloudLoad(){
     cs[key]={cases:Number(x.cases)||0,holiday:!!x.is_holiday,base:Number(x.base_pay)||0,piece:Number(x.piece_pay)||0,total:Number(x.total_pay)||0};
   }
   state.shifts=cs;
+  syncHomeInputsFromCloud();
   await cloudLoadExtra();
   save();updateHome();renderCalendar();renderStats();if(typeof renderInsights==="function")renderInsights();if(typeof renderFinance==="function")renderFinance();
   return true;
@@ -165,6 +166,11 @@ function updateProfileUI(){
   const first=n.split(/\s+/)[0];$("greetingTitle").textContent="Моя смена";
 }
 
+function syncHomeInputsFromCloud(){
+  const todayShift=state.shifts[dateKey(new Date())];
+  $("casesInput").value=todayShift?String(todayShift.cases||0):"0";
+  $("holidayInput").checked=Boolean(todayShift?.holiday);
+}
 function updateHome(){
   updateHomeDashboard();
   const c=Math.max(0,Math.floor(Number($("casesInput").value)||0)),h=$("holidayInput").checked,p=piece(c);
@@ -397,7 +403,7 @@ async function initCloudAuth(){
  if(session?.user){currentUser=session.user;await afterLogin()}else showAuth(true);
  db.auth.onAuthStateChange(async(_event,session)=>{if(session?.user&&!currentUser){currentUser=session.user;await afterLogin()}else if(!session){currentUser=null;currentProfile=null;showAuth(true);backAuth()}});
 }
-state.selectedDate=dateKey(new Date());applyTheme();selectCalendarDate(state.selectedDate);updateHome();renderCalendar();renderStats();renderInsights();renderFinance();refreshUndoUI();initCloudAuth();
+state.selectedDate=dateKey(new Date());applyTheme();selectCalendarDate(state.selectedDate);syncHomeInputsFromCloud();updateHome();renderCalendar();renderStats();renderInsights();renderFinance();refreshUndoUI();initCloudAuth();
 $("logoutBtn").onclick=async()=>{
   await db.auth.signOut();
   currentUser=null;currentProfile=null;
