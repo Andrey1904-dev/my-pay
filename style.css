@@ -102,3 +102,30 @@ body{background:radial-gradient(circle at 10% 0%,#e5eaff 0,transparent 34%),radi
 body.dark{--bg:#0e1118;--card:rgba(24,29,40,.88);--line:rgba(255,255,255,.08);--ink:#f4f6fb;--muted:#8f98a9;--dark:#080a0f;background:radial-gradient(circle at 10% 0%,#232b4d 0,transparent 32%),radial-gradient(circle at 100% 5%,#173f35 0,transparent 28%),#0e1118;color:var(--ink)}
 body.dark .topbar,body.dark .bottom-nav{background:rgba(14,17,24,.88);border-color:var(--line)}body.dark .month-snapshot,body.dark .cases-card,body.dark .holiday-card,body.dark .mini-card,body.dark .calendar-card,body.dark .selected-card,body.dark .stat-box,body.dark .progress-card,body.dark .history-card,body.dark .profile-card,body.dark .menu-list,body.dark .tip-card{background:var(--card);color:var(--ink)}body.dark .snapshot-stats span,body.dark .goal-item,body.dark .template-chip,body.dark .mini-action,body.dark .expense-delete,body.dark .tiny-btn{background:#1b202c;color:var(--ink)}body.dark input,body.dark textarea,body.dark select{background:#171b24!important;color:var(--ink)!important;border-color:var(--line)!important}body.dark .sheet{background:#131722;color:var(--ink)}body.dark .menu-item{color:var(--ink)}
 @media(max-width:380px){.nav-item small{font-size:7px}.finance-hero strong{font-size:26px}.field-grid-2{grid-template-columns:1fr}}
+
+/* MY PAY ULTRA X — premium redesign */
+:root{--accent:#b8ff4a;--accent-2:#8d7bff;--ink:#10131b;--muted:#8991a3;--radius-xl:28px}
+body{letter-spacing:-.01em}
+.app-shell{max-width:1180px!important}
+.topbar{position:sticky;top:0;z-index:40;padding:22px 24px!important;background:rgba(244,246,250,.78)!important;backdrop-filter:blur(24px)!important;border-bottom:1px solid rgba(20,27,45,.06)!important}
+.brand-mark{width:46px!important;height:46px!important;border-radius:16px!important;background:linear-gradient(135deg,#171b2b,#6255d8)!important;box-shadow:0 10px 28px rgba(74,65,170,.25)!important;font-size:22px!important}
+.brand-title{font-size:17px!important;letter-spacing:-.045em!important}.brand-subtitle{font-size:10px!important}
+.content{padding:26px 24px 110px!important}
+.screen h1,.screen h2{font-size:clamp(30px,4vw,48px)!important;letter-spacing:-.065em!important;line-height:1.02!important}
+.month-snapshot,.next-shift-card,.cases-card,.holiday-card,.mini-card,.calendar-card,.selected-card,.stat-box,.progress-card,.history-card,.goal-card,.expense-card,.template-card,.chart-card,.insight-card{border-radius:var(--radius-xl)!important;box-shadow:0 18px 60px rgba(27,35,62,.07)!important;border:1px solid rgba(25,33,54,.075)!important}
+.month-snapshot{padding:26px!important;background:linear-gradient(135deg,#fff,#f3f5ff)!important}
+.snapshot-head strong{font-size:clamp(38px,6vw,64px)!important;letter-spacing:-.075em!important}
+.snapshot-track,.goal-track,.expense-track,.progress-track{height:10px!important;border-radius:99px!important;background:#e5e8f0!important}.snapshot-track>div,.goal-track i,.progress-track>div{background:linear-gradient(90deg,var(--accent-2),#55d6a0)!important}
+.earnings-card,.finance-hero{border-radius:30px!important;background:radial-gradient(circle at 90% 0%,rgba(141,123,255,.55),transparent 35%),linear-gradient(135deg,#111522,#20283b 62%,#29234b)!important;box-shadow:0 28px 75px rgba(20,24,48,.25)!important;padding:28px!important}
+.earnings-total{font-size:clamp(48px,8vw,78px)!important;letter-spacing:-.08em!important}
+.save-btn{border-radius:18px!important;min-height:60px!important;background:linear-gradient(100deg,#171b2b,#5145b9 70%,#8d7bff)!important;box-shadow:0 16px 35px rgba(70,59,165,.22)!important;font-size:14px!important}
+.step-btn{width:52px!important;height:52px!important;border-radius:17px!important;background:#f0f2f8!important;font-size:25px!important}
+.quick-row button,.mini-action,.tiny-btn,.template-chip{border-radius:13px!important;padding:11px 13px!important}
+.page-head{margin-bottom:24px!important}.page-head h2{margin-top:7px!important}
+.bottom-nav{border-radius:25px 25px 0 0!important;padding:10px 14px calc(10px + env(safe-area-inset-bottom))!important;box-shadow:0 -15px 45px rgba(25,32,55,.1)!important}
+.nav-item.active{background:#171b2b!important;color:#fff!important;border-radius:16px!important}.nav-item.active svg{color:var(--accent)!important}
+.round-icon{border-radius:15px!important;background:#fff!important;box-shadow:0 8px 22px rgba(30,35,55,.08)!important}
+input,select,textarea{border-radius:15px!important}
+@media(min-width:800px){.content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.screen{grid-column:1/-1}.screen.active{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:18px}.screen.active>*{grid-column:span 12}.screen.active>.month-snapshot,.screen.active>.earnings-card,.screen.active>.finance-hero{grid-column:span 7}.screen.active>.next-shift-card,.screen.active>.cases-card,.screen.active>.holiday-card,.screen.active>.mini-grid,.screen.active>.stat-grid{grid-column:span 5}.screen.active>.page-head,.screen.active>.chart-card,.screen.active>.history-card{grid-column:span 12}.screen.active>.section-label{grid-column:span 12}}
+@media(prefers-reduced-motion:no-preference){.screen.active>*{animation:riseIn .45s both}.screen.active>*:nth-child(2){animation-delay:.04s}.screen.active>*:nth-child(3){animation-delay:.08s}.screen.active>*:nth-child(4){animation-delay:.12s}@keyframes riseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}}
+body.dark .topbar{background:rgba(14,17,24,.8)!important}body.dark .month-snapshot{background:linear-gradient(135deg,#1b2130,#252b43)!important}body.dark .step-btn,body.dark .round-icon{background:#1b202c!important;color:#fff!important}
