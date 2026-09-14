@@ -467,7 +467,46 @@ body.dark .cases-input-wrap input{color:#fff!important}
   .quick-row button{font-size:11px!important;padding-left:2px!important;padding-right:2px!important}
 }
 
-/* Final requested alignment: income amount in «Моя смена» matches «Этот месяц». */
-.earnings-total{
-  font-size:clamp(34px,4.4vw,53px)!important;
+/* CALENDAR FINAL FIX — clear schedule colors and balanced typography */
+#calendarScreen .page-head h2{
+  font-size:clamp(36px,4.8vw,56px)!important;
+  line-height:1!important;
+  letter-spacing:-.055em!important;
+  font-weight:800!important;
+}
+#calendarScreen .page-head{margin-bottom:18px!important;align-items:center!important}
+#calendarScreen .month-nav strong{font-size:15px!important;font-weight:800!important;min-width:150px!important;color:var(--ink)!important}
+#calendarScreen .month-nav button{width:44px!important;height:44px!important;font-size:25px!important;border-radius:14px!important;background:#252b35!important;color:#fff!important;border:1px solid #485161!important}
+#calendarScreen .calendar-legend{gap:18px!important;font-size:13px!important;margin:0 0 16px!important;color:var(--muted)!important}
+#calendarScreen .legend-dot{width:11px!important;height:11px!important;flex:0 0 11px!important}
+#calendarScreen .legend-dot.work{background:#ff5a1f!important;box-shadow:0 0 0 3px rgba(255,90,31,.16)}
+#calendarScreen .legend-dot.off{background:#697384!important;box-shadow:0 0 0 3px rgba(105,115,132,.16)}
+#calendarScreen .legend-dot.saved{background:#fff!important;border:3px solid #ff5a1f;box-sizing:border-box}
+#calendarScreen .calendar-card{padding:18px!important;border-radius:26px!important;background:#1b1f27!important;border:1px solid #3b4350!important;box-shadow:none!important}
+#calendarScreen .weekdays{font-size:13px!important;font-weight:800!important;color:#aeb6c5!important;margin-bottom:10px!important}
+#calendarScreen .calendar-days{gap:8px!important}
+#calendarScreen .day{aspect-ratio:1!important;min-height:54px!important;border-radius:10px!important;background:#303744!important;color:#f3f5f8!important;font-size:16px!important;font-weight:800!important;border:1px solid transparent!important;transition:background .15s,border-color .15s!important}
+#calendarScreen .day.work{background:#4b291f!important;color:#ffb49b!important;border-color:#6e3929!important}
+#calendarScreen .day.saved{background:#ff5a1f!important;color:#fff!important;border-color:#ffb39a!important}
+#calendarScreen .day.work.saved{background:#ff5a1f!important;color:#fff!important}
+#calendarScreen .day.today{box-shadow:inset 0 0 0 2px #fff!important}
+#calendarScreen .day.selected{box-shadow:0 0 0 3px #ff5a1f!important}
+#calendarScreen .day .tiny{width:6px!important;height:6px!important;bottom:7px!important;background:#fff!important}
+#calendarScreen .selected-card{margin-top:18px!important;padding:24px!important;border-radius:26px!important;background:linear-gradient(110deg,#1b1f27 0%,#302326 100%)!important;overflow:hidden!important}
+#calendarScreen .selected-main .overline{font-size:12px!important;letter-spacing:.12em!important;color:#b9c0cc!important}
+#calendarScreen .selected-main h3{font-size:clamp(26px,3.2vw,42px)!important;line-height:1.05!important;letter-spacing:-.045em!important;font-weight:800!important;white-space:normal!important;overflow-wrap:anywhere!important;margin:8px 0 0!important}
+#calendarScreen .selected-main>span{font-size:14px!important;color:#c5cad3!important;margin-top:8px!important}
+#calendarScreen .selected-money{font-size:24px!important;font-weight:800!important;white-space:nowrap!important}
+#calendarScreen .outline-btn{min-height:54px!important;font-size:15px!important;border-radius:14px!important}
+@media(max-width:700px){
+  #calendarScreen .page-head h2{font-size:38px!important}
+  #calendarScreen .month-nav strong{font-size:13px!important;min-width:105px!important}
+  #calendarScreen .month-nav button{width:38px!important;height:38px!important}
+  #calendarScreen .calendar-card{padding:10px!important}
+  #calendarScreen .calendar-days{gap:5px!important}
+  #calendarScreen .day{min-height:40px!important;font-size:13px!important;border-radius:8px!important}
+  #calendarScreen .weekdays{font-size:11px!important}
+  #calendarScreen .selected-card{padding:18px!important}
+  #calendarScreen .selected-main h3{font-size:28px!important}
+  #calendarScreen .selected-money{font-size:18px!important}
 }
