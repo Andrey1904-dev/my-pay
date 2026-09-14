@@ -575,3 +575,72 @@ body.dark .selected-main h3{font-size:clamp(46px,5.7vw,78px)!important;letter-sp
   body.dark .quick-row{gap:6px!important}
   body.dark .quick-row button{font-size:12px!important;min-height:48px!important;border-radius:14px!important}
 }
+
+/* v7 — restrained, balanced typography and responsive proportions */
+body.dark .screen.active > .month-snapshot,
+body.dark .screen.active > .earnings-card{grid-column:span 7!important;}
+body.dark .screen.active > .next-shift-card{grid-column:span 5!important;}
+body.dark .screen.active > .cases-card{grid-column:span 7!important;}
+body.dark .screen.active > .holiday-card{grid-column:span 5!important;}
+
+body.dark .topbar{padding:22px 28px 18px!important;}
+body.dark .brand-mark{width:54px!important;height:54px!important;border-radius:16px!important;font-size:27px!important;}
+body.dark .brand-title{font-size:22px!important;letter-spacing:-.045em!important;}
+body.dark .brand-subtitle{font-size:13px!important;}
+body.dark .content{padding:34px 28px 108px!important;}
+body.dark .screen.active{gap:22px!important;}
+
+body.dark .snapshot-head strong{font-size:clamp(38px,4.2vw,58px)!important;line-height:1!important;letter-spacing:-.065em!important;white-space:nowrap!important;}
+body.dark .snapshot-kicker{font-size:13px!important;letter-spacing:.11em!important;}
+body.dark .snapshot-percent{font-size:15px!important;padding:10px 13px!important;}
+body.dark .snapshot-track{height:10px!important;margin:18px 0 12px!important;}
+body.dark .snapshot-stats{gap:8px!important;}
+body.dark .snapshot-stats span{padding:12px 6px!important;font-size:12px!important;}
+body.dark .snapshot-stats b{font-size:17px!important;}
+
+body.dark .next-shift-card{min-height:210px!important;padding:25px!important;gap:16px!important;}
+body.dark .next-shift-icon{width:48px!important;height:48px!important;flex-basis:48px!important;font-size:25px!important;border-radius:16px!important;}
+body.dark .next-shift-card span{font-size:12px!important;letter-spacing:.11em!important;}
+body.dark .next-shift-card b{font-size:clamp(18px,2vw,27px)!important;line-height:1.08!important;letter-spacing:-.035em!important;}
+body.dark .next-shift-card small{font-size:14px!important;line-height:1.25!important;}
+
+body.dark .greeting{margin:12px 2px 0!important;}
+body.dark .greeting .overline{font-size:13px!important;letter-spacing:.09em!important;}
+body.dark .greeting h1{font-size:clamp(42px,4.6vw,62px)!important;line-height:1!important;letter-spacing:-.065em!important;}
+body.dark .today-badge{font-size:13px!important;padding:10px 15px!important;}
+
+body.dark .earnings-card{padding:30px!important;border-radius:30px!important;min-height:220px!important;}
+body.dark .earnings-top>span:first-child{font-size:13px!important;letter-spacing:.11em!important;}
+body.dark .earnings-total{font-size:clamp(42px,5vw,68px)!important;line-height:1!important;letter-spacing:-.065em!important;white-space:nowrap!important;}
+body.dark .earnings-breakdown{font-size:14px!important;gap:22px!important;line-height:1.3!important;}
+
+body.dark .section-label{font-size:13px!important;letter-spacing:.09em!important;margin:20px 2px 10px!important;}
+body.dark .cases-card{padding:20px!important;border-radius:28px!important;}
+body.dark .stepper{gap:12px!important;}
+body.dark .step-btn{width:68px!important;height:68px!important;flex-basis:68px!important;border-radius:20px!important;font-size:34px!important;}
+body.dark .cases-input-wrap input{font-size:clamp(40px,4.4vw,60px)!important;line-height:1!important;}
+body.dark .cases-input-wrap span{font-size:13px!important;margin-top:3px!important;}
+body.dark .quick-row{gap:9px!important;margin-top:14px!important;}
+body.dark .quick-row button{min-height:50px!important;border-radius:16px!important;font-size:14px!important;}
+body.dark .holiday-card{min-height:180px!important;padding:24px!important;border-radius:28px!important;gap:14px!important;}
+body.dark .holiday-icon{width:46px!important;height:46px!important;flex-basis:46px!important;font-size:24px!important;}
+body.dark .holiday-copy b{font-size:18px!important;line-height:1.12!important;}
+body.dark .holiday-copy span{font-size:14px!important;line-height:1.25!important;}
+body.dark .switch{transform:scale(1)!important;}
+
+@media(min-width:800px){
+  body.dark .screen.active>.month-snapshot,
+  body.dark .screen.active>.earnings-card{grid-column:span 7!important;}
+  body.dark .screen.active>.next-shift-card,
+  body.dark .screen.active>.holiday-card{grid-column:span 5!important;}
+}
+@media(max-width:799px){
+  body.dark .content{padding:24px 16px 100px!important;}
+  body.dark .brand-title{font-size:19px!important;}
+  body.dark .brand-subtitle{font-size:11px!important;}
+  body.dark .snapshot-head strong{font-size:clamp(38px,10vw,54px)!important;}
+  body.dark .earnings-total{font-size:clamp(40px,10vw,58px)!important;}
+  body.dark .greeting h1{font-size:clamp(40px,10vw,56px)!important;}
+  body.dark .screen.active{display:block!important;}
+  body.dark .month-snapshot,body.dark .next-shift-card,body.dark .earnings-card,body.dark .cases-card,body.dark .holiday-card{margin-bottom:16px!important;}
+}
