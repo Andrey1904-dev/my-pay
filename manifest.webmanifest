@@ -1,11 +1,11 @@
 {
-  "name": "Моя зарплата",
+  "name": "Моя зарплата — Ultra",
   "short_name": "Моя зарплата",
-  "description": "Личный калькулятор зарплаты и графика 2/2",
+  "description": "Учёт смен, зарплаты, расходов, целей и личной финансовой аналитики",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f4f5f7",
-  "theme_color": "#0d0f14",
+  "theme_color": "#111522",
   "lang": "ru",
   "id": "./",
   "scope": "./",
@@ -16,5 +16,19 @@
   "categories": [
     "finance",
     "productivity"
+  ],
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }

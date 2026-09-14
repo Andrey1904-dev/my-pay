@@ -199,6 +199,42 @@
         </article>
       </section>
 
+
+      <section class="screen" id="financeScreen">
+        <div class="page-head">
+          <div><div class="overline">ДЕНЬГИ ПОД КОНТРОЛЕМ</div><h2>Финансы</h2></div>
+          <button class="round-icon" id="addExpenseTop" aria-label="Добавить расход">＋</button>
+        </div>
+
+        <article class="finance-hero">
+          <div><span>СВОБОДНЫЙ ОСТАТОК ЗА МЕСЯЦ</span><strong id="freeBalance">0 ₽</strong><small id="dailyBudget">—</small></div>
+          <div class="finance-orb"><b id="savingsRate">0%</b><span>остаётся</span></div>
+        </article>
+
+        <div class="stat-grid finance-stats">
+          <article class="stat-box"><span>Доход</span><strong id="financeIncome">0 ₽</strong></article>
+          <article class="stat-box"><span>Расходы</span><strong id="financeExpenses">0 ₽</strong></article>
+          <article class="stat-box"><span>Прогноз</span><strong id="financeForecast">0 ₽</strong></article>
+          <article class="stat-box"><span>До цели</span><strong id="financeGoalLeft">0 ₽</strong></article>
+        </div>
+
+        <article class="goal-card">
+          <div class="section-row"><div><span class="eyebrow">ЦЕЛИ</span><h3>На что копим</h3></div><button class="mini-action" id="addGoalBtn">＋ цель</button></div>
+          <div id="goalsList" class="goal-list"></div>
+        </article>
+
+        <article class="expense-card">
+          <div class="section-row"><div><span class="eyebrow">РАСХОДЫ</span><h3>Куда уходят деньги</h3></div><button class="mini-action" id="addExpenseBtn">＋ расход</button></div>
+          <div id="expenseBars" class="expense-bars"></div>
+          <div id="expenseList" class="expense-list"></div>
+        </article>
+
+        <article class="template-card">
+          <div class="section-row"><div><span class="eyebrow">БЫСТРЫЙ ВВОД</span><h3>Шаблоны смен</h3></div><button class="mini-action" id="addTemplateBtn">＋ шаблон</button></div>
+          <div id="templatesList" class="templates-list"></div>
+        </article>
+      </section>
+
       <section class="screen" id="moreScreen">
         <div class="page-head">
           <div>
@@ -218,6 +254,10 @@
           <button class="menu-item" id="importBtn"><span class="menu-icon">↧</span><span><b>Восстановить данные</b><small>Загрузить ранее сохранённую копию</small></span><i>›</i></button>
           <button class="menu-item" id="installBtn"><span class="menu-icon">＋</span><span><b>Добавить на экран телефона</b><small>Работает как отдельное приложение</small></span><i>›</i></button>
           <button class="menu-item" id="enableNotificationsMenu"><span class="menu-icon">🔔</span><span><b>Уведомления</b><small id="notificationMenuStatus">Напоминания о сменах</small></span><i>›</i></button>
+
+          <button class="menu-item" id="exportCsvBtn"><span class="menu-icon">▤</span><span><b>Экспорт в CSV</b><small>Открывается в Excel и Numbers</small></span><i>›</i></button>
+          <button class="menu-item" id="themeBtn"><span class="menu-icon">◐</span><span><b>Тема оформления</b><small id="themeStatus">Системная</small></span><i>›</i></button>
+          <button class="menu-item hidden" id="undoDeleteBtn"><span class="menu-icon">↶</span><span><b>Вернуть удалённую смену</b><small id="undoDeleteMeta">Последнее удаление</small></span><i>›</i></button>
           <button class="menu-item" id="logoutBtn"><span class="menu-icon">↪</span><span><b>Выйти из аккаунта</b><small>Останусь на этом устройстве</small></span><i>›</i></button>
           <input type="file" id="importFile" accept=".json,application/json" hidden>
         </div>
@@ -238,6 +278,7 @@
       <button class="nav-item active" data-screen="homeScreen"><span>⌂</span><small>Смена</small></button>
       <button class="nav-item" data-screen="calendarScreen"><span>▦</span><small>Календарь</small></button>
       <button class="nav-item" data-screen="statsScreen"><span>◒</span><small>Статистика</small></button>
+      <button class="nav-item" data-screen="financeScreen"><span>₽</span><small>Финансы</small></button>
       <button class="nav-item" data-screen="moreScreen"><span>•••</span><small>Ещё</small></button>
     </nav>
   </div>
@@ -247,8 +288,14 @@
       <div class="sheet-handle"></div>
       <div class="sheet-head"><div><div class="overline">СМЕНА</div><h2 id="modalDate">—</h2></div><button class="close-btn" data-close="shiftModal">✕</button></div>
       <label class="field-label">Количество чехлов<input id="modalCases" type="number" inputmode="numeric" min="0" step="1"></label>
+      <div class="template-pills" id="modalTemplatePills"></div>
+      <div class="field-grid-2">
+        <label class="field-label">Часов<input id="modalHours" type="number" inputmode="decimal" min="0" step="0.5" placeholder="11"></label>
+        <label class="field-label">Премия / доплата, ₽<input id="modalBonus" type="number" inputmode="decimal" min="0" step="100" placeholder="0"></label>
+      </div>
+      <label class="field-label">Комментарий<textarea id="modalNote" rows="2" maxlength="160" placeholder="Например: переработка, сложная смена"></textarea></label>
       <label class="modal-holiday"><span><b>Праздничная смена</b><small>Ставка 4 050 ₽</small></span><label class="switch"><input type="checkbox" id="modalHoliday"><span></span></label></label>
-      <div class="modal-preview"><span>Итого за смену</span><strong id="modalTotal">0 ₽</strong></div>
+      <div class="modal-preview"><span>Итого за смену</span><strong id="modalTotal">0 ₽</strong></div><div class="modal-subpreview" id="modalHourly">—</div>
       <button class="save-btn" id="modalSave">Сохранить</button>
       <button class="delete-btn" id="modalDelete">Удалить смену</button>
     </div>
@@ -269,6 +316,34 @@
     </div>
   </div>
 
+
+  <div class="modal hidden" id="expenseModal"><div class="sheet">
+    <div class="sheet-handle"></div><div class="sheet-head"><div><div class="overline">РАСХОД</div><h2>Новая трата</h2></div><button class="close-btn" data-close="expenseModal">✕</button></div>
+    <label class="field-label">Сумма, ₽<input id="expenseAmount" type="number" min="0" step="10" inputmode="decimal"></label>
+    <label class="field-label">Категория<select id="expenseCategory"><option>Еда</option><option>Транспорт</option><option>Покупки</option><option>Жильё</option><option>Развлечения</option><option>Здоровье</option><option>Другое</option></select></label>
+    <label class="field-label">Дата<input id="expenseDate" type="date"></label>
+    <label class="field-label">Комментарий<input id="expenseNote" type="text" maxlength="100" placeholder="Необязательно"></label>
+    <button class="save-btn" id="expenseSave">Добавить расход</button>
+  </div></div>
+
+  <div class="modal hidden" id="goalModal"><div class="sheet">
+    <div class="sheet-handle"></div><div class="sheet-head"><div><div class="overline">ЦЕЛЬ</div><h2>Новая цель</h2></div><button class="close-btn" data-close="goalModal">✕</button></div>
+    <label class="field-label">Название<input id="goalName" type="text" maxlength="50" placeholder="Например: Новый телефон"></label>
+    <label class="field-label">Нужно накопить, ₽<input id="goalAmount" type="number" min="1" step="1000" inputmode="decimal"></label>
+    <label class="field-label">Уже отложено, ₽<input id="goalSaved" type="number" min="0" step="1000" inputmode="decimal" value="0"></label>
+    <button class="save-btn" id="goalSave">Создать цель</button>
+  </div></div>
+
+  <div class="modal hidden" id="templateModal"><div class="sheet">
+    <div class="sheet-handle"></div><div class="sheet-head"><div><div class="overline">ШАБЛОН</div><h2>Шаблон смены</h2></div><button class="close-btn" data-close="templateModal">✕</button></div>
+    <label class="field-label">Название<input id="templateName" type="text" maxlength="30" placeholder="Например: Обычная"></label>
+    <div class="field-grid-2"><label class="field-label">Чехлов<input id="templateCases" type="number" min="0" step="100"></label><label class="field-label">Часов<input id="templateHours" type="number" min="0" step="0.5" value="11"></label></div>
+    <label class="field-label">Доплата, ₽<input id="templateBonus" type="number" min="0" step="100" value="0"></label>
+    <label class="modal-holiday"><span><b>Праздничная</b><small>Использовать праздничную ставку</small></span><label class="switch"><input type="checkbox" id="templateHoliday"><span></span></label></label>
+    <button class="save-btn" id="templateSave">Сохранить шаблон</button>
+  </div></div>
+
+  <div class="confetti-layer" id="confettiLayer" aria-hidden="true"></div>
   <div class="toast" id="toast"></div>
   <div class="auth-modal" id="authModal">
   <div class="auth-card">
@@ -302,7 +377,7 @@
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="script.js?v=12"></script>
+    <script src="script.js?v=13"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
