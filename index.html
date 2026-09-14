@@ -253,6 +253,7 @@
           <button class="menu-item" id="exportBtn"><span class="menu-icon">↥</span><span><b>Сохранить резервную копию</b><small>Скачать данные в файл</small></span><i>›</i></button>
           <button class="menu-item" id="importBtn"><span class="menu-icon">↧</span><span><b>Восстановить данные</b><small>Загрузить ранее сохранённую копию</small></span><i>›</i></button>
           <button class="menu-item" id="installBtn"><span class="menu-icon">＋</span><span><b>Добавить на экран телефона</b><small>Работает как отдельное приложение</small></span><i>›</i></button>
+          <button class="menu-item" id="telegramBotBtn"><span class="menu-icon">✈</span><span><b>Telegram-бот</b><small>Ввод смен и уведомления</small></span><i>›</i></button>
           <button class="menu-item" id="enableNotificationsMenu"><span class="menu-icon">🔔</span><span><b>Уведомления</b><small id="notificationMenuStatus">Напоминания о сменах</small></span><i>›</i></button>
 
           <button class="menu-item" id="exportCsvBtn"><span class="menu-icon">▤</span><span><b>Экспорт в CSV</b><small>Открывается в Excel и Numbers</small></span><i>›</i></button>
@@ -316,6 +317,15 @@
     </div>
   </div>
 
+
+  <div class="modal hidden" id="telegramModal"><div class="sheet">
+    <div class="sheet-handle"></div><div class="sheet-head"><div><div class="overline">ИНТЕГРАЦИЯ</div><h2>Telegram-бот</h2></div><button class="close-btn" data-close="telegramModal">✕</button></div>
+    <p class="sheet-description">Получай уведомления и записывай количество чехлов прямо в Telegram.</p>
+    <div class="modal-preview"><span>Код привязки</span><strong id="telegramCode">—</strong></div>
+    <p class="sheet-description">Нажми «Получить код», затем отправь боту команду <b>/start КОД</b>. Код действует 10 минут.</p>
+    <button class="save-btn" id="telegramGenerateBtn">Получить код</button>
+    <button class="text-btn" id="telegramHelpBtn">Как настроить бота</button>
+  </div></div>
 
   <div class="modal hidden" id="expenseModal"><div class="sheet">
     <div class="sheet-handle"></div><div class="sheet-head"><div><div class="overline">РАСХОД</div><h2>Новая трата</h2></div><button class="close-btn" data-close="expenseModal">✕</button></div>

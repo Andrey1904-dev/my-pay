@@ -470,3 +470,23 @@ async function undoLastDelete(){const u=state.extra.undo;if(!u?.shift)return;sta
 
 $("addExpenseBtn").onclick=openExpenseModal;$("addExpenseTop").onclick=openExpenseModal;$("expenseSave").onclick=saveExpense;$("addGoalBtn").onclick=openGoalModal;$("goalSave").onclick=saveGoal;$("addTemplateBtn").onclick=openTemplateModal;$("templateSave").onclick=saveTemplate;$("exportCsvBtn").onclick=exportCsv;$("themeBtn").onclick=cycleTheme;$("undoDeleteBtn").onclick=undoLastDelete;
 flushCloudQueue();
+
+// ===== Telegram bot integration =====
+async function openTelegramModal(){
+  if(!currentUser){showToast("Сначала войди в аккаунт");return;}
+  $("telegramCode").textContent="—"; $("telegramModal").classList.remove("hidden");
+}
+async function generateTelegramCode(){
+  if(!currentUser){showToast("Сначала войди в аккаунт");return;}
+  $("telegramGenerateBtn").disabled=true; $("telegramGenerateBtn").textContent="Генерирую…";
+  try{
+    const {data,error}=await db.rpc("create_telegram_link_code");
+    if(error) throw error;
+    $("telegramCode").textContent=data||"—";
+    showToast("Код готов ✓");
+  }catch(e){console.error(e);showToast("Сначала выполни TELEGRAM_SUPABASE.sql");}
+  finally{$("telegramGenerateBtn").disabled=false;$("telegramGenerateBtn").textContent="Получить код";}
+}
+$("telegramBotBtn")?.addEventListener("click",openTelegramModal);
+$("telegramGenerateBtn")?.addEventListener("click",generateTelegramCode);
+$("telegramHelpBtn")?.addEventListener("click",()=>showToast("Инструкция: telegram_bot_setup.md"));

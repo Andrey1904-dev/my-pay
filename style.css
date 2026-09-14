@@ -137,3 +137,5 @@ body.dark .topbar{background:rgba(14,17,24,.8)!important}body.dark .month-snapsh
 .cases-card{min-width:0;overflow:hidden}
 @media(max-width:520px){.quick-row{gap:7px}.quick-row button{font-size:10px!important;padding:10px 2px!important}}
 @media(max-width:380px){.quick-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.telegram-code{letter-spacing:.2em}
+#telegramCode{font-variant-numeric:tabular-nums;letter-spacing:.18em}
