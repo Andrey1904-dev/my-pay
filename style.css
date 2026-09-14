@@ -139,3 +139,31 @@ body.dark .topbar{background:rgba(14,17,24,.8)!important}body.dark .month-snapsh
 @media(max-width:380px){.quick-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .telegram-code{letter-spacing:.2em}
 #telegramCode{font-variant-numeric:tabular-nums;letter-spacing:.18em}
+
+/* CASE.PLACE SALARY — brand skin inspired by the CASE.PLACE product aesthetic */
+:root{--bg:#f2f2f2;--card:#fff;--ink:#111214;--muted:#777b82;--line:#e9e9e9;--dark:#151515;--dark2:#222;--green:#ff5a1f;--green-soft:#fff0e9;--purple:#ff5a1f;--purple-soft:#fff0e9;--red:#ff5a1f;--shadow:0 8px 24px rgba(20,20,20,.045);--accent:#ff5a1f}
+html,body{background:#1d2024;color:var(--ink)}
+body{background:linear-gradient(#1d2024 0 90px,#f2f2f2 90px 100%);}
+.app-shell{background:#f2f2f2;overflow:hidden}
+.topbar{background:#1d2024;color:#fff;padding-top:calc(18px + env(safe-area-inset-top));padding-bottom:20px}
+.brand-mark{background:#ff5a1f;border-radius:50%;width:42px;height:42px;font-size:20px;box-shadow:none}
+.brand-title{font-size:16px;letter-spacing:-.04em;color:#fff}.brand-subtitle{color:#b8bbc0}
+.round-icon{background:#2a2d32!important;border-color:#41454b!important;color:#fff!important;box-shadow:none!important}
+.content{padding:18px 16px 0}
+.overline,.section-label{color:#8c9097;letter-spacing:.13em}
+h1,h2{font-weight:900;letter-spacing:-.065em}
+.today-badge,.month-tag{background:#ff5a1f;color:#fff;border-radius:5px;padding:8px 10px}
+.earnings-card{background:#fff;color:#111;border-radius:0;border:1px solid #ececec;box-shadow:none;padding:22px;margin-bottom:14px}
+.earnings-top>span:first-child{color:#999;opacity:1}.earnings-total{font-size:48px;color:#111}.earnings-breakdown{color:#8a8d93}.earnings-breakdown b{color:#111}.earnings-glow{background:rgba(255,90,31,.08);filter:blur(24px)}
+.cases-card,.holiday-card,.mini-card,.calendar-card,.progress-card,.history-card,.profile-card,.menu-list,.stat-box,.chart-card,.insight-card{border-radius:0;box-shadow:none;border-color:#e8e8e8}
+.step-btn{background:#f2f2f2;border-radius:0}.quick-row button{background:#f4f4f4;border-radius:0;color:#333}
+.save-btn{background:#ff5a1f;border-radius:0;box-shadow:none}.save-note{color:#ff5a1f}
+.holiday-card{border-radius:0}.holiday-icon{border-radius:0;background:#fff0e9;color:#ff5a1f}
+.switch input:checked+span{background:#ff5a1f}
+.day{border-radius:0}.day.work{background:#fff0e9;color:#ff5a1f}.day.saved{background:#ffe2d6;color:#d8440e}.day.today{box-shadow:inset 0 0 0 2px #ff5a1f}
+.selected-card,.month-total-card{background:#1d2024;border-radius:0}
+.outline-btn{border-radius:0}.progress-track div{background:#ff5a1f}
+.profile-avatar{background:#ff5a1f;border-radius:50%}
+.bottom-nav{background:#1d2024!important;border-radius:0!important;color:#fff!important}
+.nav-item.active{background:#ff5a1f!important}.nav-item.active svg{color:#fff!important}
+@media(min-width:800px){.app-shell{max-width:1100px;margin:auto}.content{padding-left:28px;padding-right:28px}}

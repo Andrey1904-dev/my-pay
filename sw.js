@@ -22,7 +22,7 @@ self.addEventListener("fetch",event=>{
   })());
 });
 self.addEventListener("push",event=>{
-  let data={title:"Моя зарплата",body:"У тебя новое напоминание."};
+  let data={title:"CASE.PLACE SALARY",body:"У тебя новое напоминание."};
   try{if(event.data)data={...data,...event.data.json()};}catch{}
   event.waitUntil(self.registration.showNotification(data.title,{body:data.body,icon:"./icon-192.png",badge:"./icon-192.png",data:data.data||{}}));
 });

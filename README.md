@@ -1,4 +1,4 @@
-# Моя зарплата — Ultra v13
+# CASE.PLACE SALARY — Ultra v13
 
 PWA для учёта смен, зарплаты, графика 2/2, личной финансовой аналитики, расходов и целей.
 
@@ -17,3 +17,6 @@ PWA для учёта смен, зарплаты, графика 2/2, лично
 - PWA + Service Worker v13.
 
 Для облачной синхронизации расходов, целей, шаблонов и дополнительных полей один раз выполни `SUPABASE_ULTRA.sql` в Supabase SQL Editor. Основная авторизация и смены от этого файла не зависят.
+
+## CASE.PLACE SALARY branding
+The interface was restyled in the CASE.PLACE visual direction: white product cards, graphite shell, orange accent, compact typography and a branded bot avatar (`bot-avatar.png`).

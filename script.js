@@ -316,7 +316,7 @@ function scheduleShiftReminder(){
         const ms=d-now;
         setTimeout(()=>{
           if(Notification.permission==="granted"){
-            try{new Notification("Моя зарплата",{body:`Сегодня рабочая смена — ${dateText(d,{day:"numeric",month:"long"})}.`});}
+            try{new Notification("CASE.PLACE SALARY",{body:`Сегодня рабочая смена — ${dateText(d,{day:"numeric",month:"long"})}.`});}
             catch{}
           }
           localStorage.setItem(key,"1");

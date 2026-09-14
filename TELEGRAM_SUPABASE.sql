@@ -1,4 +1,4 @@
--- MY PAY Telegram integration
+-- CASE.PLACE SALARY Telegram integration
 create table if not exists public.telegram_links (
   user_id uuid primary key references auth.users(id) on delete cascade,
   chat_id bigint unique not null,
@@ -67,3 +67,29 @@ alter table public.telegram_preferences enable row level security;
 drop policy if exists telegram_preferences_own on public.telegram_preferences;
 create policy telegram_preferences_own on public.telegram_preferences for select to authenticated using (auth.uid()=user_id);
 grant select on public.telegram_preferences to authenticated;
+
+-- Дополнительные функции Telegram: история, точечная отмена и подтверждение
+create table if not exists public.telegram_entries (
+  id bigserial primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  chat_id bigint not null,
+  work_date date not null,
+  cases integer not null check (cases > 0),
+  created_at timestamptz not null default now()
+);
+create index if not exists telegram_entries_user_date_idx on public.telegram_entries(user_id, work_date, created_at desc);
+alter table public.telegram_entries enable row level security;
+drop policy if exists telegram_entries_own on public.telegram_entries;
+create policy telegram_entries_own on public.telegram_entries for select to authenticated using (auth.uid()=user_id);
+grant select on public.telegram_entries to authenticated;
+grant usage, select on sequence public.telegram_entries_id_seq to service_role;
+
+create table if not exists public.telegram_pending_inputs (
+  chat_id bigint primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  cases integer not null check (cases > 0),
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+alter table public.telegram_pending_inputs enable row level security;
+grant all on public.telegram_entries, public.telegram_pending_inputs to service_role;

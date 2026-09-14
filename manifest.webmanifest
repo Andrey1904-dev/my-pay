@@ -1,6 +1,6 @@
 {
-  "name": "Моя зарплата — Ultra",
-  "short_name": "Моя зарплата",
+  "name": "CASE.PLACE SALARY — Ultra",
+  "short_name": "CASE.PLACE SALARY",
   "description": "Учёт смен, зарплаты, расходов, целей и личной финансовой аналитики",
   "start_url": "./",
   "display": "standalone",

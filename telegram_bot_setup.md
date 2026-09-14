@@ -1,4 +1,4 @@
-# MY PAY Telegram BOT — ULTRA setup
+# CASE.PLACE SALARY Telegram BOT — ULTRA setup
 
 ## Возможности
 
@@ -32,13 +32,13 @@
 https://api.telegram.org/botТОКЕН/setWebhook?url=https://PROJECT_REF.supabase.co/functions/v1/telegram-mypay&secret_token=СЕКРЕТ
 ```
 
-7. В MY PAY открой `Ещё → Telegram-бот → Получить код`.
+7. В CASE.PLACE SALARY открой `Ещё → Telegram-бот → Получить код`.
 8. Отправь боту `/start КОД`.
 
 ## Команды BotFather
 
 ```text
-start - Привязать MY PAY
+start - Привязать CASE.PLACE SALARY
 menu - Открыть меню
 help - Помощь
 today - Результат сегодня

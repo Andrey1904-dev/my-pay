@@ -1,4 +1,4 @@
-# MY PAY TELEGRAM IMBA
+# CASE.PLACE SALARY TELEGRAM IMBA
 
 Это готовая сборка сайта и Telegram Edge Function.
 
