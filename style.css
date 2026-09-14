@@ -466,3 +466,112 @@ body.dark .cases-input-wrap input{color:#fff!important}
   .quick-row{gap:5px!important}
   .quick-row button{font-size:11px!important;padding-left:2px!important;padding-right:2px!important}
 }
+
+/* v6 — final harmony pass: balanced grid, typography and spacing */
+:root{
+  --cp-orange:#ff5a1f;
+  --cp-bg:#101216;
+  --cp-panel:#1b1e24;
+  --cp-panel-2:#20242c;
+  --cp-line:#39414e;
+  --cp-muted:#aeb5c1;
+}
+
+body.dark .app-shell{max-width:1100px!important;background:var(--cp-bg)!important}
+body.dark .topbar{padding:24px 30px 22px!important;background:#101216!important;border-bottom:0!important}
+body.dark .brand{gap:16px!important}
+body.dark .brand-mark{width:74px!important;height:74px!important;border-radius:18px!important;background:var(--cp-orange)!important;font-size:34px!important}
+body.dark .brand-mark:after{display:none!important}
+body.dark .brand-title{font-size:27px!important;font-weight:800!important;letter-spacing:-.055em!important}
+body.dark .brand-subtitle{font-size:16px!important;color:#858c98!important;margin-top:5px!important}
+body.dark .round-icon{width:64px!important;height:64px!important;border-radius:22px!important;background:#20252d!important;border:1px solid #424b5a!important;font-size:25px!important}
+
+body.dark .content{padding:32px 38px 110px!important}
+body.dark .screen.active{gap:28px!important}
+body.dark .month-snapshot,
+body.dark .next-shift-card,
+body.dark .cases-card,
+body.dark .holiday-card{min-width:0!important;background:#1b1e24!important;border:1px solid #3a424f!important;box-shadow:none!important}
+body.dark .month-snapshot{padding:34px!important;border-radius:30px!important}
+body.dark .snapshot-kicker{font-size:16px!important;letter-spacing:.12em!important;color:#b8bec9!important}
+body.dark .snapshot-head strong{font-size:clamp(48px,5vw,72px)!important;line-height:1!important;letter-spacing:-.075em!important;white-space:nowrap!important}
+body.dark .snapshot-percent{font-size:16px!important;padding:12px 15px!important;border-radius:16px!important;background:#fff0e9!important;color:#07864e!important}
+body.dark .snapshot-track{height:14px!important;margin:22px 0 14px!important;background:#343a46!important}
+body.dark .snapshot-stats{gap:10px!important}
+body.dark .snapshot-stats span{padding:14px 8px!important;border-radius:16px!important;background:#191f2a!important;font-size:14px!important}
+body.dark .snapshot-stats b{font-size:18px!important;margin-bottom:5px!important}
+
+/* Use a deliberate 8/4 composition: the main earning card gets the space it needs. */
+@media(min-width:800px){
+  body.dark .screen.active>.month-snapshot,
+  body.dark .screen.active>.earnings-card{grid-column:span 8!important}
+  body.dark .screen.active>.next-shift-card{grid-column:span 4!important}
+  body.dark .screen.active>.cases-card{grid-column:span 8!important}
+  body.dark .screen.active>.holiday-card{grid-column:span 4!important}
+}
+
+body.dark .next-shift-card{min-height:230px!important;padding:34px!important;border-radius:30px!important;gap:22px!important}
+body.dark .next-shift-icon{width:58px!important;height:58px!important;flex-basis:58px!important;border-radius:19px!important;font-size:30px!important}
+body.dark .next-shift-card span{font-size:15px!important;letter-spacing:.13em!important;line-height:1.05!important}
+body.dark .next-shift-card b{font-size:clamp(22px,2.2vw,31px)!important;line-height:1.08!important;letter-spacing:-.045em!important}
+body.dark .next-shift-card small{font-size:17px!important;line-height:1.2!important}
+body.dark .next-shift-card.current-shift span,
+body.dark .next-shift-card.current-shift b,
+body.dark .next-shift-card.current-shift small{color:var(--cp-orange)!important}
+
+body.dark .greeting{margin:20px 2px 0!important;align-items:center!important}
+body.dark .greeting .overline{font-size:16px!important;letter-spacing:.12em!important}
+body.dark .greeting h1{font-size:clamp(52px,5.3vw,78px)!important;font-weight:800!important;letter-spacing:-.075em!important;line-height:.98!important}
+body.dark .today-badge{font-size:16px!important;padding:12px 18px!important;border-radius:10px!important}
+
+body.dark .earnings-card{padding:38px!important;border-radius:34px!important;border-top:4px solid var(--cp-orange)!important;min-width:0!important;background:linear-gradient(110deg,#1b1e24 0%,#25252a 45%,#4b2d26 100%)!important}
+body.dark .earnings-top>span:first-child{font-size:16px!important;letter-spacing:.13em!important;color:#c3c8d0!important}
+body.dark .earnings-total{font-size:clamp(52px,5.6vw,82px)!important;line-height:.98!important;letter-spacing:-.075em!important;white-space:nowrap!important;max-width:100%!important}
+body.dark .earnings-breakdown{font-size:17px!important;gap:28px!important;flex-wrap:wrap!important}
+body.dark .earnings-breakdown b{font-weight:800!important}
+
+body.dark .section-label{font-size:16px!important;letter-spacing:.11em!important;margin:26px 2px 14px!important;color:#b8bec9!important}
+body.dark .cases-card{padding:24px!important;border-radius:30px!important}
+body.dark .stepper{gap:18px!important}
+body.dark .step-btn{width:88px!important;height:88px!important;flex:0 0 88px!important;border-radius:23px!important;background:#292f39!important;border:1px solid #4a5362!important;font-size:43px!important}
+body.dark .cases-input-wrap input{font-size:clamp(48px,5.2vw,76px)!important;line-height:1!important;min-width:0!important}
+body.dark .cases-input-wrap span{font-size:16px!important;margin-top:4px!important}
+body.dark .quick-row{gap:12px!important;margin-top:18px!important}
+body.dark .quick-row button{min-height:58px!important;border-radius:18px!important;font-size:17px!important;background:#292f39!important;border:1px solid #4a5362!important;color:#fff!important}
+body.dark .holiday-card{min-height:194px!important;height:100%!important;padding:30px!important;border-radius:30px!important;gap:18px!important}
+body.dark .holiday-icon{width:54px!important;height:54px!important;flex:0 0 54px!important;border-radius:0!important;background:#4a2418!important;color:#ffb49b!important;font-size:29px!important}
+body.dark .holiday-copy b{font-size:22px!important;line-height:1.08!important}
+body.dark .holiday-copy span{font-size:17px!important;line-height:1.25!important}
+body.dark .switch{transform:scale(1.12);transform-origin:right center}
+
+/* Keep the large amount visually contained at every width. */
+body.dark .selected-card,
+body.dark .month-total-card{width:100%!important;max-width:none!important;overflow:hidden!important}
+body.dark .selected-main h3{font-size:clamp(46px,5.7vw,78px)!important;letter-spacing:-.07em!important;white-space:nowrap!important}
+
+@media(max-width:799px){
+  body.dark .topbar{padding:18px 18px 16px!important}
+  body.dark .brand-mark{width:54px!important;height:54px!important;font-size:27px!important;border-radius:15px!important}
+  body.dark .brand-title{font-size:20px!important}
+  body.dark .brand-subtitle{font-size:12px!important}
+  body.dark .round-icon{width:50px!important;height:50px!important;border-radius:17px!important}
+  body.dark .content{padding:24px 16px 100px!important}
+  body.dark .screen.active{display:block!important}
+  body.dark .month-snapshot,body.dark .next-shift-card{margin-bottom:16px!important}
+  body.dark .next-shift-card{min-height:160px!important;padding:24px!important}
+  body.dark .earnings-card{padding:27px!important}
+  body.dark .earnings-total{font-size:clamp(43px,11vw,68px)!important}
+  body.dark .selected-main h3{font-size:clamp(42px,11vw,65px)!important}
+  body.dark .cases-card,body.dark .holiday-card{margin-bottom:16px!important}
+  body.dark .holiday-card{min-height:150px!important}
+}
+@media(max-width:430px){
+  body.dark .brand-title{font-size:17px!important}
+  body.dark .brand-subtitle{font-size:10px!important}
+  body.dark .snapshot-head strong{font-size:clamp(40px,10.5vw,54px)!important}
+  body.dark .stepper{gap:9px!important}
+  body.dark .step-btn{width:58px!important;height:58px!important;flex-basis:58px!important;font-size:30px!important}
+  body.dark .cases-input-wrap input{font-size:clamp(39px,10.5vw,54px)!important}
+  body.dark .quick-row{gap:6px!important}
+  body.dark .quick-row button{font-size:12px!important;min-height:48px!important;border-radius:14px!important}
+}
