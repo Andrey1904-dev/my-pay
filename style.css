@@ -358,3 +358,111 @@ input::placeholder,textarea::placeholder{color:#8a8a86!important;opacity:1}
   .snapshot-head strong{font-size:clamp(27px,8vw,40px)!important}
   .next-shift-card.current-shift b{font-size:15px!important}
 }
+
+/* v5 — final visual polish: hierarchy, proportions and typography */
+:root{
+  --cp-orange:#ff5a1f;
+  --cp-bg:#101216;
+  --cp-panel:#1b1e24;
+  --cp-panel-2:#222731;
+  --cp-border-strong:#3b424f;
+  --cp-muted-strong:#b8bec9;
+}
+
+/* Keep the interface confident, but not poster-heavy. */
+h1,h2{font-weight:800!important;letter-spacing:-.07em!important;line-height:1.02!important}
+.page-head h2{font-size:clamp(42px,5.5vw,66px)!important}
+.section-label,.overline,.snapshot-kicker{font-size:11px!important;font-weight:750!important;letter-spacing:.105em!important;line-height:1.25!important}
+.brand-title{font-size:16px!important;font-weight:800!important;letter-spacing:-.045em!important}
+.brand-subtitle{font-size:11px!important;letter-spacing:-.01em!important}
+
+/* A more balanced top composition. */
+@media(min-width:800px){
+  .content{padding-left:30px!important;padding-right:30px!important;gap:20px!important}
+  .screen.active{gap:20px!important}
+  .screen.active>.month-snapshot,.screen.active>.earnings-card{grid-column:span 7!important}
+  .screen.active>.next-shift-card{grid-column:span 5!important}
+  .screen.active>.cases-card{grid-column:span 7!important}
+  .screen.active>.holiday-card{grid-column:span 5!important}
+}
+
+.month-snapshot{padding:24px!important;border-radius:24px!important}
+.snapshot-head strong{font-size:clamp(34px,4.4vw,53px)!important;font-weight:800!important;line-height:1!important;letter-spacing:-.065em!important}
+.snapshot-stats{gap:8px!important}
+.snapshot-stats span{padding:10px 6px!important;border-radius:13px!important}
+.snapshot-stats b{font-size:13px!important;font-weight:800!important}
+
+/* Main amount: one visual unit, no awkward currency separation. */
+.earnings-card{padding:25px!important;border-radius:26px!important;border-top:3px solid var(--cp-orange)!important}
+.earnings-total,#shiftTotal,#homeMonthTotal,#homeAvgShift,#homeBase,#homePiece{
+  font-weight:800!important;
+  letter-spacing:-.065em!important;
+  line-height:.98!important;
+  white-space:nowrap!important;
+  font-variant-numeric:tabular-nums lining-nums;
+}
+.earnings-total{font-size:clamp(44px,6vw,70px)!important}
+.earnings-breakdown{font-size:12px!important;gap:18px!important}
+.earnings-breakdown b{font-weight:750!important}
+
+/* Current/next shift card: calmer hierarchy and better text rhythm. */
+.next-shift-card{min-height:158px!important;padding:24px!important;border-radius:24px!important;gap:15px!important}
+.next-shift-card>div:last-child{gap:5px!important}
+.next-shift-card span{font-size:10px!important;letter-spacing:.13em!important;font-weight:800!important;line-height:1.15!important}
+.next-shift-card b{font-size:20px!important;line-height:1.08!important;font-weight:800!important;letter-spacing:-.035em!important}
+.next-shift-card small{font-size:12px!important;line-height:1.25!important;font-weight:600!important}
+.next-shift-card.current-shift span{color:var(--cp-orange)!important}
+.next-shift-card.current-shift b{color:var(--cp-orange)!important}
+.next-shift-card.current-shift small{color:#ffad8f!important}
+.next-shift-icon{width:42px!important;height:42px!important;flex-basis:42px!important;border-radius:14px!important}
+
+/* Shift card: reduce the muddy gradient and give the amount breathing room. */
+.selected-card,.month-total-card{border-radius:26px!important;padding:26px!important;background:linear-gradient(110deg,#1b1e24 0%,#202126 42%,#4a2b24 100%)!important}
+.selected-main h3{font-size:clamp(58px,6.4vw,86px)!important;font-weight:800!important;letter-spacing:-.075em!important;line-height:.98!important;white-space:nowrap!important}
+.selected-main>span{font-size:12px!important}
+.selected-money{font-size:19px!important}
+
+/* Packing controls: consistent geometry and room for 3000+ cases. */
+.cases-card{padding:18px!important;border-radius:24px!important}
+.stepper{gap:12px!important}
+.step-btn{width:58px!important;height:58px!important;flex:0 0 58px!important;border-radius:17px!important;font-size:30px!important;font-weight:650!important}
+.cases-input-wrap input{font-size:clamp(34px,4.4vw,50px)!important;font-weight:800!important;letter-spacing:-.06em!important;line-height:1!important}
+.cases-input-wrap span{font-size:11px!important;font-weight:600!important}
+.quick-row{gap:9px!important;margin-top:13px!important}
+.quick-row button{min-height:45px!important;border-radius:13px!important;font-size:12px!important;font-weight:750!important;white-space:nowrap!important}
+.holiday-card{min-height:116px!important;padding:18px!important;border-radius:24px!important}
+.holiday-copy b{font-size:15px!important;line-height:1.1!important;font-weight:800!important}
+.holiday-copy span{font-size:11px!important;line-height:1.25!important}
+
+/* Section spacing: compact enough to scan, still breathable. */
+.section-label{margin-top:25px!important;margin-bottom:12px!important}
+.page-head{margin-top:18px!important;margin-bottom:20px!important}
+
+/* Bottom navigation no longer dominates the whole screen. */
+.bottom-nav{padding:8px 12px calc(8px + env(safe-area-inset-bottom))!important}
+.nav-item{padding:6px 5px!important;gap:4px!important}
+.nav-item span{font-size:17px!important}
+.nav-item small{font-size:10px!important;font-weight:750!important}
+.nav-item.active{border-radius:18px!important}
+
+/* Dark mode contrast and border consistency. */
+body.dark .section-label,body.dark .overline,body.dark .snapshot-kicker{color:#b8bec9!important}
+body.dark .month-snapshot,body.dark .cases-card,body.dark .holiday-card,body.dark .next-shift-card{border-color:#3b424f!important}
+body.dark .step-btn,body.dark .quick-row button{background:#292e37!important;border-color:#454d5b!important;color:#fff!important}
+body.dark .cases-input-wrap input{color:#fff!important}
+
+@media(max-width:700px){
+  .page-head h2{font-size:clamp(39px,10vw,58px)!important}
+  .selected-main h3{font-size:clamp(48px,12vw,72px)!important}
+  .next-shift-card{min-height:132px!important;padding:20px!important}
+}
+@media(max-width:420px){
+  .brand-title{font-size:14px!important}
+  .brand-subtitle{font-size:10px!important}
+  .earnings-card{padding:21px!important}
+  .earnings-total{font-size:clamp(38px,11vw,54px)!important}
+  .selected-main h3{font-size:clamp(42px,11.5vw,58px)!important}
+  .step-btn{width:52px!important;height:52px!important;flex-basis:52px!important}
+  .quick-row{gap:5px!important}
+  .quick-row button{font-size:11px!important;padding-left:2px!important;padding-right:2px!important}
+}
