@@ -11,11 +11,16 @@
 const SUPABASE_URL="https://dyixwxxpjmyycgigcbtx.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_NFxxL8WDGpG-ASXo2LasmQ_wskniL6r";
 const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-const DEFAULTS={basePay:2150,holidayPay:4050,casePrice:7,percent:20,scheduleStart:new Date().toISOString().slice(0,10),goal:60000};
+const DEFAULTS={basePay:2627.84,holidayPay:4050,casePrice:1.69717,percent:100,scheduleStart:new Date().toISOString().slice(0,10),goal:60000};
 const EXTRA_DEFAULTS={expenses:[],goals:[],templates:[{id:"default",name:"Обычная",cases:0,hours:11,bonus:0,holiday:false}],shiftMeta:{},theme:"system",undo:null,celebratedGoals:[]};
-const state={settings:load("myPaySettings",DEFAULTS),shifts:load("myPayShifts",{}),extra:load("myPayExtra",EXTRA_DEFAULTS),calendarDate:new Date(),selectedDate:dateKey(new Date()),modalDate:null};
+const state={settings:{...DEFAULTS,...load("myPaySettings",DEFAULTS)},shifts:load("myPayShifts",{}),extra:load("myPayExtra",EXTRA_DEFAULTS),calendarDate:new Date(),selectedDate:dateKey(new Date()),modalDate:null};
 state.extra={...EXTRA_DEFAULTS,...(state.extra||{})};
 state.settings.holidayPay=4050;
+// Новая модель оплаты: 1 900 ₽ дневной тариф + районный коэффициент 727,84 ₽.
+// Фактическая сдельная ставка по расчётному листку августа: 44 284,28 / 26 093 = 1,69717 ₽ за чехол.
+if(Number(state.settings.basePay)===2150 && Number(state.settings.casePrice)===7 && Number(state.settings.percent)===20){
+  state.settings.basePay=2627.84; state.settings.casePrice=1.69717; state.settings.percent=100;
+}
 let currentUser=null,currentProfile=null,authMode="login";
 
 function load(k,f){try{const x=localStorage.getItem(k);return x?JSON.parse(x):{...f}}catch{return{...f}}}
@@ -141,7 +146,11 @@ async function cloudLoad(){
   if(se){console.error("cloudLoad settings:",se);return false;}
   const {data:rows,error:re}=await db.from("shifts").select("*").eq("user_id",currentUser.id).order("work_date",{ascending:true});
   if(re){console.error("cloudLoad shifts:",re);return false;}
-  if(sd) state.settings={basePay:Number(sd.base_pay)||0,holidayPay:Number(sd.holiday_pay)||4050,casePrice:Number(sd.case_price)||0,percent:Number(sd.piece_percent)||0,scheduleStart:sd.schedule_start||state.settings.scheduleStart,goal:Number(sd.monthly_goal)||0};
+  if(sd){
+    const legacy=Number(sd.base_pay)===2150 && Number(sd.case_price)===7 && Number(sd.piece_percent)===20;
+    state.settings={basePay:legacy?2627.84:(Number(sd.base_pay)||2627.84),holidayPay:Number(sd.holiday_pay)||4050,casePrice:legacy?1.69717:(Number(sd.case_price)||1.69717),percent:legacy?100:(Number(sd.piece_percent)||100),scheduleStart:sd.schedule_start||state.settings.scheduleStart,goal:Number(sd.monthly_goal)||0};
+    if(legacy) await db.from("settings").upsert({user_id:currentUser.id,base_pay:2627.84,holiday_pay:4050,case_price:1.69717,piece_percent:100,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:"user_id"});
+  }
   else await ensureCloudDefaults();
 
   const {data:profile,error:pe}=await db.from("profiles").select("id,name").eq("id",currentUser.id).maybeSingle();
@@ -370,7 +379,12 @@ function renderStats(){
 }
 function openSettings(){$("settingBase").value=state.settings.basePay;$("settingHoliday").value=state.settings.holidayPay;$("settingPrice").value=state.settings.casePrice;$("settingPercent").value=state.settings.percent;$("settingStart").value=state.settings.scheduleStart;$("settingGoal").value=state.settings.goal;$("settingsModal").classList.remove("hidden")}
 async function saveSettings(){
-  state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=4050;state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();
+  state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=4050;
+// Новая модель оплаты: 1 900 ₽ дневной тариф + районный коэффициент 727,84 ₽.
+// Фактическая сдельная ставка по расчётному листку августа: 44 284,28 / 26 093 = 1,69717 ₽ за чехол.
+if(Number(state.settings.basePay)===2150 && Number(state.settings.casePrice)===7 && Number(state.settings.percent)===20){
+  state.settings.basePay=2627.84; state.settings.casePrice=1.69717; state.settings.percent=100;
+}state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();
   const ok=await cloudSaveSettings();updateHome();renderCalendar();renderStats();
   if(ok){closeModal("settingsModal");showToast("Настройки обновлены ✓");}else showToast("Настройки сохранены на устройстве, но не в облако.");
 }
