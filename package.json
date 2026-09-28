@@ -1,0 +1,22 @@
+{
+  "name": "case-place-salary",
+  "version": "16.0.0",
+  "private": true,
+  "description": "CASE.PLACE SALARY — учёт смен 2/2, упаковки чехлов и заработка. Статический PWA + Supabase + Telegram-бот.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/*.test.mjs",
+    "test:app": "node --test tests/app.test.mjs",
+    "test:bot": "node --test tests/telegram-bot.test.mjs",
+    "typecheck": "tsc -p supabase/functions/tsconfig.json",
+    "check": "node --check script.js && node --check sw.js && npm run typecheck && npm test"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "typescript": "^5.6.3"
+  }
+}

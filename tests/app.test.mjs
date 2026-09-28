@@ -1,0 +1,479 @@
+// Тесты веб-приложения в jsdom: настоящий index.html + script.js (локальный режим без Supabase).
+// Запуск: node --test tests/app.test.mjs
+
+import { test, describe, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { loadApp, key, addDays, tick } from "./helpers/load-app.mjs";
+
+const apps = [];
+function open(opts) {
+  const app = loadApp(opts);
+  apps.push(app);
+  return app;
+}
+afterEach(() => {
+  while (apps.length) apps.pop().close();
+});
+
+const TODAY = key();
+const norm = (s) => s.replace(/\u00a0/g, " ");
+// Объекты из окна jsdom живут в другом realm — сравниваем через JSON.
+const plain = (v) => JSON.parse(JSON.stringify(v));
+
+// Смены текущего месяца по графику 2/2 с 1-го числа (для сидов).
+function seedMonth(cases = [1000, 1200, 900, 1500]) {
+  const shifts = {};
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  let i = 0;
+  for (let d = new Date(start); d < now && i < cases.length; d.setDate(d.getDate() + 1)) {
+    const diff = Math.round((d - start) / 86400000);
+    if (diff % 4 >= 2) continue;
+    const c = cases[i++];
+    shifts[key(d)] = { cases: c, holiday: false, base: 2627.84, piece: c * 1.69, total: 2627.84 + c * 1.69 };
+  }
+  return { shifts, scheduleStart: key(start) };
+}
+
+describe("загрузка и модель", () => {
+  test("приложение стартует без ошибок и публикует API", () => {
+    const app = open();
+    assert.deepEqual(app.errors, []);
+    assert.equal(app.MyPay.version, 16);
+    assert.equal(app.text("appVersion"), "v16");
+    assert.equal(app.MyPay.cloudAvailable, false, "без SDK — локальный режим");
+    assert.match(app.text("cloudNotice"), /локальном режиме/);
+    assert.ok(app.$("logoutBtn").classList.contains("hidden"), "кнопка выхода скрыта без аккаунта");
+  });
+
+  test("дефолты и формула: ставка + чехлы × цена × процент", () => {
+    const { MyPay } = open();
+    assert.equal(MyPay.DEFAULTS.basePay, 2627.84);
+    assert.equal(MyPay.DEFAULTS.holidayPay, 4050);
+    assert.equal(MyPay.DEFAULTS.casePrice, 1.69);
+    assert.equal(MyPay.total(0, false), 2627.84);
+    assert.equal(MyPay.total(1000, false), 4317.84);
+    assert.equal(MyPay.total(1000, true), 5740);
+    const s = MyPay.makeShift("1200.7", false, 300);
+    assert.equal(s.cases, 1200);
+    assert.equal(Math.round(s.piece * 100) / 100, 2028);
+    assert.equal(Math.round(s.total * 100) / 100, 4955.84);
+  });
+
+  test("normalizeSettings чинит мусор и мигрирует старый тариф 2150/7/20", () => {
+    const { MyPay } = open();
+    const bad = MyPay.normalizeSettings({ basePay: "x", casePrice: -3, percent: 250, scheduleStart: "вчера", goal: null });
+    assert.equal(bad.basePay, 2627.84);
+    assert.equal(bad.casePrice, 0);
+    assert.equal(bad.percent, 100);
+    assert.equal(bad.scheduleStart, TODAY);
+    assert.equal(bad.goal, 60000);
+    const legacy = MyPay.normalizeSettings({ basePay: 2150, casePrice: 7, percent: 20 });
+    assert.equal(legacy.basePay, 2627.84);
+    assert.equal(legacy.casePrice, 1.69);
+    assert.equal(legacy.percent, 100);
+    const custom = MyPay.normalizeSettings({ basePay: 2150, casePrice: 7, percent: 30 });
+    assert.equal(custom.basePay, 2150, "неполное совпадение — не легаси, оставляем");
+  });
+
+  test("праздничная ставка читается из настроек, а не захардкожена", () => {
+    const app = open({ settings: { basePay: 2627.84, holidayPay: 5000, casePrice: 1.69, percent: 100, scheduleStart: TODAY, goal: 60000 } });
+    assert.equal(app.MyPay.total(0, true), 5000);
+    assert.match(app.text("holidayRateLabel"), /5 000/);
+  });
+
+  test("график 2/2: два рабочих, два выходных", () => {
+    const { MyPay } = open({ settings: { scheduleStart: TODAY } });
+    const d = new Date();
+    assert.equal(MyPay.isWork(d), true);
+    assert.equal(MyPay.isWork(addDays(d, 1)), true);
+    assert.equal(MyPay.isWork(addDays(d, 2)), false);
+    assert.equal(MyPay.isWork(addDays(d, 3)), false);
+    assert.equal(MyPay.isWork(addDays(d, 4)), true);
+    assert.equal(MyPay.isWork(addDays(d, -1)), false);
+    assert.equal(MyPay.isWork(addDays(d, -3)), true);
+  });
+
+  test("форматирование: деньги, короткие суммы, склонения, экранирование", () => {
+    const { MyPay } = open();
+    assert.equal(norm(MyPay.money(2627.84)), "2 627,84 ₽");
+    assert.equal(norm(MyPay.money(1690)), "1 690 ₽");
+    assert.equal(norm(MyPay.money(30014.4)), "30 014,40 ₽");
+    assert.equal(norm(MyPay.moneyShort(5585.34)), "5,6к");
+    assert.equal(norm(MyPay.moneyShort(950)), "950");
+    assert.equal(MyPay.plural(1, "смена", "смены", "смен"), "смена");
+    assert.equal(MyPay.plural(4, "смена", "смены", "смен"), "смены");
+    assert.equal(MyPay.plural(12, "смена", "смены", "смен"), "смен");
+    assert.equal(MyPay.escapeHtml('<b>"x"</b>'), "&lt;b&gt;&quot;x&quot;&lt;/b&gt;");
+    assert.equal(MyPay.isDateKey("2026-09-28"), true);
+    assert.equal(MyPay.isDateKey("28.09.2026"), false);
+  });
+});
+
+describe("главный экран", () => {
+  test("ввод чехлов пересчитывает итог и сохраняет смену за сегодня", async () => {
+    const app = open({ settings: { scheduleStart: TODAY } });
+    app.input("casesInput", "350");
+    assert.equal(app.MyPay.homeDirty, true);
+    assert.match(app.text("shiftTotal"), /3 219,34/);
+    app.click("saveShiftBtn");
+    await tick();
+    const saved = JSON.parse(app.window.localStorage.getItem("myPayShifts"));
+    assert.equal(saved[TODAY].cases, 350);
+    assert.equal(Math.round(saved[TODAY].total * 100) / 100, 3219.34);
+    assert.equal(app.MyPay.homeDirty, false);
+    assert.match(app.text("homeMonthShifts"), /1/);
+    assert.match(app.text("toast"), /Смена сохранена/);
+  });
+
+  test("кнопки +100/+500 и −/+ меняют поле", () => {
+    const app = open();
+    app.click(app.document.querySelector('[data-add="500"]'));
+    assert.equal(app.$("casesInput").value, "500");
+    app.click(app.document.querySelector('[data-step="100"]'));
+    assert.equal(app.$("casesInput").value, "600");
+    app.click(app.document.querySelector('[data-step="-100"]'));
+    app.click(app.document.querySelector('[data-step="-100"]'));
+    app.click(app.document.querySelector('[data-step="-100"]'));
+    app.click(app.document.querySelector('[data-step="-100"]'));
+    app.click(app.document.querySelector('[data-step="-100"]'));
+    app.click(app.document.querySelector('[data-step="-100"]'));
+    app.click(app.document.querySelector('[data-step="-100"]'));
+    assert.equal(app.$("casesInput").value, "0", "ниже нуля не уходит");
+  });
+
+  test("праздничный переключатель меняет ставку", () => {
+    const app = open();
+    app.$("holidayInput").checked = true;
+    app.$("holidayInput").dispatchEvent(new app.window.Event("change", { bubbles: true }));
+    assert.match(app.text("homeBase"), /4 050/);
+    assert.match(app.text("shiftTotal"), /4 050/);
+  });
+
+  test("сохранённая смена за сегодня подставляется в поле при старте", () => {
+    const app = open({ shifts: { [TODAY]: { cases: 777, holiday: true, base: 4050, piece: 1313.13, total: 5363.13 } } });
+    assert.equal(app.$("casesInput").value, "777");
+    assert.equal(app.$("holidayInput").checked, true);
+    assert.match(app.text("shiftTotal"), /5 363,13/);
+  });
+
+  test("статистика месяца: заработано, смены, цель", () => {
+    const { shifts, scheduleStart } = seedMonth([1000, 1000]);
+    const app = open({ shifts, settings: { scheduleStart, goal: 10000 } });
+    const n = Object.keys(shifts).length;
+    if (!n) return; // 1-е число месяца — сидов нет, проверять нечего
+    assert.match(app.text("homeMonthShifts"), new RegExp(`^${n}`));
+    const expected = n * 4317.84;
+    assert.match(norm(app.text("homeMonthTotal")), new RegExp(expected.toLocaleString("ru-RU").replace(/\u00a0/g, " ").slice(0, 5)));
+    assert.equal(app.text("homeGoalPercent"), `${Math.min(100, Math.round(expected / 10000 * 100))}%`);
+  });
+
+  test("прогноз: null без смен, иначе заработано + средняя × оставшиеся рабочие дни", () => {
+    const app = open({ settings: { scheduleStart: TODAY } });
+    assert.equal(app.MyPay.monthForecast(), null);
+    const { shifts, scheduleStart } = seedMonth([1000, 1000, 1000, 1000]);
+    const app2 = open({ shifts, settings: { scheduleStart } });
+    const f = app2.MyPay.monthForecast();
+    const sum = Object.values(shifts).reduce((a, s) => a + s.total, 0);
+    if (!Object.keys(shifts).length) return assert.equal(f, null);
+    assert.ok(f >= Math.round(sum), "прогноз не меньше уже заработанного");
+    // остаток = рабочие дни с сегодняшнего по конец месяца без сохранённой смены
+    const now = new Date();
+    const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    let remaining = 0;
+    for (let n = now.getDate(); n <= days; n++) {
+      const x = new Date(now.getFullYear(), now.getMonth(), n);
+      if (app2.MyPay.isWork(x) && !shifts[key(x)]) remaining++;
+    }
+    assert.equal(f, Math.round(sum + 4317.84 * remaining));
+  });
+});
+
+describe("календарь и смены", () => {
+  test("первый тап выбирает день, второй открывает окно смены", () => {
+    const app = open({ settings: { scheduleStart: TODAY } });
+    app.MyPay.showScreen("calendarScreen");
+    const days = [...app.document.querySelectorAll("#calendarDays .day:not(.empty)")];
+    const d1 = days[0];
+    app.click(d1);
+    assert.equal(app.MyPay.state.selectedDate, key(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+    assert.ok(app.$("shiftModal").classList.contains("hidden"));
+    app.click(app.document.querySelector("#calendarDays .day.selected"));
+    assert.ok(!app.$("shiftModal").classList.contains("hidden"), "второй тап открыл модалку");
+    assert.equal(app.MyPay.state.modalDate, app.MyPay.state.selectedDate);
+  });
+
+  test("окно смены: сохранение, удаление с подтверждением и возврат", async () => {
+    const app = open({ settings: { scheduleStart: TODAY } });
+    const k = key(new Date(new Date().getFullYear(), new Date().getMonth(), 2));
+    app.MyPay.openShiftModal(k);
+    app.input("modalCases", "1200");
+    app.input("modalHours", "11");
+    app.input("modalBonus", "500");
+    app.input("modalNote", "переработка");
+    assert.match(app.text("modalTotal"), /5 155,84/);
+    app.click("modalSave");
+    await tick();
+    assert.equal(app.MyPay.state.shifts[k].cases, 1200);
+    assert.equal(Math.round(app.MyPay.state.shifts[k].total * 100) / 100, 5155.84);
+    assert.deepEqual(plain(app.MyPay.state.extra.shiftMeta[k]), { hours: 11, bonus: 500, note: "переработка" });
+    assert.ok(app.$("shiftModal").classList.contains("hidden"));
+
+    const p = app.MyPay.deleteShift(k);
+    await tick(10);
+    assert.ok(!app.$("confirmModal").classList.contains("hidden"), "показан диалог подтверждения");
+    assert.match(app.text("confirmTitle"), /Удалить смену/);
+    app.click("confirmOk");
+    assert.equal(await p, true);
+    assert.equal(app.MyPay.state.shifts[k], undefined);
+    assert.ok(!app.$("undoDeleteBtn").classList.contains("hidden"), "в «Ещё» появилась кнопка возврата");
+
+    await app.MyPay.undoLastDelete();
+    assert.equal(app.MyPay.state.shifts[k].cases, 1200);
+    assert.deepEqual(plain(app.MyPay.state.extra.shiftMeta[k]), { hours: 11, bonus: 500, note: "переработка" });
+    assert.ok(app.$("undoDeleteBtn").classList.contains("hidden"));
+  });
+
+  test("отмена в диалоге ничего не удаляет", async () => {
+    const app = open({ shifts: { [TODAY]: { cases: 100, holiday: false, base: 2627.84, piece: 169, total: 2796.84 } } });
+    const p = app.MyPay.deleteShift(TODAY);
+    await tick(10);
+    app.click("confirmCancel");
+    assert.equal(await p, false);
+    assert.equal(app.MyPay.state.shifts[TODAY].cases, 100);
+  });
+
+  test("шаблон подставляет значения в окно смены", () => {
+    const app = open();
+    app.MyPay.openShiftModal(TODAY);
+    const pill = app.document.querySelector("#modalTemplatePills [data-modal-tpl]");
+    assert.ok(pill, "есть кнопки шаблонов");
+    app.click(pill);
+    const t = app.MyPay.state.extra.templates[0];
+    assert.equal(app.$("modalCases").value, String(t.cases));
+    assert.equal(app.$("modalHours").value, String(t.hours));
+  });
+
+  test("переключение месяцев в календаре и статистике синхронно, клик по заголовку возвращает к текущему", () => {
+    const app = open();
+    const m0 = app.MyPay.state.calendarDate.getMonth();
+    app.click("nextMonth");
+    assert.equal(app.MyPay.state.calendarDate.getMonth(), (m0 + 1) % 12);
+    assert.equal(app.text("statsMonth"), app.text("monthTitle"));
+    app.click("statsPrev");
+    app.click("statsPrev");
+    assert.equal(app.MyPay.state.calendarDate.getMonth(), (m0 + 11) % 12);
+    app.click("monthTitle");
+    assert.equal(app.MyPay.state.calendarDate.getMonth(), m0);
+    assert.equal(app.MyPay.state.calendarDate.getFullYear(), new Date().getFullYear());
+  });
+
+  test("очистка месяца: подтверждение, затем смены месяца удалены", async () => {
+    const { shifts, scheduleStart } = seedMonth([500, 600, 700]);
+    const other = { "2000-01-05": { cases: 1, holiday: false, base: 1, piece: 1, total: 2 } };
+    const app = open({ shifts: { ...shifts, ...other }, settings: { scheduleStart } });
+    const p = app.MyPay.clearMonth();
+    await tick(10);
+    assert.match(app.text("confirmTitle"), /Очистить месяц/);
+    app.click("confirmOk");
+    await p;
+    assert.deepEqual(Object.keys(app.MyPay.state.shifts), ["2000-01-05"], "чужой месяц не тронут");
+  });
+});
+
+describe("статистика", () => {
+  test("analyticsForMonth: сумма, лучшая смена, серия, до цели", () => {
+    const { shifts, scheduleStart } = seedMonth([1000, 1500, 800]);
+    const app = open({ shifts, settings: { scheduleStart, goal: 60000 } });
+    const a = app.MyPay.analyticsForMonth(new Date());
+    const n = Object.keys(shifts).length;
+    assert.equal(a.es.length, n);
+    if (!n) return;
+    assert.equal(Math.round(a.sum * 100) / 100, Math.round(Object.values(shifts).reduce((x, s) => x + s.total, 0) * 100) / 100);
+    assert.equal(a.best.cases, Math.max(...Object.values(shifts).map((s) => s.cases)));
+    assert.equal(a.remaining, Math.max(0, 60000 - a.sum));
+    assert.ok(a.bestStreak >= 1 && a.bestStreak <= n);
+    assert.equal(a.shiftsNeeded, Math.ceil(a.remaining / (a.sum / n)));
+  });
+
+  test("список смен месяца и график заполняются", () => {
+    const { shifts, scheduleStart } = seedMonth([1000, 1500]);
+    const app = open({ shifts, settings: { scheduleStart } });
+    app.MyPay.showScreen("statsScreen");
+    const n = Object.keys(shifts).length;
+    assert.equal(app.document.querySelectorAll("#historyList .history-item").length, n);
+    assert.equal(app.document.querySelectorAll("#earningsChart .bar").length, n);
+    if (n) assert.match(norm(app.text("monthTotal")), /₽/);
+  });
+});
+
+describe("финансы", () => {
+  test("расход добавляется через форму и учитывается в остатке", async () => {
+    const { shifts, scheduleStart } = seedMonth([1000]);
+    const app = open({ shifts, settings: { scheduleStart } });
+    app.MyPay.showScreen("financeScreen");
+    app.click("addExpenseBtn");
+    assert.ok(!app.$("expenseModal").classList.contains("hidden"));
+    app.input("expenseAmount", "1500");
+    app.$("expenseCategory").value = app.$("expenseCategory").options[0].value;
+    app.input("expenseDate", TODAY);
+    app.input("expenseNote", "проезд");
+    app.click("expenseSave");
+    await tick();
+    assert.equal(app.MyPay.state.extra.expenses.length, 1);
+    assert.equal(app.MyPay.state.extra.expenses[0].amount, 1500);
+    const f = app.MyPay.financeNumbers();
+    assert.equal(f.expenses, 1500);
+    assert.equal(Math.round((f.income - f.expenses) * 100) / 100, Math.round(f.free * 100) / 100);
+    assert.match(norm(app.text("financeExpenses")), /1 500/);
+    const before = app.MyPay.state.extra.expenses.length;
+    await app.MyPay.deleteExpense(app.MyPay.state.extra.expenses[0].id);
+    assert.equal(app.MyPay.state.extra.expenses.length, before - 1);
+  });
+
+  test("цель: создание, пополнение через диалог суммы, удаление", async () => {
+    const app = open();
+    app.click("addGoalBtn");
+    app.input("goalName", "Отпуск");
+    app.input("goalAmount", "50000");
+    app.input("goalSaved", "10000");
+    app.click("goalSave");
+    await tick();
+    const g = app.MyPay.state.extra.goals.at(-1);
+    assert.equal(g.name, "Отпуск");
+    assert.equal(g.saved, 10000);
+    assert.match(app.text("goalsList"), /Отпуск/);
+
+    const p = app.MyPay.topUpGoal(g.id);
+    await tick(10);
+    assert.ok(!app.$("promptModal").classList.contains("hidden"));
+    app.input("promptInput", "2500");
+    app.click("promptOk");
+    await p;
+    assert.equal(g.saved, 12500);
+
+    const d = app.MyPay.deleteGoal(g.id);
+    await tick(10);
+    app.click("confirmOk");
+    await d;
+    assert.ok(!app.MyPay.state.extra.goals.find((x) => x.id === g.id));
+  });
+
+  test("пустые цель/расход не сохраняются", async () => {
+    const app = open();
+    app.click("addGoalBtn");
+    app.input("goalName", "");
+    app.input("goalAmount", "0");
+    app.click("goalSave");
+    await tick();
+    assert.match(app.text("toast"), /Укажи название и сумму/);
+    app.click("addExpenseBtn");
+    app.input("expenseAmount", "");
+    app.click("expenseSave");
+    await tick();
+    assert.match(app.text("toast"), /Укажи сумму/);
+  });
+});
+
+describe("настройки, тема, резервные копии", () => {
+  test("настройки сохраняются и пересчитывают экран", async () => {
+    const app = open();
+    app.MyPay.openSettings();
+    assert.equal(app.$("settingHoliday").value, "4050");
+    app.input("settingBase", "3000");
+    app.input("settingHoliday", "4500");
+    app.input("settingPrice", "2");
+    app.input("settingPercent", "50");
+    app.input("settingGoal", "80000");
+    app.click("settingsSave");
+    await tick();
+    assert.equal(app.MyPay.state.settings.basePay, 3000);
+    assert.equal(app.MyPay.state.settings.holidayPay, 4500);
+    assert.equal(app.MyPay.total(1000, false), 4000);
+    assert.equal(JSON.parse(app.window.localStorage.getItem("myPaySettings")).goal, 80000);
+    assert.match(app.text("shiftTotal"), /3 000/);
+  });
+
+  test("тема: system → light → dark, класс body и theme-color", () => {
+    const app = open({ dark: true });
+    assert.equal(app.MyPay.state.extra.theme, "system");
+    assert.ok(app.document.body.classList.contains("dark"), "система тёмная → тёмная");
+    app.MyPay.cycleTheme();
+    assert.equal(app.MyPay.state.extra.theme, "light");
+    assert.ok(!app.document.body.classList.contains("dark"));
+    assert.equal(app.document.querySelector('meta[name="theme-color"]').getAttribute("content"), "#f4f4f2");
+    app.MyPay.cycleTheme();
+    assert.equal(app.MyPay.state.extra.theme, "dark");
+    assert.equal(app.document.querySelector('meta[name="theme-color"]').getAttribute("content"), "#0f1114");
+    assert.equal(JSON.parse(app.window.localStorage.getItem("myPayExtra")).theme, "dark");
+  });
+
+  test("buildBackup → parseBackup круг, мусор отбрасывается", () => {
+    const app = open({ shifts: { [TODAY]: { cases: 300, holiday: false, base: 2627.84, piece: 507, total: 3134.84 } } });
+    const backup = app.MyPay.buildBackup();
+    assert.equal(backup.version, 16);
+    const parsed = app.MyPay.parseBackup(JSON.stringify(backup));
+    assert.equal(parsed.shifts[TODAY].cases, 300);
+    assert.equal(parsed.settings.basePay, 2627.84);
+    const dirty = app.MyPay.parseBackup(JSON.stringify({ settings: {}, shifts: { "bad-date": { cases: 5 }, "2026-01-01": { cases: -4, holiday: 1 }, "2026-01-02": null } }));
+    assert.deepEqual(Object.keys(dirty.shifts), ["2026-01-01"]);
+    assert.equal(dirty.shifts["2026-01-01"].cases, 0);
+    assert.equal(dirty.shifts["2026-01-01"].holiday, true);
+    assert.throws(() => app.MyPay.parseBackup("{}"), /invalid backup/);
+    assert.throws(() => app.MyPay.parseBackup("not json"));
+  });
+
+  test("CSV содержит BOM, заголовок и строки смен", () => {
+    const app = open({
+      shifts: { "2026-01-05": { cases: 100, holiday: false, base: 2627.84, piece: 169, total: 2796.84 } },
+      extra: { shiftMeta: { "2026-01-05": { hours: 11, bonus: 0, note: 'тест "кавычки"' } } },
+    });
+    const csv = app.MyPay.buildCsv();
+    assert.equal(csv.charCodeAt(0), 0xfeff);
+    const lines = csv.slice(1).split("\n");
+    assert.equal(lines[0].split(";")[0], '"Дата"');
+    assert.equal(lines.length, 2);
+    assert.match(lines[1], /^"2026-01-05";"100";"Нет"/);
+    assert.match(lines[1], /"тест ""кавычки"""/);
+    assert.match(lines[1], /"254,26"|"254.26"/); // доход в час
+  });
+});
+
+describe("офлайн-очередь и навигация", () => {
+  test("очередь: дубли по типу и дате схлопываются", () => {
+    const app = open();
+    app.MyPay.queueCloudOp({ type: "saveShift", date: "2026-01-01", shift: { cases: 1 } });
+    app.MyPay.queueCloudOp({ type: "saveShift", date: "2026-01-01", shift: { cases: 2 } });
+    app.MyPay.queueCloudOp({ type: "deleteShift", date: "2026-01-02" });
+    const q = app.MyPay.loadQueue();
+    assert.equal(q.length, 2);
+    assert.equal(q[0].shift.cases, 2);
+    assert.ok(q.every((op) => typeof op.queuedAt === "number"));
+    app.window.localStorage.setItem("myPayCloudQueue", "{broken");
+    assert.deepEqual(plain(app.MyPay.loadQueue()), []);
+  });
+
+  test("нижняя навигация переключает экраны и aria-current", () => {
+    const app = open();
+    app.click(app.document.querySelector('.nav-item[data-screen="financeScreen"]'));
+    assert.ok(app.$("financeScreen").classList.contains("active"));
+    assert.ok(!app.$("homeScreen").classList.contains("active"));
+    assert.equal(app.document.querySelector('.nav-item[data-screen="financeScreen"]').getAttribute("aria-current"), "page");
+    assert.equal(app.document.querySelector('.nav-item[data-screen="homeScreen"]').getAttribute("aria-current"), null);
+  });
+
+  test("экран входа: переключение режимов и валидация без сети", async () => {
+    const app = open();
+    app.MyPay.setAuthMode("signup");
+    assert.ok(!app.$("signupNameWrap").classList.contains("hidden"));
+    assert.ok(!app.$("confirmPasswordWrap").classList.contains("hidden"));
+    app.MyPay.setAuthMode("login");
+    assert.ok(app.$("signupNameWrap").classList.contains("hidden"));
+    app.$("authModal").classList.remove("hidden");
+    app.input("authEmail", "");
+    app.input("authPassword", "");
+    app.click("authAction");
+    await tick();
+    assert.match(app.text("authStatus"), /Облако недоступно/, "без SDK объясняем, почему вход невозможен");
+  });
+});

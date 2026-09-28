@@ -1,58 +1,110 @@
-# CASE.PLACE SALARY Telegram BOT — ULTRA setup
+# CASE.PLACE SALARY — Telegram-бот
 
-## Возможности
+Бот живёт в Supabase Edge Functions и работает с теми же таблицами, что и приложение: смена, внесённая из чата, сразу видна на сайте, и наоборот.
 
-- Ввод смены: `350`, `350 + 500`, `чехлы 350`.
-- Автоматическое обновление смены за сегодня.
-- Кнопочное меню прямо в Telegram.
-- `/today` — результат за сегодня.
-- `/month` — доход, чехлы, смены, средняя смена и цель.
-- `/forecast` — прогноз дохода до конца месяца.
-- `/last` — последняя смена.
-- `/undo` — удалить сегодняшнюю запись.
-- `/notify_on` и `/notify_off` — настройки напоминаний.
-- `/unlink` — отвязать Telegram.
-- Защита webhook через secret token.
-- Все операции сохраняются в `telegram_bot_events`.
+## Что умеет
+
+- **Ввод чехлов за сегодня**: `350`, `350 + 500`, `чехлы 350`, `упаковал 1200 чехлов`.
+  Если смена уже внесена, бот спрашивает: «➕ Добавить» или «✏️ Заменить» (кнопки под сообщением, действуют 15 минут).
+- **Добавить к текущему**: `+500` или кнопки `+100 / +500 / +1000`.
+- После каждого добавления: чехлы за сегодня, мотивация, заработок (ставка + сделка), время до конца смены (08:00–19:00 Екатеринбург).
+- `/today` (кнопка «Сегодня») — смена за сегодня и статус по графику.
+- `/month` («Месяц») — заработано, смены, чехлы, средняя и лучшая смена, цель, прогноз.
+- `/forecast` («Прогноз») — сколько смен осталось по графику 2/2, прогноз и сколько нужно за смену до цели.
+- `/last` — последняя внесённая смена.
+- `/undo` («Отменить») — откатить последнее добавление за сегодня (только сделанные через бота).
+- `/holiday` — переключить праздничную ставку на сегодня.
+- `/notify_on`, `/notify_off` — напоминания: вечером перед рабочим днём и в 19:00, если смена не внесена.
+- `/menu`, `/help`, `/unlink`.
+- Все входящие и исходящие сообщения журналируются в `telegram_bot_events`.
+
+Расчёт берётся из таблицы `settings` пользователя (ставка, праздничная ставка, цена чехла, процент сделки, начало графика, цель).
+
+## Файлы
+
+```text
+supabase/functions/_shared/mypay.ts          общая логика (модель оплаты, график, PostgREST, Telegram API)
+supabase/functions/telegram-mypay/index.ts   вход Deno (Deno.serve)
+supabase/functions/telegram-mypay/bot.ts     обработчик вебхука
+supabase/functions/telegram-reminders/       функция напоминаний
+tests/telegram-bot.test.mjs                  42 проверки на моках
+```
 
 ## Установка
 
-1. Создай бота через `@BotFather` → `/newbot`.
-2. Выполни весь файл `TELEGRAM_SUPABASE.sql` в Supabase SQL Editor.
-3. Опубликуй Edge Function:
+1. Создай бота через `@BotFather` → `/newbot`, сохрани токен.
+2. Выполни `TELEGRAM_SUPABASE.sql` в Supabase SQL Editor (после `SUPABASE_SCHEMA.sql`).
+3. Установи Supabase CLI, войди и привяжи проект:
+   ```bash
+   supabase login
+   supabase link --project-ref PROJECT_REF
+   ```
+4. Добавь секреты (URL и service-role-ключ Supabase подставляет в функции сам):
+   ```bash
+   supabase secrets set TELEGRAM_BOT_TOKEN=123456:ABC... TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 24)
+   ```
+5. Задеплой функции без проверки JWT (Telegram не присылает JWT, защита — secret token):
    ```bash
    supabase functions deploy telegram-mypay --no-verify-jwt
+   supabase functions deploy telegram-reminders --no-verify-jwt
    ```
-   Исходник — `supabase/functions/telegram-mypay/index.ts`.
-4. Добавь Secrets:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_WEBHOOK_SECRET`
-   - стандартный `SUPABASE_URL`
-   - стандартный `SUPABASE_SERVICE_ROLE_KEY`
-5. Для Edge Function отключи JWT-проверку: `verify_jwt = false`.
-6. Установи webhook (обязательно с `secret_token`, функция проверяет заголовок):
+6. Установи webhook **обязательно с `secret_token`** — функция отвечает 401 без него:
+   ```text
+   https://api.telegram.org/botТОКЕН/setWebhook?url=https://PROJECT_REF.supabase.co/functions/v1/telegram-mypay&secret_token=СЕКРЕТ&drop_pending_updates=true
+   ```
+   Проверка: `https://api.telegram.org/botТОКЕН/getWebhookInfo` — поле `last_error_message` должно быть пустым.
+7. В приложении: **Ещё → Telegram-бот → Получить код** (нужен вход в аккаунт). Команда `/start КОД` копируется в буфер — отправь её боту. Код действует ограниченное время и одноразовый.
 
-```text
-https://api.telegram.org/botТОКЕН/setWebhook?url=https://PROJECT_REF.supabase.co/functions/v1/telegram-mypay&secret_token=СЕКРЕТ
+## Напоминания по расписанию
+
+Функция `telegram-reminders` должна вызываться раз в час. В Supabase включи расширения **pg_cron** и **pg_net** (Database → Extensions) и создай задачу:
+
+```sql
+select cron.schedule(
+  'telegram-reminders-hourly',
+  '5 * * * *',
+  $$
+  select net.http_post(
+    url     := 'https://PROJECT_REF.supabase.co/functions/v1/telegram-reminders',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key')
+    ),
+    body    := '{}'::jsonb
+  );
+  $$
+);
 ```
 
-7. В CASE.PLACE SALARY открой `Ещё → Telegram-бот → Получить код`.
-8. Отправь боту `/start КОД`.
+Ключ положи в Vault заранее: `select vault.create_secret('SERVICE_ROLE_KEY', 'service_role_key');`.
+Функция проверяет заголовок `Authorization: Bearer <service role key>` и без него отвечает 401.
+Час напоминания «завтра смена» хранится в `telegram_preferences.reminder_hour` (по умолчанию 21).
 
-## Команды BotFather
+## Команды для BotFather (`/setcommands`)
 
 ```text
 start - Привязать CASE.PLACE SALARY
-menu - Открыть меню
+menu - Показать кнопки
 help - Помощь
-today - Результат сегодня
-month - Итог месяца
-forecast - Прогноз зарплаты
+today - Смена за сегодня
+month - Итоги месяца
+forecast - Прогноз до конца месяца
 last - Последняя смена
-undo - Отменить сегодняшнюю запись
+undo - Отменить последнее добавление
+holiday - Праздничная ставка на сегодня
 notify_on - Включить напоминания
 notify_off - Выключить напоминания
 unlink - Отвязать Telegram
 ```
 
-Токен бота никогда не добавляй в GitHub или frontend.
+## Проверка и отладка
+
+```bash
+npm test                  # тесты бота и приложения
+npm run typecheck         # tsc --strict для функций
+supabase functions logs telegram-mypay
+```
+
+Бот отвечает Telegram статусом 200 даже при внутренней ошибке (иначе Telegram будет повторять доставку), а пользователю пишет «Не получилось обработать сообщение». Подробности — в логах функции и в `telegram_bot_events`.
+
+Токен бота и service-role-ключ никогда не добавляй в GitHub, фронтенд или SQL-файлы.

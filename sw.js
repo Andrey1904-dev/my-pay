@@ -1,7 +1,7 @@
 // Версия кеша должна совпадать с CACHE_VERSION в script.js,
 // иначе приложение удаляет собственный кеш service worker'а при каждом запуске.
-const CACHE_NAME="my-pay-v15";
-const APP_SHELL=["./","./index.html","./style.css","./script.js?v=15","./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png"];
+const CACHE_NAME="my-pay-v16";
+const APP_SHELL=["./","./index.html","./style.css","./script.js?v=16","./style.css?v=16","./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png"];
 
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));

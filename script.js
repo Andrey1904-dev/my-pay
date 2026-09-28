@@ -1,596 +1,1097 @@
-/// v15: единая версия кеша (совпадает с CACHE_NAME в sw.js) + локальный режим без облака.
-const CACHE_VERSION="my-pay-v15";
-(async()=>{
-  // Remove caches from older releases, but do not unregister the active worker on every launch.
-  try{
-    if("caches" in window){
-      const keys=await caches.keys();
-      await Promise.all(keys.filter(k=>k.startsWith("my-pay-v")&&k!==CACHE_VERSION).map(k=>caches.delete(k)));
+/* ==========================================================================
+   CASE.PLACE SALARY — script.js v16
+   Учёт смен 2/2, упаковки чехлов и заработка. Работает офлайн (localStorage),
+   синхронизируется с Supabase, когда есть аккаунт и сеть.
+   ========================================================================== */
+"use strict";
+
+const APP_VERSION = 16;
+// Должна совпадать с CACHE_NAME в sw.js, иначе приложение удалит собственный кеш.
+const CACHE_VERSION = "my-pay-v16";
+
+// Удаляем кеши прошлых версий, но не трогаем активный service worker.
+(async () => {
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(k => k.startsWith("my-pay-v") && k !== CACHE_VERSION).map(k => caches.delete(k)));
     }
-  }catch(e){console.warn("Cache cleanup:",e);}
-})();;
-const SUPABASE_URL="https://dyixwxxpjmyycgigcbtx.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY="sb_publishable_NFxxL8WDGpG-ASXo2LasmQ_wskniL6r";
-// Облако необязательно: если SDK Supabase не загрузился (заблокирован CDN, нет сети),
-// приложение должно работать локально, а не показывать пустой экран.
-let db=null;
-try{
-  if(window.supabase&&typeof window.supabase.createClient==="function"){
-    db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
-  }else{
+  } catch (e) { console.warn("Cache cleanup:", e); }
+})();
+
+/* ---------- Supabase (необязателен: без SDK работаем локально) ---------- */
+const SUPABASE_URL = "https://dyixwxxpjmyycgigcbtx.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_NFxxL8WDGpG-ASXo2LasmQ_wskniL6r";
+const CLOUD_EXTRA_TABLE = "user_app_data";
+let db = null;
+try {
+  if (window.supabase && typeof window.supabase.createClient === "function") {
+    db = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+    });
+  } else {
     console.warn("Supabase SDK не загрузился — работаем в локальном режиме.");
   }
-}catch(e){console.warn("Supabase init failed:",e)}
-const cloudAvailable=()=>!!db;
-const DEFAULTS={basePay:2627.84,holidayPay:4050,casePrice:1.69,percent:100,scheduleStart:new Date().toISOString().slice(0,10),goal:60000};
-const EXTRA_DEFAULTS={expenses:[],goals:[],templates:[{id:"default",name:"Обычная",cases:0,hours:11,bonus:0,holiday:false}],shiftMeta:{},theme:"system",undo:null,celebratedGoals:[]};
-const state={settings:{...DEFAULTS,...load("myPaySettings",DEFAULTS)},shifts:load("myPayShifts",{}),extra:load("myPayExtra",EXTRA_DEFAULTS),calendarDate:new Date(),selectedDate:dateKey(new Date()),modalDate:null};
-state.extra={...EXTRA_DEFAULTS,...(state.extra||{})};
-state.settings.holidayPay=4050;
-// Новая модель оплаты: 1 900 ₽ дневной тариф + районный коэффициент 727,84 ₽.
-// Фактическая сдельная ставка по расчётному листку августа: 44 284,28 / 26 093 = 1,69 ₽ за чехол.
-if(Number(state.settings.basePay)===2150 && Number(state.settings.casePrice)===7 && Number(state.settings.percent)===20){
-  state.settings.basePay=2627.84; state.settings.casePrice=1.69; state.settings.percent=100;
-}
-let currentUser=null,currentProfile=null,authMode="login";
+} catch (e) { console.warn("Supabase init failed:", e); }
 
-function load(k,f){try{const x=localStorage.getItem(k);return x?JSON.parse(x):{...f}}catch{return{...f}}}
-function save(){localStorage.setItem("myPaySettings",JSON.stringify(state.settings));localStorage.setItem("myPayShifts",JSON.stringify(state.shifts));localStorage.setItem("myPayExtra",JSON.stringify(state.extra))}
-function $(id){return document.getElementById(id)}
-function money(n){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Math.round((Number(n)||0)*100)/100)+" ₽"}
-function integer(n){return new Intl.NumberFormat("ru-RU").format(Number(n)||0)}
-function dateKey(d){d=new Date(d);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
-function fromKey(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d)}
-function dateText(d,opt){return new Intl.DateTimeFormat("ru-RU",opt||{day:"numeric",month:"long"}).format(d)}
-function piece(c){return Number(c||0)*Number(state.settings.casePrice)*Number(state.settings.percent)/100}
-function monthEntries(d=state.calendarDate){const prefix=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-`;return Object.entries(state.shifts).filter(([k])=>k.startsWith(prefix)).map(([k,v])=>({k,...v}))}
-function updateHomeDashboard(){
-  const es=monthEntries(new Date()),sum=es.reduce((a,v)=>a+Number(v.total||0),0),cases=es.reduce((a,v)=>a+Number(v.cases||0),0),avg=es.length?sum/es.length:0,goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;
-  $("homeMonthTotal").textContent=money(sum);$("homeMonthShifts").textContent=integer(es.length);$("homeMonthCases").textContent=integer(cases);$("homeAvgShift").textContent=money(avg);$("homeGoalPercent").textContent=pct+"%";$("homeGoalBar").style.width=pct+"%";
-  updateNextShiftCard();
+/* ---------- Модель оплаты и дефолты ---------- */
+// 1 900 ₽ дневной тариф + 727,84 ₽ районный коэффициент = 2 627,84 ₽ за смену.
+// Сделка по расчётному листку: 44 284,28 ₽ / 26 093 чехла ≈ 1,69 ₽ за чехол.
+const DEFAULTS = { basePay: 2627.84, holidayPay: 4050, casePrice: 1.69, percent: 100, scheduleStart: todayKey(), goal: 60000 };
+const EXTRA_DEFAULTS = {
+  expenses: [], goals: [],
+  templates: [{ id: "default", name: "Обычная", cases: 0, hours: 11, bonus: 0, holiday: false }],
+  shiftMeta: {}, theme: "system", undo: null, celebratedGoals: []
+};
+const WORK_START_MIN = 8 * 60;   // 08:00
+const WORK_END_MIN = 19 * 60;    // 19:00
+const LEGACY = { basePay: 2150, casePrice: 7, percent: 20 }; // старая тройка настроек → мигрируем один раз
+
+/* ---------- Утилиты ---------- */
+function $(id) { return document.getElementById(id); }
+function num(v, fallback = 0) { if (v === null || v === undefined || v === "") return fallback; const n = Number(typeof v === "string" ? v.replace(",", ".").trim() : v); return Number.isFinite(n) ? n : fallback; }
+function clamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+function money(n) {
+  const v = Math.round(num(n) * 100) / 100;
+  return new Intl.NumberFormat("ru-RU", { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 }).format(v) + " ₽";
 }
-function updateNextShiftCard(){
-  const now=new Date(), minutes=now.getHours()*60+now.getMinutes(), start=8*60, end=19*60;
-  if(isWork(now) && minutes>=start && minutes<end){
-    const left=end-minutes, h=Math.floor(left/60), m=left%60;
-    $("nextShiftCard").classList.add("current-shift");
-    $("nextShiftCard").querySelector("span").textContent="СМЕНА ИДЁТ";
-    $("nextShiftDate").textContent=`До конца смены ${h} ч ${String(m).padStart(2,"0")} мин`;
-    $("nextShiftMeta").textContent="Рабочее время до 19:00";
+function moneyShort(n) { n = num(n); return n >= 1000 ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(n / 1000) + "к" : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(n); }
+function integer(n) { return new Intl.NumberFormat("ru-RU").format(num(n)); }
+function pad2(n) { return String(n).padStart(2, "0"); }
+function dateKey(d) { d = new Date(d); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function todayKey() { return dateKey(new Date()); }
+function fromKey(k) { const [y, m, d] = String(k).split("-").map(Number); return new Date(y, m - 1, d); }
+function isDateKey(k) { return /^\d{4}-\d{2}-\d{2}$/.test(String(k)) && !Number.isNaN(fromKey(k).getTime()); }
+function monthPrefix(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-`; }
+function dateText(d, opt) { return new Intl.DateTimeFormat("ru-RU", opt || { day: "numeric", month: "long" }).format(d); }
+function plural(n, one, few, many) { n = Math.abs(n) % 100; const x = n % 10; return n > 10 && n < 20 ? many : x > 1 && x < 5 ? few : x === 1 ? one : many; }
+function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function uid(prefix = "id") { return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function icon(name) { return `<svg aria-hidden="true"><use href="#${name}"/></svg>`; }
+function sameMonth(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth(); }
+
+/* ---------- Состояние и хранилище ---------- */
+function load(key, fallback) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : structuredCloneSafe(fallback); }
+  catch { return structuredCloneSafe(fallback); }
+}
+function structuredCloneSafe(v) { return JSON.parse(JSON.stringify(v)); }
+function normalizeSettings(s) {
+  s = s && typeof s === "object" ? s : {};
+  const out = {
+    basePay: Math.max(0, num(s.basePay, DEFAULTS.basePay)),
+    holidayPay: Math.max(0, num(s.holidayPay, DEFAULTS.holidayPay)),
+    casePrice: Math.max(0, num(s.casePrice, DEFAULTS.casePrice)),
+    percent: clamp(num(s.percent, DEFAULTS.percent), 0, 100),
+    scheduleStart: isDateKey(s.scheduleStart) ? s.scheduleStart : todayKey(),
+    goal: Math.max(0, num(s.goal, DEFAULTS.goal))
+  };
+  if (out.basePay === LEGACY.basePay && out.casePrice === LEGACY.casePrice && out.percent === LEGACY.percent) {
+    out.basePay = DEFAULTS.basePay; out.casePrice = DEFAULTS.casePrice; out.percent = DEFAULTS.percent;
+  }
+  return out;
+}
+function normalizeExtra(e) {
+  e = e && typeof e === "object" ? e : {};
+  const out = { ...structuredCloneSafe(EXTRA_DEFAULTS), ...e };
+  out.expenses = Array.isArray(out.expenses) ? out.expenses : [];
+  out.goals = Array.isArray(out.goals) ? out.goals : [];
+  out.templates = Array.isArray(out.templates) && out.templates.length ? out.templates : structuredCloneSafe(EXTRA_DEFAULTS.templates);
+  out.shiftMeta = out.shiftMeta && typeof out.shiftMeta === "object" ? out.shiftMeta : {};
+  out.celebratedGoals = Array.isArray(out.celebratedGoals) ? out.celebratedGoals : [];
+  out.theme = ["system", "light", "dark"].includes(out.theme) ? out.theme : "system";
+  return out;
+}
+const state = {
+  settings: normalizeSettings(load("myPaySettings", DEFAULTS)),
+  shifts: load("myPayShifts", {}),
+  extra: normalizeExtra(load("myPayExtra", EXTRA_DEFAULTS)),
+  calendarDate: new Date(),
+  selectedDate: todayKey(),
+  modalDate: null
+};
+if (!state.shifts || typeof state.shifts !== "object" || Array.isArray(state.shifts)) state.shifts = {};
+function save() {
+  localStorage.setItem("myPaySettings", JSON.stringify(state.settings));
+  localStorage.setItem("myPayShifts", JSON.stringify(state.shifts));
+  localStorage.setItem("myPayExtra", JSON.stringify(state.extra));
+}
+
+let currentUser = null, currentProfile = null, authMode = "login";
+let homeDirty = false;      // пользователь правит поле на главной — не перетирать его данными из облака
+let extraDirty = false;     // локальные расходы/цели не ушли в облако — не перетирать их при следующей загрузке
+
+/* ---------- Расчёт ---------- */
+function piece(cases) { return Math.max(0, num(cases)) * num(state.settings.casePrice) * num(state.settings.percent) / 100; }
+function base(holiday) { return holiday ? num(state.settings.holidayPay) : num(state.settings.basePay); }
+function total(cases, holiday) { return base(holiday) + piece(cases); }
+function makeShift(cases, holiday, bonus = 0) {
+  cases = Math.max(0, Math.floor(num(cases))); holiday = !!holiday; bonus = Math.max(0, num(bonus));
+  return { cases, holiday, base: base(holiday), piece: piece(cases), total: total(cases, holiday) + bonus };
+}
+function isWork(d) {
+  const start = fromKey(state.settings.scheduleStart);
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((t - start) / 86400000);
+  return ((diff % 4) + 4) % 4 < 2;
+}
+function monthEntries(d = state.calendarDate) {
+  const prefix = monthPrefix(d);
+  return Object.entries(state.shifts).filter(([k]) => k.startsWith(prefix)).map(([k, v]) => ({ k, ...v }));
+}
+function monthSum(entries) { return entries.reduce((a, v) => a + num(v.total), 0); }
+// Прогноз по графику: заработано + средняя смена × оставшиеся рабочие дни месяца (включая сегодняшний, если он ещё не внесён).
+function monthForecast(d = new Date()) {
+  const es = monthEntries(d);
+  if (!es.length) return null;
+  const sum = monthSum(es);
+  const today = new Date();
+  if (!sameMonth(d, today)) return Math.round(sum);
+  const avg = sum / es.length;
+  const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  let remaining = 0;
+  for (let n = today.getDate(); n <= days; n++) {
+    const x = new Date(d.getFullYear(), d.getMonth(), n);
+    if (isWork(x) && !state.shifts[dateKey(x)]) remaining++;
+  }
+  return Math.round(sum + avg * remaining);
+}
+function analyticsForMonth(d = state.calendarDate) {
+  const es = monthEntries(d).sort((a, b) => a.k.localeCompare(b.k));
+  const sum = monthSum(es);
+  const goal = num(state.settings.goal);
+  const best = es.reduce((a, v) => !a || num(v.total) > num(a.total) ? v : a, null);
+  const remaining = Math.max(0, goal - sum);
+  const avg = es.length ? sum / es.length : 0;
+  const shiftsNeeded = remaining > 0 && avg > 0 ? Math.ceil(remaining / avg) : 0;
+  let streak = 0, bestStreak = 0, prev = null;
+  for (const v of es) {
+    const x = fromKey(v.k);
+    streak = prev && Math.round((x - prev) / 86400000) <= 3 ? streak + 1 : 1;
+    bestStreak = Math.max(bestStreak, streak); prev = x;
+  }
+  return { es, sum, goal, best, remaining, avg, shiftsNeeded, bestStreak, cases: es.reduce((a, v) => a + num(v.cases), 0) };
+}
+
+/* ---------- Тост, диалоги ---------- */
+function showToast(text, ms = 2400) {
+  const t = $("toast"); t.textContent = text; t.classList.add("show");
+  clearTimeout(showToast.timer); showToast.timer = setTimeout(() => t.classList.remove("show"), ms);
+}
+function openModal(id) { $(id).classList.remove("hidden"); }
+function closeModal(id) { $(id).classList.add("hidden"); }
+function anyModalOpen() { return !!document.querySelector(".modal:not(.hidden)"); }
+// Свои диалоги вместо системных confirm()/prompt(): в PWA они выглядят чужеродно и не стилизуются.
+function confirmAction({ title = "Подтверди действие", text = "", okText = "Удалить", cancelText = "Отмена", danger = true } = {}) {
+  return new Promise(resolve => {
+    $("confirmTitle").textContent = title; $("confirmText").textContent = text;
+    const ok = $("confirmOk"), cancel = $("confirmCancel");
+    ok.querySelector("span").textContent = okText; cancel.querySelector("span").textContent = cancelText;
+    ok.className = `btn btn-lg ${danger ? "btn-danger" : "btn-primary"}`;
+    const done = v => { ok.onclick = cancel.onclick = null; closeModal("confirmModal"); $("confirmModal").onclick = null; resolve(v); };
+    ok.onclick = () => done(true); cancel.onclick = () => done(false);
+    $("confirmModal").onclick = e => { if (e.target === $("confirmModal")) done(false); };
+    openModal("confirmModal"); setTimeout(() => cancel.focus(), 50);
+  });
+}
+function promptNumber({ title = "Сумма", text = "", label = "Сумма, ₽", value = "", okText = "Готово" } = {}) {
+  return new Promise(resolve => {
+    $("promptTitle").textContent = title; $("promptText").textContent = text; $("promptLabel").textContent = label;
+    const input = $("promptInput"), ok = $("promptOk"), cancel = $("promptCancel");
+    input.value = value === null || value === undefined ? "" : String(value);
+    ok.querySelector("span").textContent = okText;
+    const done = v => { ok.onclick = cancel.onclick = input.onkeydown = null; $("promptModal").onclick = null; closeModal("promptModal"); resolve(v); };
+    ok.onclick = () => { const v = Number(String(input.value).replace(",", ".")); done(Number.isFinite(v) ? v : null); };
+    cancel.onclick = () => done(null);
+    input.onkeydown = e => { if (e.key === "Enter") ok.click(); };
+    $("promptModal").onclick = e => { if (e.target === $("promptModal")) done(null); };
+    openModal("promptModal"); setTimeout(() => { input.focus(); input.select(); }, 50);
+  });
+}
+
+/* ---------- Авторизация ---------- */
+function showAuth(show) { $("authModal").classList.toggle("hidden", !show); }
+function setStatus(t) { $("authStatus").textContent = t || ""; }
+function setAuthMode(mode) {
+  authMode = mode;
+  const signup = mode === "signup";
+  $("authWelcome").classList.add("hidden"); $("authForm").classList.remove("hidden");
+  $("signupNameWrap").classList.toggle("hidden", !signup); $("confirmPasswordWrap").classList.toggle("hidden", !signup);
+  $("authOverline").textContent = signup ? "Регистрация" : "Вход";
+  $("authTitle").textContent = signup ? "Создай аккаунт" : "С возвращением";
+  $("authSubtitle").textContent = signup ? "Имя, email и пароль — больше ничего не понадобится." : "Введи email и пароль, чтобы открыть приложение.";
+  $("authAction").querySelector("span").textContent = signup ? "Создать аккаунт" : "Войти";
+  $("authSwitch").innerHTML = signup ? 'Уже есть аккаунт? <button id="switchAuth">Войти</button>' : 'Нет аккаунта? <button id="switchAuth">Зарегистрироваться</button>';
+  $("switchAuth").onclick = () => setAuthMode(signup ? "login" : "signup");
+  $("authPassword").setAttribute("autocomplete", signup ? "new-password" : "current-password");
+  setStatus("");
+  setTimeout(() => (signup ? $("authName") : $("authEmail")).focus(), 60);
+}
+function backAuth() { $("authForm").classList.add("hidden"); $("authWelcome").classList.remove("hidden"); setStatus(""); }
+function friendlyAuthError(error, signup) {
+  const m = (error?.message || "").toLowerCase();
+  if (error?.status === 0 || /fetch|network|failed to fetch/.test(m)) return "Нет соединения с сервером. Проверь интернет.";
+  if (/email not confirmed/.test(m)) return "Подтверждение email включено. Отключи Confirm email в настройках Supabase.";
+  if (/rate limit|too many/.test(m)) return "Слишком много попыток. Подожди минуту и попробуй снова.";
+  if (signup) {
+    if (/already registered|already been registered|user already registered/.test(m)) return "Этот email уже зарегистрирован.";
+    if (/email provider is disabled|email signups are disabled/.test(m)) return "Регистрация отключена. Включи Authentication → Providers → Email.";
+    if (/invalid.*email|email.*invalid/.test(m)) return "Укажи корректный email.";
+    if (/password.*(6|characters)|weak password/.test(m)) return "Пароль должен быть минимум 6 символов.";
+    return error?.message || "Не удалось создать аккаунт.";
+  }
+  return "Неверный email или пароль.";
+}
+async function authAction() {
+  if (!db) { setStatus("Облако недоступно: не загрузился модуль Supabase (проверь интернет или блокировщик скриптов). Данные сохраняются на этом устройстве."); return; }
+  const email = $("authEmail").value.trim().toLowerCase(), password = $("authPassword").value;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setStatus("Укажи корректный email."); return; }
+  if (password.length < 6) { setStatus("Пароль должен быть минимум 6 символов."); return; }
+  const btn = $("authAction"), label = btn.querySelector("span"), prev = label.textContent;
+  btn.disabled = true; label.textContent = "Секунду…";
+  try {
+    if (authMode === "login") {
+      const { data, error } = await db.auth.signInWithPassword({ email, password });
+      if (error) throw new Error(friendlyAuthError(error, false));
+      currentUser = data.user; await afterLogin(); setStatus("");
+    } else {
+      const name = $("authName").value.trim(), p2 = $("authPassword2").value;
+      if (name.length < 2) throw new Error("Напиши имя.");
+      if (password !== p2) throw new Error("Пароли не совпадают.");
+      const { data, error } = await db.auth.signUp({ email, password, options: { data: { name } } });
+      if (error) throw new Error(friendlyAuthError(error, true));
+      if (!data.user) throw new Error("Не удалось создать аккаунт.");
+      if (!data.session) { setStatus("Аккаунт создан. Подтверди email по ссылке из письма, затем войди."); return; }
+      currentUser = data.user;
+      if (!await cloudSaveProfile(name)) throw new Error("Аккаунт создан, но не удалось сохранить профиль. Проверь SQL-схему и RLS.");
+      if (!await ensureCloudDefaults()) throw new Error("Аккаунт создан, но не удалось сохранить настройки. Проверь SQL-схему и RLS.");
+      await afterLogin(); showToast("Аккаунт создан. Добро пожаловать ✨");
+    }
+  } catch (e) { setStatus(e.message || "Что-то пошло не так."); }
+  finally { btn.disabled = false; label.textContent = prev === "Секунду…" ? (authMode === "signup" ? "Создать аккаунт" : "Войти") : prev; }
+}
+async function initCloudAuth() {
+  if (!db) { showAuth(false); showCloudNotice(); updateProfileUI(); return; }
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (session?.user) { currentUser = session.user; await afterLogin(); } else showAuth(true);
+    db.auth.onAuthStateChange(async (_event, s) => {
+      if (s?.user && !currentUser) { currentUser = s.user; await afterLogin(); }
+      else if (!s && currentUser) { currentUser = null; currentProfile = null; hideCloudNotice(); showAuth(true); backAuth(); }
+    });
+  } catch (e) { console.error("initCloudAuth:", e); showAuth(false); showCloudNotice(); }
+}
+async function logout() {
+  const ok = await confirmAction({ title: "Выйти из аккаунта?", text: "Данные останутся в облаке. На этом устройстве они будут очищены.", okText: "Выйти", danger: false });
+  if (!ok) return;
+  try { if (db) await db.auth.signOut(); } catch (e) { console.warn("signOut:", e); }
+  currentUser = null; currentProfile = null; homeDirty = false;
+  const keepTheme = state.extra.theme || "system";
+  state.shifts = {}; state.settings = normalizeSettings({ ...DEFAULTS, scheduleStart: todayKey() }); state.extra = normalizeExtra({ theme: keepTheme });
+  localStorage.removeItem("myPayCloudQueue");
+  save(); renderAll(); showAuth(true); backAuth(); showToast("Ты вышел из аккаунта");
+}
+function showCloudNotice(text) {
+  const n = $("cloudNotice"); if (!n) return;
+  n.classList.remove("hidden");
+  n.querySelector("span").textContent = text || "Облако недоступно — приложение работает в локальном режиме. Синхронизация включится, когда появится связь с Supabase.";
+}
+function hideCloudNotice() { $("cloudNotice")?.classList.add("hidden"); }
+
+/* ---------- Облако: загрузка и сохранение ---------- */
+let afterLoginInFlight = null;
+async function afterLogin() {
+  if (afterLoginInFlight) return afterLoginInFlight;
+  afterLoginInFlight = (async () => {
+    const synced = await cloudLoad();
+    if (!synced) {
+      if (!navigator.onLine || !db) {
+        showAuth(false); showCloudNotice("Нет сети — работаем офлайн. Изменения синхронизируются автоматически, когда связь появится."); renderAll();
+        showToast("Офлайн-режим: данные сохраняются на устройстве"); return true;
+      }
+      showAuth(true); setStatus("Не удалось синхронизировать данные. Проверь интернет и попробуй войти снова."); return false;
+    }
+    showAuth(false); hideCloudNotice(); renderAll(); flushCloudQueue(); startCloudRefresh(); loadTelegramStatus();
+    return true;
+  })();
+  try { return await afterLoginInFlight; } finally { afterLoginInFlight = null; }
+}
+let cloudRefreshTimer = null, cloudListenersBound = false;
+function startCloudRefresh() {
+  if (cloudRefreshTimer) clearInterval(cloudRefreshTimer);
+  cloudRefreshTimer = setInterval(() => {
+    if (!currentUser || document.hidden || anyModalOpen() || homeDirty) return;
+    cloudLoad();
+  }, 30000);
+  if (cloudListenersBound) return; // слушатели регистрируем один раз, иначе при повторном входе они дублируются
+  cloudListenersBound = true;
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && currentUser && !anyModalOpen()) cloudLoad(); });
+  window.addEventListener("online", () => { if (currentUser) { flushCloudQueue(); cloudLoad(); } });
+}
+async function cloudLoad() {
+  if (!currentUser || !db) return false;
+  try {
+    const { data: sd, error: se } = await db.from("settings").select("*").eq("user_id", currentUser.id).maybeSingle();
+    if (se) { console.error("cloudLoad settings:", se); return false; }
+    const { data: rows, error: re } = await db.from("shifts").select("*").eq("user_id", currentUser.id).order("work_date", { ascending: true });
+    if (re) { console.error("cloudLoad shifts:", re); return false; }
+    if (sd) {
+      // Легаси-миграция только по точной старой тройке 2150 / 7 / 20 — иначе затрём настройки пользователя.
+      const legacy = num(sd.base_pay) === LEGACY.basePay && num(sd.case_price) === LEGACY.casePrice && num(sd.piece_percent) === LEGACY.percent;
+      state.settings = normalizeSettings({
+        basePay: legacy ? DEFAULTS.basePay : sd.base_pay, holidayPay: sd.holiday_pay,
+        casePrice: legacy ? DEFAULTS.casePrice : sd.case_price, percent: legacy ? DEFAULTS.percent : sd.piece_percent,
+        scheduleStart: sd.schedule_start || state.settings.scheduleStart, goal: sd.monthly_goal
+      });
+      if (legacy) await cloudSaveSettings();
+    } else await ensureCloudDefaults();
+
+    const { data: profile, error: pe } = await db.from("profiles").select("id,name").eq("id", currentUser.id).maybeSingle();
+    if (pe) { console.error("cloudLoad profile:", pe); return false; }
+    currentProfile = profile || null;
+
+    // Облако — источник истины для аккаунта: пустой ответ очищает старые локальные смены,
+    // чтобы один аккаунт никогда не видел смены другого на том же устройстве.
+    const cloudShifts = {};
+    for (const x of rows || []) {
+      const key = String(x.work_date).slice(0, 10);
+      const cases = num(x.cases), holiday = !!x.is_holiday;
+      // total_pay в облаке включает премию из модалки; сохраняем его, чтобы не терять доплаты.
+      const shift = makeShift(cases, holiday);
+      const cloudTotal = num(x.total_pay);
+      if (cloudTotal > 0) shift.total = cloudTotal;
+      cloudShifts[key] = shift;
+    }
+    state.shifts = cloudShifts;
+    await cloudLoadExtra();
+    save(); syncHomeInputsFromCloud(); renderAll();
+    return true;
+  } catch (e) { console.error("cloudLoad:", e); return false; }
+}
+function settingsPayload() {
+  const s = state.settings;
+  return { user_id: currentUser.id, base_pay: num(s.basePay), holiday_pay: num(s.holidayPay, 4050), case_price: num(s.casePrice), piece_percent: num(s.percent), schedule_start: s.scheduleStart || todayKey(), monthly_goal: num(s.goal) };
+}
+async function ensureCloudDefaults() {
+  if (!currentUser || !db) return false;
+  const { error } = await db.from("settings").upsert(settingsPayload(), { onConflict: "user_id" });
+  return !error;
+}
+async function cloudSaveSettings() {
+  if (!currentUser || !db) return false;
+  const { error } = await db.from("settings").upsert(settingsPayload(), { onConflict: "user_id" });
+  if (error) { console.error("cloudSaveSettings:", error); return false; }
+  return true;
+}
+async function cloudSaveProfile(name) {
+  if (!currentUser || !db) return false;
+  const { data, error } = await db.from("profiles").upsert({ id: currentUser.id, name: name.trim() }, { onConflict: "id" }).select().single();
+  if (!error) currentProfile = data;
+  return !error;
+}
+function shiftPayload(date, shift) {
+  return { user_id: currentUser.id, work_date: date, cases: num(shift.cases), is_holiday: !!shift.holiday, base_pay: num(shift.base), piece_pay: num(shift.piece), total_pay: num(shift.total) };
+}
+function isNetworkError(error) { return !navigator.onLine || /fetch|network|load failed/i.test(error?.message || ""); }
+async function cloudSaveShift(date, shift) {
+  if (!currentUser || !db || !date || !shift) return false;
+  const { error } = await db.from("shifts").upsert(shiftPayload(date, shift), { onConflict: "user_id,work_date" });
+  if (error) {
+    console.error("cloudSaveShift:", date, error);
+    if (isNetworkError(error)) { queueCloudOp({ type: "saveShift", date, shift }); return true; }
+    showToast("Не удалось сохранить смену в облако");
+    return false;
+  }
+  removeQueuedOp("saveShift", date); return true;
+}
+async function cloudDeleteShift(date) {
+  if (!currentUser || !db) return false;
+  const { error } = await db.from("shifts").delete().eq("user_id", currentUser.id).eq("work_date", date);
+  if (error) {
+    if (isNetworkError(error)) { queueCloudOp({ type: "deleteShift", date }); return true; }
+    showToast("Не удалось удалить смену из облака"); return false;
+  }
+  removeQueuedOp("deleteShift", date); return true;
+}
+async function cloudLoadExtra() {
+  if (!currentUser || !db) return false;
+  try {
+    if (extraDirty) { // сначала доталкиваем локальные правки, иначе облако их перетрёт
+      if (await cloudSaveExtra()) extraDirty = false; else return false;
+    }
+    const { data, error } = await db.from(CLOUD_EXTRA_TABLE).select("payload").eq("user_id", currentUser.id).maybeSingle();
+    if (error) { console.info("Доп. облачные данные недоступны:", error.message); return false; }
+    state.extra = normalizeExtra(data?.payload && typeof data.payload === "object" ? data.payload : { theme: state.extra.theme });
+    applyTheme();
+    return true;
+  } catch { return false; }
+}
+async function cloudSaveExtra() {
+  save();
+  if (!currentUser || !db) return false;
+  if (!navigator.onLine) { extraDirty = true; queueCloudOp({ type: "saveExtra" }); return false; }
+  try {
+    const { error } = await db.from(CLOUD_EXTRA_TABLE).upsert({ user_id: currentUser.id, payload: state.extra, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (error) { console.info("Доп. данные сохранены только локально:", error.message); extraDirty = true; return false; }
+    extraDirty = false; removeQueuedOp("saveExtra"); return true;
+  } catch { extraDirty = true; return false; }
+}
+
+/* ---------- Офлайн-очередь ---------- */
+function loadQueue() { try { const q = JSON.parse(localStorage.getItem("myPayCloudQueue") || "[]"); return Array.isArray(q) ? q : []; } catch { return []; } }
+function saveQueue(q) { localStorage.setItem("myPayCloudQueue", JSON.stringify(q)); }
+function queueCloudOp(op) {
+  const q = loadQueue().filter(x => !(x.type === op.type && x.date === op.date));
+  q.push({ ...op, queuedAt: Date.now() }); saveQueue(q);
+  showToast("Офлайн: сохраню в облако при подключении");
+}
+function removeQueuedOp(type, date) { saveQueue(loadQueue().filter(x => !(x.type === type && x.date === date))); }
+async function flushCloudQueue() {
+  if (!db || !navigator.onLine || !currentUser) return;
+  const q = loadQueue(); if (!q.length) return;
+  const left = [];
+  for (const op of q) {
+    try {
+      if (op.type === "saveShift") {
+        const { error } = await db.from("shifts").upsert(shiftPayload(op.date, op.shift), { onConflict: "user_id,work_date" }); if (error) throw error;
+      } else if (op.type === "deleteShift") {
+        const { error } = await db.from("shifts").delete().eq("user_id", currentUser.id).eq("work_date", op.date); if (error) throw error;
+      } else if (op.type === "saveExtra") {
+        const { error } = await db.from(CLOUD_EXTRA_TABLE).upsert({ user_id: currentUser.id, payload: state.extra, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); if (error) throw error;
+        extraDirty = false;
+      }
+    } catch { left.push(op); }
+  }
+  saveQueue(left);
+  if (!left.length) showToast("Офлайн-изменения синхронизированы ✓");
+}
+
+/* ---------- Главный экран ---------- */
+function renderAll() { updateProfileUI(); updateHome(); renderCalendar(); renderStats(); renderInsights(); renderFinance(); refreshUndoUI(); }
+function homeInputs() {
+  return { cases: Math.max(0, Math.floor(num($("casesInput").value))), holiday: $("holidayInput").checked };
+}
+function syncHomeInputsFromCloud() {
+  if (homeDirty || document.activeElement === $("casesInput")) return;
+  const today = state.shifts[todayKey()];
+  $("casesInput").value = today ? String(today.cases || 0) : "";
+  $("holidayInput").checked = !!today?.holiday;
+}
+function updateHome() {
+  const { cases, holiday } = homeInputs();
+  const p = piece(cases), b = base(holiday);
+  $("shiftTotal").textContent = money(b + p);
+  $("homeBase").textContent = money(b);
+  $("homePiece").textContent = money(p);
+  $("holidayChip").classList.toggle("hidden", !holiday);
+  $("perCase").textContent = money(num(state.settings.casePrice) * num(state.settings.percent) / 100);
+  $("perThousand").textContent = money(piece(1000));
+  $("holidayRateLabel").textContent = money(state.settings.holidayPay);
+  const now = new Date();
+  $("todayLabel").textContent = dateText(now, { weekday: "long", day: "numeric", month: "long" });
+  const badge = $("todayBadge"), work = isWork(now);
+  badge.textContent = work ? "Работа" : "Выходной"; badge.classList.toggle("is-work", work);
+  const saved = state.shifts[todayKey()];
+  $("saveNote").textContent = homeDirty ? "Есть несохранённые изменения" : saved ? `Смена за сегодня сохранена: ${money(saved.total)}` : "";
+  updateNextShiftCard();
+  updateHomeDashboard();
+}
+function updateHomeDashboard() {
+  const es = monthEntries(new Date()), sum = monthSum(es), cases = es.reduce((a, v) => a + num(v.cases), 0);
+  const goal = num(state.settings.goal), pct = goal ? Math.min(100, Math.round(sum / goal * 100)) : 0;
+  $("homeMonthTotal").textContent = money(sum);
+  $("homeMonthShifts").textContent = integer(es.length);
+  $("homeMonthCases").textContent = integer(cases);
+  $("homeAvgShift").textContent = money(es.length ? sum / es.length : 0);
+  $("homeGoalPercent").textContent = pct + "%";
+  const bar = $("homeGoalBar"); bar.style.width = pct + "%"; bar.classList.toggle("is-done", pct >= 100);
+}
+function updateNextShiftCard() {
+  const card = $("nextShiftCard"), kicker = $("nextShiftKicker"), progress = $("shiftProgress");
+  const now = new Date(), minutes = now.getHours() * 60 + now.getMinutes();
+  if (isWork(now) && minutes >= WORK_START_MIN && minutes < WORK_END_MIN) {
+    const left = WORK_END_MIN - minutes, h = Math.floor(left / 60), m = left % 60;
+    card.classList.add("current-shift"); kicker.textContent = "Смена идёт";
+    $("nextShiftDate").textContent = `До конца ${h} ч ${pad2(m)} мин`;
+    $("nextShiftMeta").textContent = "Рабочее время 08:00–19:00";
+    progress.classList.remove("hidden");
+    $("shiftProgressBar").style.width = Math.round((minutes - WORK_START_MIN) / (WORK_END_MIN - WORK_START_MIN) * 100) + "%";
     return;
   }
-  $("nextShiftCard").classList.remove("current-shift");
-  let d=new Date(now);
-  if(isWork(d) && minutes<start){
-    $("nextShiftCard").querySelector("span").textContent="БЛИЖАЙШАЯ СМЕНА";
-    $("nextShiftDate").textContent="Сегодня";
-    $("nextShiftMeta").textContent="Начало в 08:00";
-    return;
-  }
-  d.setDate(d.getDate()+1);
-  for(let i=0;i<366;i++){
-    if(isWork(d)){
-      $("nextShiftCard").querySelector("span").textContent="БЛИЖАЙШАЯ СМЕНА";
-      $("nextShiftDate").textContent=dateText(d,{weekday:"long",day:"numeric",month:"long"});
-      $("nextShiftMeta").textContent="Начало в 08:00";
+  card.classList.remove("current-shift"); progress.classList.add("hidden"); kicker.textContent = "Ближайшая смена";
+  if (isWork(now) && minutes < WORK_START_MIN) { $("nextShiftDate").textContent = "Сегодня"; $("nextShiftMeta").textContent = "Начало в 08:00"; return; }
+  const d = new Date(now); d.setDate(d.getDate() + 1);
+  for (let i = 0; i < 366; i++) {
+    if (isWork(d)) {
+      const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+      $("nextShiftDate").textContent = diff === 1 ? "Завтра" : dateText(d, { weekday: "long", day: "numeric", month: "long" });
+      $("nextShiftMeta").textContent = diff === 1 ? "Начало в 08:00" : `Через ${diff} ${plural(diff, "день", "дня", "дней")} · в 08:00`;
       return;
     }
-    d.setDate(d.getDate()+1);
+    d.setDate(d.getDate() + 1);
   }
 }
-function base(h){return h?Number(state.settings.holidayPay):Number(state.settings.basePay)}
-function total(c,h){return base(h)+piece(c)}
-function isWork(d){const start=fromKey(state.settings.scheduleStart);const t=new Date(d.getFullYear(),d.getMonth(),d.getDate());const diff=Math.floor((t-start)/86400000);return ((diff%4)+4)%4<2}
-function plural(n,a,b,c){n=Math.abs(n)%100;const x=n%10;return n>10&&n<20?c:x>1&&x<5?b:x===1?a:c}
-function showToast(t){const x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(showToast.t);showToast.t=setTimeout(()=>x.classList.remove("show"),2200)}
-function setStatus(t){$("authStatus").textContent=t||""}
-
-function showAuth(show){$("authModal").classList.toggle("hidden",!show)}
-function setAuthMode(mode){
-  authMode=mode;
-  const signup=mode==="signup";
-  $("authWelcome").classList.add("hidden");$("authForm").classList.remove("hidden");
-  $("signupNameWrap").classList.toggle("hidden",!signup);$("confirmPasswordWrap").classList.toggle("hidden",!signup);
-  $("authOverline").textContent=signup?"РЕГИСТРАЦИЯ":"ВХОД";
-  $("authTitle").textContent=signup?"Создай свой аккаунт ✨":"С возвращением ✨";
-  $("authSubtitle").textContent=signup?"Придумай логин и пароль. Больше ничего не понадобится.":"Введи логин и пароль, чтобы открыть приложение.";
-  $("authAction").textContent=signup?"Создать аккаунт":"Войти";
-  $("authSwitch").innerHTML=signup?'Уже есть аккаунт? <button id="switchAuth">Войти</button>':'Нет аккаунта? <button id="switchAuth">Зарегистрироваться</button>';
-  $("switchAuth").onclick=()=>setAuthMode(signup?"login":"signup");
-  $("authPassword").setAttribute("autocomplete",signup?"new-password":"current-password");
-  setStatus("");
-}
-function backAuth(){$("authForm").classList.add("hidden");$("authWelcome").classList.remove("hidden");setStatus("")}
-
-async function authAction(){
-  if(!db){setStatus('Облако недоступно: не загрузился модуль Supabase (проверь интернет или блокировщик скриптов). Данные сохраняются на этом устройстве.');return}
-  const email=$('authEmail').value.trim().toLowerCase(),password=$('authPassword').value;
-  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setStatus('Укажи корректный email.');return}
-  if(password.length<6){setStatus('Пароль должен быть минимум 6 символов.');return}
-  $('authAction').disabled=true;$('authAction').textContent='Секунду…';
-  try{
-    if(authMode==='login'){
-      const {data,error}=await db.auth.signInWithPassword({email,password});
-      if(error){
-        const m=(error.message||'').toLowerCase();
-        if(error.status===0 || /fetch|network|failed to fetch/i.test(m)) throw new Error('Нет соединения с сервером.');
-        if(/email not confirmed/i.test(m)) throw new Error('Подтверждение email включено. Отключи Confirm email в настройках Supabase.');
-        throw new Error('Неверный email или пароль.');
-      }
-      currentUser=data.user;await afterLogin();setStatus('');
-    }else{
-      const name=$('authName').value.trim(),p2=$('authPassword2').value;
-      if(name.length<2)throw new Error('Напиши имя.');
-      if(password!==p2)throw new Error('Пароли не совпадают.');
-      const {data,error}=await db.auth.signUp({email,password,options:{data:{name:name.trim()}}});
-      if(error){
-        const m=(error.message||'').toLowerCase();
-        if(/already registered|already been registered|user already registered/i.test(m)) throw new Error('Этот email уже зарегистрирован.');
-        if(/email provider is disabled|email signups are disabled/i.test(m)) throw new Error('Регистрация отключена. Включи Authentication → Providers → Email.');
-        if(/invalid.*email|email.*invalid/i.test(m)) throw new Error('Укажи корректный email.');
-        if(/password.*(6|characters)|weak password/i.test(m)) throw new Error('Пароль должен быть минимум 6 символов.');
-        if(/fetch|network|failed to fetch/i.test(m)) throw new Error('Нет соединения с сервером.');
-        throw new Error(error.message||'Не удалось создать аккаунт.');
-      }
-      if(!data.user)throw new Error('Не удалось создать аккаунт.');
-      if(!data.session){ setStatus('Аккаунт создан. Проверь почту и подтверди email, затем войди.'); return; }
-      currentUser=data.user;
-      const profileResult=await cloudSaveProfile(name);
-      if(!profileResult)throw new Error('Аккаунт создан, но не удалось сохранить профиль. Проверь SQL-схему и RLS.');
-      const settingsResult=await ensureCloudDefaults();
-      if(!settingsResult)throw new Error('Аккаунт создан, но не удалось сохранить настройки. Проверь SQL-схему и RLS.');
-      await afterLogin();showToast('Аккаунт создан. Добро пожаловать ✨');
-    }
-  }catch(e){setStatus(e.message||'Что-то пошло не так.')}finally{$('authAction').disabled=false;$('authAction').textContent=authMode==='signup'?'Создать аккаунт':'Войти'}
-}
-let cloudRefreshTimer=null;
-function startCloudRefresh(){
-  if(cloudRefreshTimer)clearInterval(cloudRefreshTimer);
-  cloudRefreshTimer=setInterval(async()=>{
-    if(!currentUser||document.hidden||document.querySelector(".modal:not(.hidden)"))return;
-    await cloudLoad();
-  },15000);
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&currentUser)cloudLoad()});
-  window.addEventListener("online",()=>{if(currentUser)cloudLoad()});
-}
-let afterLoginInFlight=null;
-async function afterLogin(){if(afterLoginInFlight)return afterLoginInFlight;afterLoginInFlight=(async()=>{const synced=await cloudLoad();if(!synced){if(!navigator.onLine||!db){showAuth(false);showCloudNotice();updateProfileUI();updateHome();renderCalendar();renderStats();renderFinance();showToast("Офлайн-режим: данные сохраняются на устройстве");return true}showAuth(true);setStatus("Не удалось синхронизировать данные. Проверь интернет и попробуй войти снова.");return false}showAuth(false);hideCloudNotice();updateProfileUI();updateHome();renderCalendar();renderStats();renderFinance();flushCloudQueue();startCloudRefresh();return true})();try{return await afterLoginInFlight}finally{afterLoginInFlight=null}}
-
-async function cloudLoad(){
-  if(!currentUser||!db)return false;
-  const {data:sd,error:se}=await db.from("settings").select("*").eq("user_id",currentUser.id).maybeSingle();
-  if(se){console.error("cloudLoad settings:",se);return false;}
-  const {data:rows,error:re}=await db.from("shifts").select("*").eq("user_id",currentUser.id).order("work_date",{ascending:true});
-  if(re){console.error("cloudLoad shifts:",re);return false;}
-  if(sd){
-    // Легаси-миграция: переносим ТОЛЬКО точную старую тройку 2150 / 7 / 20.
-    // Раньше сюда попадали и нормальные настройки пользователя (цена 1.69 или 2),
-    // из-за чего облако затирало base_pay и percent на каждом входе.
-    const legacy=Number(sd.base_pay)===2150 && Number(sd.case_price)===7 && Number(sd.piece_percent)===20;
-    state.settings={basePay:legacy?2627.84:(Number(sd.base_pay)||2627.84),holidayPay:Number(sd.holiday_pay)||4050,casePrice:legacy?1.69:(Number(sd.case_price)||1.69),percent:legacy?100:(Number(sd.piece_percent)||100),scheduleStart:sd.schedule_start||state.settings.scheduleStart,goal:Number(sd.monthly_goal)||0};
-    if(legacy) await db.from("settings").upsert({user_id:currentUser.id,base_pay:2627.84,holiday_pay:4050,case_price:1.69,piece_percent:100,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:"user_id"});
+async function saveHomeShift() {
+  // Главная всегда сохраняет сегодняшний день (а не дату, выбранную в календаре).
+  const { cases, holiday } = homeInputs();
+  const k = todayKey(), previous = state.shifts[k];
+  const meta = state.extra.shiftMeta?.[k];
+  const v = makeShift(cases, holiday, meta?.bonus || 0);
+  state.shifts[k] = v; save();
+  if (currentUser && !await cloudSaveShift(k, v)) {
+    if (previous) state.shifts[k] = previous; else delete state.shifts[k];
+    save(); return;
   }
-  else await ensureCloudDefaults();
+  homeDirty = false; renderAll(); showToast("Смена сохранена ✓");
+}
 
-  const {data:profile,error:pe}=await db.from("profiles").select("id,name").eq("id",currentUser.id).maybeSingle();
-  if(pe){console.error("cloudLoad profile:",pe);return false;}
-  currentProfile=profile||null;
-
-  // Cloud is the source of truth for an authenticated account. An empty cloud result
-  // must clear old device data so one account can never see another account's shifts.
-  const cs={};
-  if(Array.isArray(rows)) for(const x of rows){
-    const key=String(x.work_date).slice(0,10);
-    cs[key]={cases:Number(x.cases)||0,holiday:!!x.is_holiday,base:base(!!x.is_holiday),piece:piece(Number(x.cases)||0),total:total(Number(x.cases)||0,!!x.is_holiday)};
+/* ---------- Календарь ---------- */
+function renderCalendar() {
+  const d = state.calendarDate;
+  $("monthTitle").textContent = dateText(d, { month: "long", year: "numeric" }).replace(" г.", "");
+  const first = new Date(d.getFullYear(), d.getMonth(), 1), offset = (first.getDay() + 6) % 7;
+  const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(), box = $("calendarDays");
+  const today = todayKey(), frag = document.createDocumentFragment();
+  for (let i = 0; i < offset; i++) { const e = document.createElement("div"); e.className = "day empty"; frag.appendChild(e); }
+  for (let n = 1; n <= days; n++) {
+    const x = new Date(d.getFullYear(), d.getMonth(), n), k = dateKey(x), s = state.shifts[k], b = document.createElement("button");
+    b.type = "button"; b.className = "day"; b.setAttribute("role", "gridcell");
+    if (isWork(x)) b.classList.add("work");
+    if (s) { b.classList.add("saved"); if (s.holiday) b.classList.add("holiday"); }
+    if (k === today) b.classList.add("today");
+    if (k === state.selectedDate) { b.classList.add("selected"); b.setAttribute("aria-selected", "true"); }
+    b.textContent = n;
+    b.setAttribute("aria-label", `${dateText(x, { day: "numeric", month: "long" })}${s ? ", смена " + money(s.total) : isWork(x) ? ", рабочий день" : ", выходной"}`);
+    if (s) { const i = document.createElement("i"); i.className = "tiny"; b.appendChild(i); }
+    b.onclick = () => { if (state.selectedDate === k) openShiftModal(k); else selectCalendarDate(k); };
+    frag.appendChild(b);
   }
-  state.shifts=cs;
-  syncHomeInputsFromCloud();
-  await cloudLoadExtra();
-  save();updateHome();renderCalendar();renderStats();if(typeof renderInsights==="function")renderInsights();if(typeof renderFinance==="function")renderFinance();
-  return true;
+  box.replaceChildren(frag);
+  renderSelectedCard();
 }
-async function ensureCloudDefaults(){
-  if(!currentUser||!db)return false;
-  const {error}=await db.from('settings').upsert({user_id:currentUser.id,base_pay:state.settings.basePay,holiday_pay:4050,case_price:state.settings.casePrice,piece_percent:state.settings.percent,schedule_start:state.settings.scheduleStart,monthly_goal:state.settings.goal},{onConflict:'user_id'});
-  return !error;
+function renderSelectedCard() {
+  const k = state.selectedDate, d = fromKey(k), s = state.shifts[k], meta = state.extra.shiftMeta?.[k];
+  $("selectedDate").textContent = dateText(d, { weekday: "long", day: "numeric", month: "long" });
+  const parts = [];
+  if (s) { parts.push(s.holiday ? "Праздничная смена" : "Смена внесена"); parts.push(`${integer(s.cases)} ${plural(s.cases, "чехол", "чехла", "чехлов")}`); if (meta?.note) parts.push(meta.note); }
+  else parts.push(isWork(d) ? "Рабочий день по графику" : "Выходной по графику");
+  $("selectedStatus").textContent = parts.join(" · ");
+  $("selectedMoney").textContent = s ? money(s.total) : "—";
+  $("editSelectedBtn").querySelector("span").textContent = s ? "Изменить смену" : "Внести смену";
 }
-async function cloudSaveProfile(name){
-  if(!currentUser||!db)return false;
-  const {data,error}=await db.from('profiles').upsert({id:currentUser.id,name:name.trim()},{onConflict:'id'}).select().single();
-  if(!error)currentProfile=data;
-  return !error;
+function selectCalendarDate(k) { state.selectedDate = k; renderCalendar(); }
+function shiftMonth(delta) {
+  state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() + delta, 1);
+  renderCalendar(); renderStats(); renderInsights();
 }
-async function cloudSaveSettings(){
-  if(!currentUser||!db) return false;
-  const s=state.settings||{};
-  const payload={user_id:currentUser.id,base_pay:Number(s.basePay)||0,holiday_pay:Number(s.holidayPay)||4050,case_price:Number(s.casePrice)||0,piece_percent:Number(s.percent)||0,schedule_start:s.scheduleStart||new Date().toISOString().slice(0,10),monthly_goal:Number(s.goal)||0};
-  const {error}=await db.from("settings").upsert(payload,{onConflict:"user_id"});
-  if(error){console.error("cloudSaveSettings:",error);return false;}
-  return true;
+function goToCurrentMonth() { state.calendarDate = new Date(); state.selectedDate = todayKey(); renderCalendar(); renderStats(); renderInsights(); }
+
+/* ---------- Модалка смены ---------- */
+function openShiftModal(k) {
+  state.modalDate = k;
+  const s = state.shifts[k], m = state.extra.shiftMeta?.[k] || {};
+  $("modalDate").textContent = dateText(fromKey(k), { weekday: "long", day: "numeric", month: "long" });
+  $("modalCases").value = s ? String(s.cases ?? "") : "";
+  $("modalHoliday").checked = !!s?.holiday;
+  $("modalHours").value = m.hours ?? 11; $("modalBonus").value = m.bonus ?? 0; $("modalNote").value = m.note ?? "";
+  $("modalHolidayRate").textContent = money(state.settings.holidayPay);
+  $("modalDelete").classList.toggle("hidden", !s);
+  renderModalTemplates(); updateModal(); openModal("shiftModal");
+  setTimeout(() => $("modalCases").focus(), 80);
 }
-async function cloudSaveShift(date,shift){
-  if(!currentUser||!db||!date||!shift)return false;
-  const payload={user_id:currentUser.id,work_date:date,cases:Number(shift.cases)||0,is_holiday:!!shift.holiday,base_pay:Number(shift.base)||0,piece_pay:Number(shift.piece)||0,total_pay:Number(shift.total)||0};
-  const {error}=await db.from("shifts").upsert(payload,{onConflict:"user_id,work_date"});
-  if(error){console.error("cloudSaveShift:",date,error);if(!navigator.onLine||/fetch|network/i.test(error.message||"")){queueCloudOp({type:"saveShift",date,shift});return true}return false;}
-  removeQueuedShift(date,"saveShift");return true;
+function modalInputs() {
+  return {
+    cases: Math.max(0, Math.floor(num($("modalCases").value))), holiday: $("modalHoliday").checked,
+    bonus: Math.max(0, num($("modalBonus").value)), hours: Math.max(0, num($("modalHours").value)), note: $("modalNote").value.trim()
+  };
 }
-async function cloudDeleteShift(k){
-  if(!currentUser||!db)return false;
-  const {error}=await db.from("shifts").delete().eq("user_id",currentUser.id).eq("work_date",k);
-  if(error){if(!navigator.onLine||/fetch|network/i.test(error.message||"")){queueCloudOp({type:"deleteShift",date:k});return true}showToast("Не удалось удалить смену из облака.");return false}
-  removeQueuedShift(k,"deleteShift");return true;
+function updateModal() {
+  const { cases, holiday, bonus, hours } = modalInputs();
+  const sum = total(cases, holiday) + bonus;
+  $("modalTotal").textContent = money(sum);
+  $("modalHourly").textContent = hours ? `≈ ${money(sum / hours)} в час` : "Укажи часы, чтобы увидеть доход в час";
+}
+async function saveModal() {
+  const k = state.modalDate; if (!k) return;
+  const { cases, holiday, bonus, hours, note } = modalInputs();
+  const v = makeShift(cases, holiday, bonus), previous = state.shifts[k], previousMeta = state.extra.shiftMeta[k];
+  state.shifts[k] = v; state.extra.shiftMeta[k] = { hours, bonus, note }; save();
+  if (currentUser && !await cloudSaveShift(k, v)) {
+    if (previous) state.shifts[k] = previous; else delete state.shifts[k];
+    if (previousMeta) state.extra.shiftMeta[k] = previousMeta; else delete state.extra.shiftMeta[k];
+    save(); return;
+  }
+  cloudSaveExtra();
+  if (k === todayKey()) { homeDirty = false; syncHomeInputsFromCloud(); }
+  state.selectedDate = k; renderAll(); closeModal("shiftModal"); showToast("Смена сохранена ✓");
+}
+async function deleteShift(k, { confirmFirst = true } = {}) {
+  const s = state.shifts[k]; if (!s) return false;
+  if (confirmFirst) {
+    const ok = await confirmAction({ title: "Удалить смену?", text: `${dateText(fromKey(k), { day: "numeric", month: "long" })} · ${money(s.total)}. Удалённую смену можно вернуть в разделе «Ещё».` });
+    if (!ok) return false;
+  }
+  const meta = state.extra.shiftMeta?.[k] || null;
+  state.extra.undo = { date: k, shift: s, meta };
+  delete state.shifts[k]; delete state.extra.shiftMeta[k]; save();
+  if (currentUser && !await cloudDeleteShift(k)) { state.shifts[k] = s; if (meta) state.extra.shiftMeta[k] = meta; state.extra.undo = null; save(); return false; }
+  cloudSaveExtra();
+  if (k === todayKey()) { homeDirty = false; syncHomeInputsFromCloud(); }
+  renderAll(); return true;
+}
+async function deleteModal() {
+  const k = state.modalDate; if (!k) return;
+  if (await deleteShift(k)) { closeModal("shiftModal"); showToast("Смена удалена · вернуть можно в «Ещё»"); }
+}
+async function undoLastDelete() {
+  const u = state.extra.undo; if (!u?.shift) return;
+  state.shifts[u.date] = u.shift; if (u.meta) state.extra.shiftMeta[u.date] = u.meta; state.extra.undo = null; save();
+  if (currentUser && !await cloudSaveShift(u.date, u.shift)) { delete state.shifts[u.date]; delete state.extra.shiftMeta[u.date]; state.extra.undo = u; save(); return; }
+  cloudSaveExtra();
+  if (u.date === todayKey()) syncHomeInputsFromCloud();
+  renderAll(); showToast("Смена восстановлена ✓");
+}
+function refreshUndoUI() {
+  const u = state.extra.undo, b = $("undoDeleteBtn"); if (!b) return;
+  b.classList.toggle("hidden", !u?.shift);
+  if (u?.shift) $("undoDeleteMeta").textContent = `${dateText(fromKey(u.date), { day: "numeric", month: "long" })} · ${money(u.shift.total)}`;
 }
 
-function updateProfileUI(){
-  const n=currentProfile?.name?.trim()||"Мой расчёт";$("profileName").textContent=n;$("profileAvatar").textContent=(n[0]||"₽").toUpperCase();
-  const first=n.split(/\s+/)[0];$("greetingTitle").textContent="Моя смена";
+/* ---------- Статистика ---------- */
+function renderStats() {
+  const a = analyticsForMonth(), es = a.es;
+  const bs = es.reduce((x, v) => x + num(v.base), 0), ps = es.reduce((x, v) => x + num(v.piece), 0);
+  const pct = a.goal ? Math.min(100, Math.round(a.sum / a.goal * 100)) : 0;
+  $("statsMonth").textContent = dateText(state.calendarDate, { month: "long", year: "numeric" }).replace(" г.", "");
+  $("statsMonth").onclick = goToCurrentMonth;
+  $("monthTotal").textContent = money(a.sum);
+  $("monthShiftsLabel").textContent = `${integer(es.length)} ${plural(es.length, "смена", "смены", "смен")}`;
+  $("monthCasesLabel").textContent = `${integer(a.cases)} ${plural(a.cases, "чехол", "чехла", "чехлов")}`;
+  $("avgShift").textContent = money(a.avg);
+  $("monthPiece").textContent = money(ps); $("monthBase").textContent = money(bs);
+  $("avgCases").textContent = integer(es.length ? Math.round(a.cases / es.length) : 0);
+  $("goalPercent").textContent = pct + "%";
+  const bar = $("goalBar"); bar.style.width = pct + "%"; bar.classList.toggle("is-done", pct >= 100);
+  $("goalCurrent").textContent = money(a.sum);
+  const forecast = sameMonth(state.calendarDate, new Date()) ? monthForecast() : null;
+  $("goalText").textContent = `Цель ${money(a.goal)}` + (forecast ? ` · прогноз ${money(forecast)}` : "");
+  const list = $("historyList");
+  if (!es.length) { list.innerHTML = '<div class="empty">Пока нет сохранённых смен за этот месяц.</div>'; return; }
+  list.innerHTML = [...es].sort((x, y) => y.k.localeCompare(x.k)).map(v => `
+    <div class="history-item">
+      <button type="button" class="history-left" data-open-shift="${v.k}" aria-label="Открыть смену">
+        <b>${dateText(fromKey(v.k), { weekday: "short", day: "numeric", month: "long" })}</b>
+        <small>${integer(v.cases)} ${plural(v.cases, "чехол", "чехла", "чехлов")} · сделка ${money(v.piece)}${v.holiday ? " · праздник" : ""}</small>
+      </button>
+      <div class="history-right"><b class="num">${money(v.total)}</b><small>${v.holiday ? "Праздничная" : "Обычная"}</small></div>
+      <button type="button" class="history-delete" data-delete-shift="${v.k}" aria-label="Удалить смену">${icon("i-trash")}</button>
+    </div>`).join("");
+  list.querySelectorAll("[data-delete-shift]").forEach(b => b.onclick = async () => { if (await deleteShift(b.dataset.deleteShift)) showToast("Смена удалена · вернуть можно в «Ещё»"); });
+  list.querySelectorAll("[data-open-shift]").forEach(b => b.onclick = () => { state.selectedDate = b.dataset.openShift; openShiftModal(b.dataset.openShift); });
 }
-
-function syncHomeInputsFromCloud(){
-  const todayShift=state.shifts[dateKey(new Date())];
-  $("casesInput").value=todayShift?String(todayShift.cases||0):"0";
-  $("holidayInput").checked=Boolean(todayShift?.holiday);
-}
-function updateHome(){
-  updateHomeDashboard();
-  const todayKey=dateKey(new Date());
-  const cloudToday=state.shifts[todayKey];
-  const c=Math.max(0,Math.floor(Number(cloudToday?cloudToday.cases:$("casesInput").value)||0));
-  const h=cloudToday?Boolean(cloudToday.holiday):$("holidayInput").checked;
-  if(cloudToday){$("casesInput").value=String(c);$("holidayInput").checked=h;}
-  const p=piece(c);
-  $("shiftTotal").textContent=money(c?base(h)+p:0);$("homeBase").textContent=money(base(h));$("homePiece").textContent=money(p);$("perCase").textContent=money(Number(state.settings.casePrice)*Number(state.settings.percent)/100);$("perThousand").textContent=money(piece(1000));$("holidayChip").classList.toggle("hidden",!h);
-  $("todayLabel").textContent=dateText(new Date(),{weekday:"long",day:"numeric",month:"long"}).toUpperCase();$("todayBadge").textContent=isWork(new Date())?"РАБОТА":"ВЫХОДНОЙ";
-  $("greetingTitle").textContent="Моя смена";
-}
-async function saveHomeShift(){
-  const c=Math.max(0,Math.floor(Number($("casesInput").value)||0)),h=$("holidayInput").checked,k=dateKey(new Date()),v={cases:c,holiday:h,base:base(h),piece:piece(c),total:total(c,h)},previous=state.shifts[k];
-  state.shifts[k]=v;
-  if(currentUser){if(!await cloudSaveShift(k,v)){if(previous)state.shifts[k]=previous;else delete state.shifts[k];save();return}}else save();
-  renderCalendar();renderStats();renderInsights();renderFinance();updateHomeDashboard();showToast("Смена сохранена ✓")
-}
-function renderCalendar(){
-  const d=state.calendarDate;$("monthTitle").textContent=dateText(d,{month:"long",year:"numeric"});const first=new Date(d.getFullYear(),d.getMonth(),1),offset=(first.getDay()+6)%7,days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(),box=$("calendarDays");box.innerHTML="";
-  for(let i=0;i<offset;i++){const e=document.createElement("div");e.className="day empty";box.appendChild(e)}
-  const today=dateKey(new Date());
-  for(let n=1;n<=days;n++){const x=new Date(d.getFullYear(),d.getMonth(),n),k=dateKey(x),b=document.createElement("button");b.className="day "+(isWork(x)?"work ":"")+(state.shifts[k]?.holiday?"holiday ":"")+(state.shifts[k]?"saved ":"")+(k===today?"today ":"")+(k===state.selectedDate?"selected":"");b.textContent=n;
-    if(state.shifts[k]){const i=document.createElement("i");i.className="tiny";b.appendChild(i)}b.onclick=()=>selectCalendarDate(k);box.appendChild(b)}
-}
-function selectCalendarDate(k){state.selectedDate=k;const d=fromKey(k),s=state.shifts[k];$("selectedDate").textContent=dateText(d,{weekday:"long",day:"numeric",month:"long"});$("selectedStatus").textContent=s?(s.holiday?"Праздничная смена":"Сохранённая смена"):(isWork(d)?"Рабочий день":"Выходной");$("selectedMoney").textContent=s?money(s.total):"—";renderCalendar()}
-function openShiftModal(k){state.modalDate=k;const s=state.shifts[k],m=state.extra.shiftMeta?.[k]||{};$("modalDate").textContent=dateText(fromKey(k),{weekday:"long",day:"numeric",month:"long"});$("modalCases").value=s?.cases??"";$("modalHoliday").checked=Boolean(s?.holiday);$("modalHours").value=m.hours??11;$("modalBonus").value=m.bonus??0;$("modalNote").value=m.note??"";$("modalDelete").style.display=s?"block":"none";renderModalTemplates();updateModal();$("shiftModal").classList.remove("hidden")}
-function updateModal(){const c=Math.max(0,Number($("modalCases").value)||0),h=$("modalHoliday").checked,bonus=Math.max(0,Number($("modalBonus").value)||0),hours=Math.max(0,Number($("modalHours").value)||0),sum=(c?total(c,h):base(h))+bonus;$("modalTotal").textContent=money(sum);$("modalHourly").textContent=hours?`≈ ${money(sum/hours)} за час`:"Укажи часы, чтобы увидеть доход в час"}
-async function saveModal(){const c=Math.max(0,Math.floor(Number($("modalCases").value)||0)),h=$("modalHoliday").checked,k=state.modalDate,bonus=Math.max(0,Number($("modalBonus").value)||0),hours=Math.max(0,Number($("modalHours").value)||0),note=$("modalNote").value.trim(),v={cases:c,holiday:h,base:base(h),piece:piece(c),total:total(c,h)+bonus},previous=state.shifts[k];state.shifts[k]=v;state.extra.shiftMeta[k]={hours,bonus,note};save();await cloudSaveExtra();if(currentUser){if(!await cloudSaveShift(k,v)){if(previous)state.shifts[k]=previous;else delete state.shifts[k];save();return}}selectCalendarDate(k);renderStats();renderFinance();renderInsights();updateHome();closeModal("shiftModal");showToast("Смена сохранена ✓")}
-async function deleteModal(){if(!state.modalDate)return;const k=state.modalDate,previous=state.shifts[k],meta=state.extra.shiftMeta?.[k]||null;state.extra.undo={date:k,shift:previous,meta};delete state.shifts[k];if(state.extra.shiftMeta)delete state.extra.shiftMeta[k];save();if(currentUser){if(!await cloudDeleteShift(k)){if(previous)state.shifts[k]=previous;save();return}}await cloudSaveExtra();selectCalendarDate(k);renderStats();renderFinance();renderInsights();updateHome();refreshUndoUI();closeModal("shiftModal");showToast("Смена удалена • можно вернуть в «Ещё»")}
-
-function monthForecast(){
-  const now=new Date(), es=monthEntries(now), workedDays=es.length;
-  if(!workedDays)return null;
-  const sum=es.reduce((a,v)=>a+Number(v.total||0),0);
-  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  const day=Math.max(1,now.getDate());
-  return Math.round(sum/day*daysInMonth);
-}
-function analyticsForMonth(d=state.calendarDate){
-  const es=monthEntries(d).sort((a,b)=>a.k.localeCompare(b.k));
-  const sum=es.reduce((a,v)=>a+Number(v.total||0),0);
-  const goal=Number(state.settings.goal)||0;
-  const best=es.reduce((a,v)=>!a||Number(v.total)>Number(a.total)?v:a,null);
-  const remaining=Math.max(0,goal-sum);
-  const avg=es.length?sum/es.length:0;
-  const shiftsNeeded=remaining>0&&avg>0?Math.ceil(remaining/avg):0;
-  let streak=0,bestStreak=0,prev=null;
-  es.forEach(v=>{
-    const d=fromKey(v.k);
-    if(prev){
-      const delta=Math.round((d-prev)/86400000);
-      if(delta<=4)streak++; else streak=1;
-    }else streak=1;
-    bestStreak=Math.max(bestStreak,streak); prev=d;
-  });
-  return {es,sum,goal,best,remaining,avg,shiftsNeeded,bestStreak};
-}
-function renderInsights(){
-  const a=analyticsForMonth();
-  if(!a.es.length){
-    $("smartGoalTitle").textContent="Внеси первую смену";
-    $("smartGoalMeta").textContent=a.goal?`Цель ${money(a.goal)} — начнём считать темп`:"Установи цель в настройках";
-    $("recordShift").textContent="0 ₽";$("shiftStreak").textContent="0";$("recordCases").textContent="0";$("bestDay").textContent="—";
-    $("bestShiftBadge").textContent="Нет данных";$("earningsChart").innerHTML='<div class="chart-empty">Здесь появится график после первой смены</div>';
+function renderInsights() {
+  const a = analyticsForMonth();
+  if (!a.es.length) {
+    $("smartGoalTitle").textContent = "Внеси первую смену";
+    $("smartGoalMeta").textContent = a.goal ? `Цель ${money(a.goal)} — начнём считать темп` : "Установи цель в настройках";
+    $("recordShift").textContent = money(0); $("shiftStreak").textContent = "0"; $("recordCases").textContent = "0"; $("bestDay").textContent = "—";
+    $("bestShiftBadge").textContent = "Нет данных";
+    $("earningsChart").innerHTML = '<div class="chart-empty">Здесь появится график после первой смены</div>';
     return;
   }
-  const forecast=monthForecast();
-  if(a.remaining<=0){
-    $("smartGoalTitle").textContent="Цель выполнена 🎉";
-    $("smartGoalMeta").textContent=`${money(a.sum)} из ${money(a.goal)}`;
-  }else if(a.avg>0){
-    $("smartGoalTitle").textContent=`Ещё ${money(a.remaining)}`;
-    $("smartGoalMeta").textContent=`≈ ${a.shiftsNeeded} ${plural(a.shiftsNeeded,"смена","смены","смен")} до цели • прогноз ${money(forecast||0)}`;
-  }else{
-    $("smartGoalTitle").textContent=`Цель ${money(a.goal)}`;
-    $("smartGoalMeta").textContent=`Заработано ${money(a.sum)}`;
-  }
-  $("recordShift").textContent=money(a.best?.total||0);
-  $("shiftStreak").textContent=`${a.bestStreak}`;
-  $("recordCases").textContent=integer(a.es.reduce((s,v)=>s+Number(v.cases||0),0));
-  $("bestDay").textContent=a.best?dateText(fromKey(a.best.k),{day:"numeric",month:"short"}):"—";
-  $("bestShiftBadge").textContent=a.best?`🏆 ${money(a.best.total)}`:"—";
-  const max=Math.max(...a.es.map(v=>Number(v.total)||0),1);
-  $("earningsChart").innerHTML=a.es.slice(-12).map(v=>{
-    const h=Math.max(7,Math.round((Number(v.total||0)/max)*92));
-    const day=fromKey(v.k).getDate();
-    return `<div class="bar-col"><div class="bar-value">${money(v.total).replace(" ₽","")}</div><div class="bar" style="height:${h}px" title="${dateText(fromKey(v.k),{day:"numeric",month:"long"})}: ${money(v.total)}"></div><small>${day}</small></div>`;
+  const forecast = sameMonth(state.calendarDate, new Date()) ? monthForecast() : null;
+  if (a.goal && a.remaining <= 0) { $("smartGoalTitle").textContent = "Цель выполнена 🎉"; $("smartGoalMeta").textContent = `${money(a.sum)} из ${money(a.goal)}`; }
+  else if (a.goal && a.avg > 0) { $("smartGoalTitle").textContent = `Ещё ${money(a.remaining)}`; $("smartGoalMeta").textContent = `≈ ${a.shiftsNeeded} ${plural(a.shiftsNeeded, "смена", "смены", "смен")} до цели` + (forecast ? ` · прогноз ${money(forecast)}` : ""); }
+  else { $("smartGoalTitle").textContent = a.goal ? `Цель ${money(a.goal)}` : "Цель не задана"; $("smartGoalMeta").textContent = `Заработано ${money(a.sum)}`; }
+  $("recordShift").textContent = money(a.best?.total || 0);
+  $("shiftStreak").textContent = String(a.bestStreak);
+  $("recordCases").textContent = integer(a.cases);
+  $("bestDay").textContent = a.best ? dateText(fromKey(a.best.k), { day: "numeric", month: "short" }) : "—";
+  $("bestShiftBadge").textContent = a.best ? `Лучшая ${money(a.best.total)}` : "—";
+  const last = a.es.slice(-12), vals = last.map(v => num(v.total)), max = Math.max(...vals, 1), min = Math.min(...vals);
+  $("earningsChart").innerHTML = last.map(v => {
+    // Масштаб от минимума к максимуму, чтобы разница между сменами была видна, а не тонула в одинаковых столбцах.
+    const h = max > min ? Math.round(40 + (num(v.total) - min) / (max - min) * 70) : 90;
+    return `<div class="bar-col"><div class="bar-value">${moneyShort(v.total)}</div><div class="bar${a.best && v.k === a.best.k ? " best" : ""}" style="height:${h}px" title="${dateText(fromKey(v.k), { day: "numeric", month: "long" })}: ${money(v.total)}"></div><small>${fromKey(v.k).getDate()}</small></div>`;
   }).join("");
 }
-async function deleteHistoryShift(k){
-  const s=state.shifts[k];
-  if(!s)return;
-  const d=dateText(fromKey(k),{day:"numeric",month:"long"});
-  if(!confirm(`Удалить смену за ${d}?`))return;
-  state.extra.undo={date:k,shift:s,meta:state.extra.shiftMeta?.[k]||null};
-  delete state.shifts[k];if(state.extra.shiftMeta)delete state.extra.shiftMeta[k];save();refreshUndoUI();
-  if(currentUser){
-    if(!await cloudDeleteShift(k)){
-      state.shifts[k]=s;
-      save();
-      return;
-    }
-  }
-  await cloudSaveExtra();
-  renderCalendar();
-  renderStats();
-  renderFinance();
-  renderInsights();
-  updateHome();
-  showToast("Смена удалена ✓");
+async function clearMonth() {
+  const keys = Object.keys(state.shifts).filter(k => k.startsWith(monthPrefix(state.calendarDate)));
+  if (!keys.length) { showToast("В этом месяце нечего удалять"); return; }
+  const ok = await confirmAction({ title: "Очистить месяц?", text: `Будут удалены все смены за ${dateText(state.calendarDate, { month: "long", year: "numeric" })} — ${keys.length} ${plural(keys.length, "запись", "записи", "записей")}. Это действие нельзя отменить.`, okText: "Удалить всё" });
+  if (!ok) return;
+  const results = await Promise.all(keys.map(async k => [k, currentUser ? await cloudDeleteShift(k) : true]));
+  const failed = results.filter(([, done]) => !done);
+  results.filter(([, done]) => done).forEach(([k]) => { delete state.shifts[k]; delete state.extra.shiftMeta[k]; });
+  state.extra.undo = null; save(); cloudSaveExtra(); homeDirty = false; syncHomeInputsFromCloud(); renderAll(); flushCloudQueue();
+  showToast(failed.length ? `Удалено не всё: ${failed.length} ${plural(failed.length, "смена", "смены", "смен")} не удалось удалить` : "Месяц очищен");
 }
-async function enableNotifications(){
-  if(!("Notification" in window)){
-    showToast("Этот браузер не поддерживает уведомления");
-    return;
-  }
-  if(!window.isSecureContext){
-    showToast("Для уведомлений нужен HTTPS");
-    return;
-  }
-  const permission=await Notification.requestPermission();
-  if(permission==="granted"){
-    $("notificationTipText").textContent="Уведомления включены. Напоминания будут работать после установки приложения на экран «Домой».";
-    $("enableNotificationsBtn").textContent="Уведомления включены ✓";
-    $("enableNotificationsBtn").disabled=true;
-    scheduleShiftReminder();
-    refreshNotificationUI();
-  }else{
-    $("notificationTipText").textContent="Уведомления запрещены. Их можно разрешить в настройках сайта.";
-    showToast("Уведомления не разрешены");
-  }
+
+/* ---------- Настройки ---------- */
+function openSettings() {
+  const s = state.settings;
+  $("settingBase").value = s.basePay; $("settingHoliday").value = s.holidayPay; $("settingPrice").value = s.casePrice;
+  $("settingPercent").value = s.percent; $("settingStart").value = s.scheduleStart; $("settingGoal").value = s.goal;
+  openModal("settingsModal");
 }
-function scheduleShiftReminder(){
-  // Web Push on iPhone needs a server-side push subscription. This local fallback
-  // only reminds while the app is open; the PWA/service worker is prepared for Push API.
-  if(!("Notification" in window) || Notification.permission!=="granted")return;
-  const now=new Date();
-  for(let i=1;i<=7;i++){
-    const d=new Date(now); d.setDate(now.getDate()+i); d.setHours(9,0,0,0);
-    if(isWork(d)){
-      const key="myPayReminder_"+dateKey(d);
-      if(!localStorage.getItem(key) && d-now>0){
-        const ms=d-now;
-        setTimeout(()=>{
-          if(Notification.permission==="granted"){
-            try{new Notification("CASE.PLACE SALARY",{body:`Сегодня рабочая смена — ${dateText(d,{day:"numeric",month:"long"})}.`});}
-            catch{}
-          }
-          localStorage.setItem(key,"1");
-        },Math.min(ms,2147483647));
+async function saveSettings() {
+  state.settings = normalizeSettings({
+    basePay: $("settingBase").value, holidayPay: $("settingHoliday").value, casePrice: $("settingPrice").value,
+    percent: $("settingPercent").value, scheduleStart: $("settingStart").value || state.settings.scheduleStart, goal: $("settingGoal").value
+  });
+  save();
+  const ok = currentUser ? await cloudSaveSettings() : true;
+  renderAll(); closeModal("settingsModal");
+  showToast(ok ? "Настройки обновлены ✓" : "Настройки сохранены на устройстве, но не в облако");
+}
+
+/* ---------- Резервные копии, CSV ---------- */
+function downloadFile(name, content, type) {
+  const blob = new Blob([content], { type }), url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function buildBackup() { return { version: APP_VERSION, exportedAt: new Date().toISOString(), settings: state.settings, shifts: state.shifts, extra: state.extra }; }
+function exportData() { downloadFile(`case-place-salary-${todayKey()}.json`, JSON.stringify(buildBackup(), null, 2), "application/json"); showToast("Резервная копия скачана ✓"); }
+function parseBackup(text) {
+  const d = JSON.parse(text);
+  if (!d || typeof d !== "object" || !d.settings || !d.shifts || typeof d.shifts !== "object") throw new Error("invalid backup");
+  const settings = normalizeSettings(d.settings);
+  const shifts = {};
+  for (const [date, raw] of Object.entries(d.shifts)) {
+    if (!isDateKey(date) || !raw || typeof raw !== "object") continue;
+    shifts[date] = { cases: Math.max(0, Math.floor(num(raw.cases))), holiday: !!raw.holiday, bonus: Math.max(0, num(raw.bonus)) };
+  }
+  return { settings, shifts, extra: d.extra && typeof d.extra === "object" ? normalizeExtra(d.extra) : null };
+}
+function importData(file) {
+  const r = new FileReader();
+  r.onload = async () => {
+    try {
+      const parsed = parseBackup(String(r.result));
+      state.settings = parsed.settings;
+      if (parsed.extra) state.extra = parsed.extra;
+      state.shifts = {};
+      for (const [date, s] of Object.entries(parsed.shifts)) {
+        const bonus = num(state.extra.shiftMeta?.[date]?.bonus) || s.bonus || 0;
+        state.shifts[date] = makeShift(s.cases, s.holiday, bonus); // пересчитываем по актуальным настройкам
       }
-      break;
-    }
-  }
-}
-function renderStats(){
- const es=monthEntries(),sum=es.reduce((a,v)=>a+v.total,0),bs=es.reduce((a,v)=>a+v.base,0),ps=es.reduce((a,v)=>a+v.piece,0),cs=es.reduce((a,v)=>a+v.cases,0),goal=Number(state.settings.goal)||0,pct=goal?Math.min(100,Math.round(sum/goal*100)):0;
- $("statsMonth").textContent=dateText(state.calendarDate,{month:"long",year:"numeric"});$("monthTotal").textContent=money(sum);$("monthShiftsLabel").textContent=`${integer(es.length)} ${plural(es.length,"смена","смены","смен")}`;$("monthCasesLabel").textContent=`${integer(cs)} чехлов`;$("avgShift").textContent=money(es.length?sum/es.length:0);$("monthPiece").textContent=money(ps);$("monthBase").textContent=money(bs);$("avgCases").textContent=integer(es.length?Math.round(cs/es.length):0);$("goalPercent").textContent=pct+"%";$("goalBar").style.width=pct+"%";$("goalCurrent").textContent=money(sum);$("goalText").textContent=`Цель ${money(goal)}`;
- const list=$("historyList");if(!es.length)list.innerHTML='<div class="empty-history">Пока нет сохранённых смен.</div>';else{es.sort((a,b)=>b.k.localeCompare(a.k));list.innerHTML=es.map(v=>`<div class="history-item"><div class="history-left"><b>${dateText(fromKey(v.k),{day:"numeric",month:"long"})}${v.holiday?" ★":""}</b><small>${integer(v.cases)} чехлов • сделка ${money(v.piece)}</small></div><div class="history-right"><b>${money(v.total)}</b><small>${v.holiday?"Праздник":"Обычная смена"}</small></div><button class="history-delete" data-delete-shift="${v.k}" aria-label="Удалить смену">×</button></div>`).join("");list.querySelectorAll("[data-delete-shift]").forEach(b=>b.onclick=()=>deleteHistoryShift(b.dataset.deleteShift))}
- const forecast=monthForecast();
- if(forecast && state.calendarDate.getMonth()===new Date().getMonth() && state.calendarDate.getFullYear()===new Date().getFullYear()){
-   $("goalText").textContent=`Цель ${money(goal)} • прогноз ${money(forecast)}`;
- }
-}
-function openSettings(){$("settingBase").value=state.settings.basePay;$("settingHoliday").value=state.settings.holidayPay;$("settingPrice").value=state.settings.casePrice;$("settingPercent").value=state.settings.percent;$("settingStart").value=state.settings.scheduleStart;$("settingGoal").value=state.settings.goal;$("settingsModal").classList.remove("hidden")}
-async function saveSettings(){
-  state.settings.basePay=Math.max(0,Number($("settingBase").value)||0);state.settings.holidayPay=4050;
-// Новая модель оплаты: 1 900 ₽ дневной тариф + районный коэффициент 727,84 ₽.
-// Фактическая сдельная ставка по расчётному листку августа: 44 284,28 / 26 093 = 1,69 ₽ за чехол.
-if(Number(state.settings.basePay)===2150 && Number(state.settings.casePrice)===7 && Number(state.settings.percent)===20){
-  state.settings.basePay=2627.84; state.settings.casePrice=1.69; state.settings.percent=100;
-}state.settings.casePrice=Math.max(0,Number($("settingPrice").value)||0);state.settings.percent=Math.min(100,Math.max(0,Number($("settingPercent").value)||0));state.settings.scheduleStart=$("settingStart").value||state.settings.scheduleStart;state.settings.goal=Math.max(0,Number($("settingGoal").value)||0);save();
-  const ok=await cloudSaveSettings();updateHome();renderCalendar();renderStats();
-  if(ok){closeModal("settingsModal");showToast("Настройки обновлены ✓");}else showToast("Настройки сохранены на устройстве, но не в облако.");
-}
-function closeModal(id){$(id).classList.add("hidden")}
-function exportData(){const blob=new Blob([JSON.stringify({version:15,settings:state.settings,shifts:state.shifts,extra:state.extra},null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`my-pay-backup-${dateKey(new Date())}.json`;a.click();URL.revokeObjectURL(url);showToast("Резервная копия скачана ✓")}
-function importData(file){
-  const r=new FileReader();
-  r.onload=async()=>{
-    try{
-      const d=JSON.parse(r.result);
-      if(!d.settings||!d.shifts||typeof d.shifts!=="object")throw new Error("invalid backup");
-      const importedSettings=d.settings||{};
-      state.settings={
-        basePay:Math.max(0,Number(importedSettings.basePay)||0),
-        holidayPay:4050,
-        casePrice:Math.max(0,Number(importedSettings.casePrice)||0),
-        percent:Math.min(100,Math.max(0,Number(importedSettings.percent)||0)),
-        scheduleStart:/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(importedSettings.scheduleStart)?importedSettings.scheduleStart:state.settings.scheduleStart,
-        goal:Math.max(0,Number(importedSettings.goal)||0)
-      };
-      const importedShifts={};
-      for(const [date,raw] of Object.entries(d.shifts)){
-        if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!raw||typeof raw!=="object")continue;
-        const cases=Math.max(0,Math.floor(Number(raw.cases)||0));
-        const holiday=!!raw.holiday;
-        importedShifts[date]={cases,holiday,base:base(holiday),piece:piece(cases),total:total(cases,holiday)};
-      }
-      state.shifts=importedShifts;
-      if(d.extra&&typeof d.extra==="object")state.extra={...EXTRA_DEFAULTS,...d.extra};
-      save();applyTheme();updateHome();renderCalendar();renderStats();renderFinance();if(typeof renderInsights==="function")renderInsights();
-      if(!currentUser){showToast("Данные восстановлены ✓");return;}
-      if(!await cloudSaveSettings()){showToast("Данные восстановлены на устройстве, но настройки не синхронизированы.");return;}
-      const entries=Object.entries(state.shifts);
-      for(const [date,shift] of entries) if(!await cloudSaveShift(date,shift)){showToast("Данные восстановлены, но часть смен не синхронизирована.");return;}
-      if(!db){showToast("Данные восстановлены на устройстве ✓");return}
-      const {data:verify,error}=await db.from("shifts").select("work_date").eq("user_id",currentUser.id);
-      // Проверяем именно импортированные даты: в облаке могли быть и другие смены.
-      const cloudDates=new Set((verify||[]).map(r=>String(r.work_date).slice(0,10)));
-      const missing=entries.filter(([d])=>!cloudDates.has(d));
-      if(error||missing.length){console.error("sync verify",error,missing);showToast(`Данные восстановлены, но ${missing.length} смен не синхронизированы.`);return}
+      save(); applyTheme(); homeDirty = false; syncHomeInputsFromCloud(); renderAll();
+      if (!currentUser || !db) { showToast("Данные восстановлены ✓"); return; }
+      if (!await cloudSaveSettings()) { showToast("Данные восстановлены на устройстве, но настройки не синхронизированы"); return; }
+      await cloudSaveExtra();
+      const entries = Object.entries(state.shifts);
+      for (const [date, shift] of entries) if (!await cloudSaveShift(date, shift)) { showToast("Данные восстановлены, но часть смен не синхронизирована"); return; }
+      const { data: verify, error } = await db.from("shifts").select("work_date").eq("user_id", currentUser.id);
+      const cloudDates = new Set((verify || []).map(x => String(x.work_date).slice(0, 10)));
+      const missing = entries.filter(([d]) => !cloudDates.has(d)); // проверяем только импортированные даты
+      if (error || missing.length) { console.error("sync verify", error, missing); showToast(`Данные восстановлены, но ${missing.length} ${plural(missing.length, "смена", "смены", "смен")} не синхронизированы`); return; }
       showToast("Данные восстановлены и синхронизированы ✓");
-    }catch(err){console.error("importData:",err);showToast("Не удалось прочитать файл");}
+    } catch (err) { console.error("importData:", err); showToast("Не удалось прочитать файл резервной копии"); }
   };
   r.readAsText(file);
 }
-
-document.querySelectorAll(".modal").forEach(m=>m.addEventListener("click",e=>{if(e.target===m)closeModal(m.id)}));
-document.addEventListener("keydown",e=>{if(e.key==="Escape")document.querySelectorAll(".modal:not(.hidden)").forEach(m=>closeModal(m.id))});
-
-document.querySelectorAll(".nav-item").forEach(b=>b.onclick=()=>{
-document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.screen).classList.add("active");if(b.dataset.screen==="calendarScreen")renderCalendar();if(b.dataset.screen==="statsScreen")renderStats();if(b.dataset.screen==="financeScreen")renderFinance()});
-$("casesInput").oninput=updateHome;$("holidayInput").onchange=updateHome;document.querySelectorAll(".step-btn").forEach(b=>{b.type="button";b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.step||0));updateHome()})});document.querySelectorAll(".quick-row button").forEach(b=>{b.type="button";b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();$("casesInput").value=Math.max(0,(Number($("casesInput").value)||0)+Number(b.dataset.add||0));updateHome()})});
-$("saveShiftBtn").onclick=saveHomeShift;$("settingsBtn").onclick=openSettings;$("openSettingsFromMore").onclick=openSettings;$("prevMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);renderCalendar();renderStats()};$("nextMonth").onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);renderCalendar();renderStats()};$("editSelectedBtn").onclick=()=>openShiftModal(state.selectedDate);
-$("modalCases").oninput=updateModal;$("modalHoliday").onchange=updateModal;$("modalHours").oninput=updateModal;$("modalBonus").oninput=updateModal;$("modalSave").onclick=saveModal;$("modalDelete").onclick=deleteModal;$("settingsSave").onclick=saveSettings;
-$("clearMonthBtn").onclick=async()=>{const es=Object.keys(state.shifts).filter(k=>k.startsWith(`${state.calendarDate.getFullYear()}-${String(state.calendarDate.getMonth()+1).padStart(2,"0")}-`));if(!es.length){showToast("В этом месяце нечего удалять");return}if(confirm("Удалить все смены за этот месяц?")){
-  const results=await Promise.all(es.map(async k=>[k,await cloudDeleteShift(k)]));
-  const failed=results.filter(([,ok])=>!ok).map(([k])=>k);
-  results.filter(([,ok])=>ok).forEach(([k])=>{delete state.shifts[k];if(state.extra.shiftMeta)delete state.extra.shiftMeta[k]});
-  save();await cloudSaveExtra();renderCalendar();renderStats();renderInsights();renderFinance();updateHomeDashboard();flushCloudQueue();
-  showToast(failed.length?`Удалено не всё: ${failed.length} смен не удалось удалить.`:"Месяц очищен");
-}};
-document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
-$("exportBtn").onclick=exportData;$("importBtn").onclick=()=>$("importFile").click();$("importFile").onchange=e=>e.target.files[0]&&importData(e.target.files[0]);
-let deferredPrompt=null;window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e});$("installBtn").onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null}else showToast("Открой меню браузера → «Добавить на экран»")};
-$("goLogin").onclick=()=>setAuthMode("login");$("goSignup").onclick=()=>setAuthMode("signup");$("backAuth").onclick=backAuth;$("authAction").onclick=authAction;
-
-async function initCloudAuth(){
- if(!db){
-   // Локальный режим: без облака приложение полностью работоспособно на устройстве.
-   showAuth(false);showCloudNotice();updateProfileUI();return;
- }
- try{
-   const {data:{session}}=await db.auth.getSession();
-   if(session?.user){currentUser=session.user;await afterLogin()}else showAuth(true);
-   db.auth.onAuthStateChange(async(_event,session)=>{
-     if(session?.user&&!currentUser){currentUser=session.user;await afterLogin()}
-     else if(!session){currentUser=null;currentProfile=null;hideCloudNotice();showAuth(true);backAuth()}
-   });
- }catch(e){console.error("initCloudAuth:",e);showAuth(false);showCloudNotice()}
+function buildCsv() {
+  const rows = [["Дата", "Чехлы", "Праздник", "Ставка", "Сделка", "Премия", "Итого", "Часы", "Доход/час", "Комментарий"]];
+  Object.entries(state.shifts).sort(([a], [b]) => a.localeCompare(b)).forEach(([k, v]) => {
+    const m = state.extra.shiftMeta?.[k] || {}, h = num(m.hours);
+    rows.push([k, v.cases, v.holiday ? "Да" : "Нет", v.base, v.piece, num(m.bonus), v.total, h, h ? Math.round(num(v.total) / h * 100) / 100 : "", m.note || ""]);
+  });
+  return "\uFEFF" + rows.map(r => r.map(x => '"' + String(x ?? "").replace(/"/g, '""') + '"').join(";")).join("\n");
 }
-function showCloudNotice(){const n=$("cloudNotice");if(n){n.classList.remove("hidden");n.textContent="Облако недоступно — приложение работает в локальном режиме. Синхронизация заработает, когда появится связь с Supabase."}}
-function hideCloudNotice(){const n=$("cloudNotice");if(n)n.classList.add("hidden")}
-state.selectedDate=dateKey(new Date());applyTheme();selectCalendarDate(state.selectedDate);syncHomeInputsFromCloud();updateHome();renderCalendar();renderStats();renderInsights();renderFinance();refreshUndoUI();initCloudAuth();
-$("logoutBtn").onclick=async()=>{
-  if(db)await db.auth.signOut();
-  currentUser=null;currentProfile=null;
-  state.shifts={};
-  state.settings={...DEFAULTS,holidayPay:4050,scheduleStart:new Date().toISOString().slice(0,10)};
-  const keepTheme=state.extra.theme||"system";state.extra={...EXTRA_DEFAULTS,theme:keepTheme};
-  save();updateHome();renderCalendar();renderStats();renderInsights();renderFinance();
-  showToast("Вы вышли из аккаунта");
+function exportCsv() { downloadFile(`case-place-salary-${todayKey()}.csv`, buildCsv(), "text/csv;charset=utf-8"); showToast("CSV скачан ✓"); }
+
+/* ---------- Тема ---------- */
+function applyTheme() {
+  const t = state.extra.theme || "system";
+  const dark = t === "dark" || (t === "system" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+  document.body.classList.toggle("dark", dark);
+  const status = $("themeStatus"); if (status) status.textContent = t === "system" ? "Как в системе" : t === "dark" ? "Тёмная" : "Светлая";
+  const themeIcon = $("themeBtn")?.querySelector("use"); if (themeIcon) themeIcon.setAttribute("href", dark ? "#i-sun" : "#i-moon");
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute("content", dark ? "#0f1114" : "#f4f4f2"));
+}
+function cycleTheme() {
+  const order = ["system", "light", "dark"], i = order.indexOf(state.extra.theme || "system");
+  state.extra.theme = order[(i + 1) % order.length];
+  save(); applyTheme(); cloudSaveExtra(); showToast(`Тема: ${$("themeStatus").textContent}`);
+}
+
+/* ---------- Финансы: расходы, цели, шаблоны ---------- */
+function currentMonthExpenses(d = new Date()) { const p = monthPrefix(d); return (state.extra.expenses || []).filter(x => String(x.date || "").startsWith(p)); }
+function financeNumbers() {
+  const d = new Date(), es = monthEntries(d), income = monthSum(es);
+  const expenses = currentMonthExpenses(d).reduce((a, v) => a + num(v.amount), 0);
+  const free = income - expenses, forecast = monthForecast(d) ?? income, goal = num(state.settings.goal);
+  const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(), remainingDays = Math.max(1, days - d.getDate() + 1);
+  const daily = Math.max(0, free) / remainingDays, rate = income > 0 ? Math.round(clamp(free / income, 0, 1) * 100) : 0;
+  return { income, expenses, free, forecast, goal, remainingDays, daily, rate };
+}
+function renderFinance() {
+  if (!$("financeIncome")) return;
+  const n = financeNumbers();
+  $("financeIncome").textContent = money(n.income); $("financeExpenses").textContent = money(n.expenses);
+  $("freeBalance").textContent = money(n.free); $("financeForecast").textContent = money(n.forecast);
+  $("financeGoalLeft").textContent = money(Math.max(0, n.goal - n.income));
+  $("dailyBudget").textContent = n.income <= 0 && n.expenses <= 0 ? "Внеси смены и расходы — посчитаем, сколько остаётся" : n.free > 0 ? `≈ ${money(n.daily)} в день до конца месяца` : "Расходы уже выше дохода за месяц";
+  $("savingsRate").textContent = n.rate + "%"; $("savingsRing").style.setProperty("--p", n.rate);
+  renderGoals(); renderExpenses(); renderTemplates(); checkGoalCelebration();
+}
+function renderGoals() {
+  const box = $("goalsList"); if (!box) return;
+  const goals = state.extra.goals || [];
+  if (!goals.length) { box.innerHTML = '<div class="empty">Целей пока нет. Добавь первую — приложение посчитает прогресс и остаток.</div>'; return; }
+  box.innerHTML = goals.map(g => {
+    const amount = Math.max(1, num(g.amount, 1)), saved = Math.max(0, num(g.saved)), pct = Math.min(100, Math.round(saved / amount * 100));
+    return `<div class="goal-item" data-goal="${escapeHtml(g.id)}">
+      <div class="goal-top"><b>${escapeHtml(g.name)}</b><span class="num">${money(saved)} / ${money(amount)}</span></div>
+      <div class="track"><i class="${pct >= 100 ? "is-done" : ""}" style="width:${pct}%"></i></div>
+      <div class="goal-meta"><span>${pct}%</span><span>${pct >= 100 ? "Цель достигнута" : "осталось " + money(Math.max(0, amount - saved))}</span></div>
+      <div class="goal-actions"><button type="button" class="btn btn-soft btn-sm" data-goal-add="${escapeHtml(g.id)}">${icon("i-plus")}Пополнить</button><button type="button" class="btn btn-soft btn-sm danger" data-goal-del="${escapeHtml(g.id)}">${icon("i-trash")}Удалить</button></div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-goal-add]").forEach(b => b.onclick = () => topUpGoal(b.dataset.goalAdd));
+  box.querySelectorAll("[data-goal-del]").forEach(b => b.onclick = () => deleteGoal(b.dataset.goalDel));
+}
+function openGoalModal() { $("goalName").value = ""; $("goalAmount").value = ""; $("goalSaved").value = "0"; openModal("goalModal"); setTimeout(() => $("goalName").focus(), 80); }
+async function saveGoal() {
+  const name = $("goalName").value.trim(), amount = Math.max(0, num($("goalAmount").value)), saved = Math.max(0, num($("goalSaved").value));
+  if (!name || !amount) { showToast("Укажи название и сумму цели"); return; }
+  state.extra.goals.push({ id: uid("goal"), name, amount, saved }); save(); cloudSaveExtra();
+  closeModal("goalModal"); renderFinance(); showToast("Цель добавлена 🎯");
+}
+async function topUpGoal(id) {
+  const g = state.extra.goals.find(x => x.id === id); if (!g) return;
+  const v = await promptNumber({ title: "Пополнить цель", text: `«${g.name}»: отложено ${money(g.saved)} из ${money(g.amount)}.`, label: "Сколько добавить, ₽", value: 1000, okText: "Пополнить" });
+  if (v === null || v <= 0) return;
+  g.saved = Math.max(0, num(g.saved)) + v; save(); cloudSaveExtra(); renderFinance();
+}
+async function deleteGoal(id) {
+  const g = state.extra.goals.find(x => x.id === id); if (!g) return;
+  if (!await confirmAction({ title: "Удалить цель?", text: `«${g.name}» будет удалена без возможности восстановления.` })) return;
+  state.extra.goals = state.extra.goals.filter(x => x.id !== id); save(); cloudSaveExtra(); renderFinance();
+}
+function checkGoalCelebration() {
+  for (const g of state.extra.goals || []) {
+    if (num(g.saved) >= num(g.amount) && num(g.amount) > 0 && !state.extra.celebratedGoals.includes(g.id)) {
+      state.extra.celebratedGoals.push(g.id); save(); cloudSaveExtra(); confetti(); showToast(`Цель «${g.name}» выполнена! 🎉`); break;
+    }
+  }
+}
+function confetti() {
+  const box = $("confettiLayer"); if (!box) return;
+  const colors = ["#ff5a1f", "#16181d", "#1f9d55", "#ffb38a", "#ffd166"];
+  for (let i = 0; i < 70; i++) {
+    const el = document.createElement("i"); el.className = "confetti-piece";
+    el.style.left = Math.random() * 100 + "vw"; el.style.color = colors[i % colors.length];
+    el.style.setProperty("--x", (Math.random() * 180 - 90) + "px"); el.style.animationDelay = Math.random() * .5 + "s";
+    box.appendChild(el); setTimeout(() => el.remove(), 2600);
+  }
+}
+function openExpenseModal() { $("expenseAmount").value = ""; $("expenseDate").value = todayKey(); $("expenseNote").value = ""; openModal("expenseModal"); setTimeout(() => $("expenseAmount").focus(), 80); }
+async function saveExpense() {
+  const amount = Math.max(0, num($("expenseAmount").value)), category = $("expenseCategory").value, date = isDateKey($("expenseDate").value) ? $("expenseDate").value : todayKey(), note = $("expenseNote").value.trim();
+  if (!amount) { showToast("Укажи сумму расхода"); return; }
+  state.extra.expenses.push({ id: uid("exp"), amount, category, date, note }); save(); cloudSaveExtra();
+  closeModal("expenseModal"); renderFinance(); showToast("Расход добавлен");
+}
+async function deleteExpense(id) {
+  state.extra.expenses = state.extra.expenses.filter(x => x.id !== id); save(); cloudSaveExtra(); renderFinance(); showToast("Расход удалён");
+}
+function renderExpenses() {
+  const list = $("expenseList"), bars = $("expenseBars"); if (!list || !bars) return;
+  const es = currentMonthExpenses(new Date()).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  if (!es.length) { bars.innerHTML = ""; list.innerHTML = '<div class="empty">Расходов за этот месяц пока нет.</div>'; return; }
+  const cats = {}; es.forEach(x => cats[x.category] = (cats[x.category] || 0) + num(x.amount));
+  const max = Math.max(...Object.values(cats), 1);
+  bars.innerHTML = Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="expense-bar-row"><div class="expense-bar-head"><span>${escapeHtml(c)}</span><b class="num">${money(v)}</b></div><div class="track"><i style="width:${Math.round(v / max * 100)}%"></i></div></div>`).join("");
+  list.innerHTML = es.slice(0, 15).map(x => `<div class="expense-row"><div><b>${escapeHtml(x.category)}</b><small>${dateText(fromKey(x.date), { day: "numeric", month: "short" })}${x.note ? " · " + escapeHtml(x.note) : ""}</small></div><strong class="num">−${money(x.amount)}</strong><button type="button" class="expense-delete" data-exp-del="${escapeHtml(x.id)}" aria-label="Удалить расход">${icon("i-x")}</button></div>`).join("");
+  list.querySelectorAll("[data-exp-del]").forEach(b => b.onclick = () => deleteExpense(b.dataset.expDel));
+}
+function openTemplateModal() { $("templateName").value = ""; $("templateCases").value = ""; $("templateHours").value = "11"; $("templateBonus").value = "0"; $("templateHoliday").checked = false; openModal("templateModal"); setTimeout(() => $("templateName").focus(), 80); }
+async function saveTemplate() {
+  const name = $("templateName").value.trim(), cases = Math.max(0, Math.floor(num($("templateCases").value))), hours = Math.max(0, num($("templateHours").value)), bonus = Math.max(0, num($("templateBonus").value)), holiday = $("templateHoliday").checked;
+  if (!name) { showToast("Укажи название шаблона"); return; }
+  state.extra.templates.push({ id: uid("tpl"), name, cases, hours, bonus, holiday }); save(); cloudSaveExtra();
+  closeModal("templateModal"); renderFinance(); showToast("Шаблон сохранён");
+}
+async function deleteTemplate(id) {
+  const t = state.extra.templates.find(x => x.id === id); if (!t) return;
+  if (!await confirmAction({ title: "Удалить шаблон?", text: `«${t.name}» исчезнет из быстрого ввода.` })) return;
+  state.extra.templates = state.extra.templates.filter(x => x.id !== id); save(); cloudSaveExtra(); renderFinance();
+}
+function renderTemplates() {
+  const box = $("templatesList"); if (!box) return;
+  box.innerHTML = (state.extra.templates || []).map(x => `<button type="button" class="template-chip" data-tpl-use="${escapeHtml(x.id)}" title="Открыть сегодняшнюю смену с этим шаблоном. Долгое нажатие — удалить">${escapeHtml(x.name)}<small>${integer(x.cases)} шт · ${x.hours || 0} ч${x.bonus ? " · +" + money(x.bonus) : ""}${x.holiday ? " · праздник" : ""}</small></button>`).join("");
+  box.querySelectorAll("[data-tpl-use]").forEach(b => {
+    b.onclick = () => useTemplateToday(b.dataset.tplUse);
+    b.oncontextmenu = e => { e.preventDefault(); deleteTemplate(b.dataset.tplUse); };
+  });
+}
+function renderModalTemplates() {
+  const box = $("modalTemplatePills"); if (!box) return;
+  box.innerHTML = (state.extra.templates || []).map(x => `<button type="button" class="template-chip" data-modal-tpl="${escapeHtml(x.id)}">${escapeHtml(x.name)}<small>${integer(x.cases)} шт</small></button>`).join("");
+  box.querySelectorAll("[data-modal-tpl]").forEach(b => b.onclick = () => applyTemplateToModal(b.dataset.modalTpl));
+}
+function applyTemplateToModal(id) {
+  const t = state.extra.templates.find(x => x.id === id); if (!t) return;
+  $("modalCases").value = t.cases || 0; $("modalHours").value = t.hours || 11; $("modalBonus").value = t.bonus || 0; $("modalHoliday").checked = !!t.holiday; updateModal();
+}
+function useTemplateToday(id) { const k = todayKey(); state.selectedDate = k; openShiftModal(k); applyTemplateToModal(id); }
+
+/* ---------- Профиль, Telegram, уведомления ---------- */
+function updateProfileUI() {
+  const n = currentProfile?.name?.trim() || currentUser?.user_metadata?.name || (currentUser ? currentUser.email : "") || "Мой расчёт";
+  $("profileName").textContent = n; $("profileAvatar").textContent = (n[0] || "₽").toUpperCase();
+  $("profileMeta").textContent = currentUser ? `${currentUser.email || ""} · синхронизация включена` : db ? "Войди в аккаунт, чтобы синхронизировать данные" : "Локальный режим: данные хранятся на этом устройстве";
+  $("logoutBtn").classList.toggle("hidden", !currentUser);
+}
+async function loadTelegramStatus() {
+  if (!db || !currentUser) return null;
+  try {
+    const { data, error } = await db.from("telegram_links").select("username,first_name,linked_at").eq("user_id", currentUser.id).maybeSingle();
+    if (error || !data) { $("telegramMenuStatus").textContent = "Ввод чехлов прямо из чата"; return null; }
+    const who = data.username ? "@" + data.username : (data.first_name || "аккаунт");
+    $("telegramMenuStatus").textContent = `Привязан: ${who}`;
+    return data;
+  } catch { return null; }
+}
+async function openTelegramModal() {
+  if (!currentUser) { showToast("Сначала войди в аккаунт"); return; }
+  $("telegramCode").textContent = "—"; $("telegramStatus").classList.add("hidden");
+  openModal("telegramModal");
+  const link = await loadTelegramStatus();
+  if (link) {
+    const who = link.username ? "@" + link.username : (link.first_name || "аккаунт Telegram");
+    $("telegramStatus").querySelector("span").textContent = `Бот уже привязан: ${who}. Новый код нужен только для смены аккаунта Telegram.`;
+    $("telegramStatus").classList.remove("hidden");
+  }
+}
+async function generateTelegramCode() {
+  if (!db) { showToast("Облако недоступно — код привязки получить нельзя"); return; }
+  if (!currentUser) { showToast("Сначала войди в аккаунт"); return; }
+  const btn = $("telegramGenerateBtn"), label = btn.querySelector("span");
+  btn.disabled = true; label.textContent = "Генерирую…";
+  try {
+    const { data, error } = await db.rpc("create_telegram_link_code");
+    if (error) throw error;
+    $("telegramCode").textContent = data || "—";
+    if (data && navigator.clipboard?.writeText) { try { await navigator.clipboard.writeText(`/start ${data}`); showToast("Код готов · команда /start скопирована"); } catch { showToast("Код готов ✓"); } }
+    else showToast("Код готов ✓");
+  } catch (e) { console.error(e); showToast("Не удалось получить код. Проверь, что выполнен TELEGRAM_SUPABASE.sql"); }
+  finally { btn.disabled = false; label.textContent = "Получить код"; }
+}
+function refreshNotificationUI() {
+  const supported = "Notification" in window, granted = supported && Notification.permission === "granted", denied = supported && Notification.permission === "denied";
+  $("notificationMenuStatus").textContent = !supported ? "Не поддерживается в этом браузере" : granted ? "Включены ✓" : denied ? "Запрещены в настройках браузера" : "Напоминания о сменах";
+  const tipBtn = $("enableNotificationsBtn");
+  if (granted) { $("notificationTipText").textContent = "Уведомления включены. Напоминание о ближайшей смене приходит, пока приложение открыто или установлено на экран «Домой»."; tipBtn.textContent = "Уведомления включены ✓"; tipBtn.disabled = true; }
+  else if (denied) { $("notificationTipText").textContent = "Уведомления запрещены. Разрешить их можно в настройках сайта в браузере."; tipBtn.disabled = true; }
+}
+async function enableNotifications() {
+  if (!("Notification" in window)) { showToast("Этот браузер не поддерживает уведомления"); return; }
+  if (!window.isSecureContext) { showToast("Для уведомлений нужен HTTPS"); return; }
+  const permission = await Notification.requestPermission();
+  if (permission === "granted") { scheduleShiftReminder(); showToast("Уведомления включены ✓"); }
+  else showToast("Уведомления не разрешены");
+  refreshNotificationUI();
+}
+function scheduleShiftReminder() {
+  // Локальное напоминание: работает, пока приложение может выполнять JS. Фоновый Web Push требует серверной части.
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const now = new Date();
+  for (let i = 1; i <= 7; i++) {
+    const d = new Date(now); d.setDate(now.getDate() + i); d.setHours(7, 30, 0, 0);
+    if (!isWork(d)) continue;
+    const key = "myPayReminder_" + dateKey(d);
+    if (!localStorage.getItem(key) && d - now > 0) {
+      setTimeout(() => {
+        if (Notification.permission === "granted") { try { new Notification("CASE.PLACE SALARY", { body: `Сегодня рабочая смена — ${dateText(d, { day: "numeric", month: "long" })}. Начало в 08:00.`, icon: "./icon-192.png" }); } catch { /* ignore */ } }
+        localStorage.setItem(key, "1");
+      }, Math.min(d - now, 2147483647));
+    }
+    break;
+  }
+}
+
+/* ---------- Навигация и события ---------- */
+function showScreen(id) {
+  document.querySelectorAll(".nav-item").forEach(x => { const active = x.dataset.screen === id; x.classList.toggle("active", active); if (active) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
+  document.querySelectorAll(".screen").forEach(x => x.classList.toggle("active", x.id === id));
+  if (id === "calendarScreen") renderCalendar();
+  if (id === "statsScreen") { renderStats(); renderInsights(); }
+  if (id === "financeScreen") renderFinance();
+  window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+function markHomeDirty() { homeDirty = true; updateHome(); }
+function bumpCases(delta) { $("casesInput").value = String(Math.max(0, homeInputs().cases + delta)); markHomeDirty(); }
+function bindEvents() {
+  document.querySelectorAll(".nav-item").forEach(b => b.onclick = () => showScreen(b.dataset.screen));
+  document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m && m.id !== "confirmModal" && m.id !== "promptModal") closeModal(m.id); }));
+  document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal:not(.hidden)").forEach(m => { if (m.id === "confirmModal") $("confirmCancel").click(); else if (m.id === "promptModal") $("promptCancel").click(); else closeModal(m.id); }); });
+  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => closeModal(b.dataset.close));
+
+  $("casesInput").addEventListener("input", markHomeDirty);
+  $("holidayInput").addEventListener("change", markHomeDirty);
+  document.querySelectorAll(".step-btn").forEach(b => b.addEventListener("click", () => bumpCases(num(b.dataset.step))));
+  document.querySelectorAll(".quick-row button").forEach(b => b.addEventListener("click", () => bumpCases(num(b.dataset.add))));
+  $("saveShiftBtn").onclick = saveHomeShift;
+  $("settingsBtn").onclick = openSettings; $("openSettingsFromMore").onclick = openSettings; $("settingsSave").onclick = saveSettings;
+
+  $("prevMonth").onclick = () => shiftMonth(-1); $("nextMonth").onclick = () => shiftMonth(1); $("monthTitle").onclick = goToCurrentMonth;
+  $("statsPrev").onclick = () => shiftMonth(-1); $("statsNext").onclick = () => shiftMonth(1);
+  $("editSelectedBtn").onclick = () => openShiftModal(state.selectedDate);
+  ["modalCases", "modalHours", "modalBonus"].forEach(id => $(id).addEventListener("input", updateModal));
+  $("modalHoliday").addEventListener("change", updateModal);
+  $("modalSave").onclick = saveModal; $("modalDelete").onclick = deleteModal;
+  $("clearMonthBtn").onclick = clearMonth;
+
+  $("exportBtn").onclick = exportData; $("exportCsvBtn").onclick = exportCsv;
+  $("importBtn").onclick = () => $("importFile").click();
+  $("importFile").onchange = e => { const f = e.target.files[0]; if (f) importData(f); e.target.value = ""; };
+  $("themeBtn").onclick = cycleTheme; $("undoDeleteBtn").onclick = undoLastDelete; $("logoutBtn").onclick = logout;
+
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredPrompt = e; });
+  $("installBtn").onclick = async () => {
+    if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; return; }
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    showToast(ios ? "Safari: «Поделиться» → «На экран Домой»" : "Меню браузера → «Установить приложение» или «Добавить на главный экран»", 4200);
+  };
+
+  $("goLogin").onclick = () => setAuthMode("login"); $("goSignup").onclick = () => setAuthMode("signup"); $("backAuth").onclick = backAuth; $("authAction").onclick = authAction;
+  ["authEmail", "authPassword", "authPassword2", "authName"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") authAction(); }));
+
+  $("addExpenseBtn").onclick = openExpenseModal; $("addExpenseTop").onclick = openExpenseModal; $("expenseSave").onclick = saveExpense;
+  $("addGoalBtn").onclick = openGoalModal; $("goalSave").onclick = saveGoal;
+  $("addTemplateBtn").onclick = openTemplateModal; $("templateSave").onclick = saveTemplate;
+
+  $("telegramBotBtn").onclick = openTelegramModal; $("telegramGenerateBtn").onclick = generateTelegramCode;
+  $("telegramHelpBtn").onclick = () => window.open("https://github.com/Andrey1904-dev/my-pay/blob/main/telegram_bot_setup.md", "_blank", "noopener");
+  $("enableNotificationsBtn").onclick = enableNotifications; $("enableNotificationsMenu").onclick = enableNotifications;
+
+  window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if ((state.extra.theme || "system") === "system") applyTheme(); });
+  setInterval(() => { updateNextShiftCard(); if (!homeDirty) updateHome(); }, 60000);
+}
+
+/* ---------- Старт ---------- */
+function init() {
+  $("appVersion").textContent = "v" + APP_VERSION;
+  applyTheme(); bindEvents();
+  syncHomeInputsFromCloud(); renderAll(); refreshNotificationUI();
+  if ("Notification" in window && Notification.permission === "granted") scheduleShiftReminder();
+  initCloudAuth();
+}
+init();
+
+// Публичный API для тестов и отладки в консоли.
+window.MyPay = {
+  version: APP_VERSION, state, DEFAULTS,
+  money, moneyShort, integer, plural, dateKey, fromKey, isDateKey, escapeHtml,
+  piece, base, total, makeShift, isWork, monthEntries, monthForecast, analyticsForMonth, financeNumbers,
+  normalizeSettings, normalizeExtra, parseBackup, buildBackup, buildCsv,
+  save, renderAll, updateHome, renderCalendar, renderStats, renderInsights, renderFinance,
+  saveHomeShift, openShiftModal, saveModal, deleteShift, undoLastDelete, clearMonth, selectCalendarDate, shiftMonth, goToCurrentMonth,
+  openSettings, saveSettings, cycleTheme, applyTheme, showScreen, showToast, confirmAction, promptNumber,
+  saveExpense, deleteExpense, saveGoal, topUpGoal, deleteGoal, saveTemplate, applyTemplateToModal,
+  loadQueue, queueCloudOp, flushCloudQueue, setAuthMode, backAuth,
+  get currentUser() { return currentUser; }, get homeDirty() { return homeDirty; }, get cloudAvailable() { return !!db; }
 };
-$("enableNotificationsBtn").onclick=enableNotifications;
-if("Notification" in window && Notification.permission==="granted"){ $("notificationTipText").textContent="Уведомления включены. Для фоновых push-уведомлений нужен серверный push."; $("enableNotificationsBtn").textContent="Уведомления включены ✓"; $("enableNotificationsBtn").disabled=true; scheduleShiftReminder(); }
-
-
-$("enableNotificationsMenu").onclick=enableNotifications;
-function refreshNotificationUI(){
-  const ok="Notification" in window && Notification.permission==="granted";
-  $("notificationMenuStatus").textContent=ok?"Включены ✓":"Напоминания о сменах";
-}
-refreshNotificationUI();
-
-
-// ===== v13 ULTRA FEATURES =====
-const CLOUD_EXTRA_TABLE="user_app_data";
-function uid(prefix="id"){return prefix+"_"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
-function monthPrefix(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-`}
-function currentMonthExpenses(d=state.calendarDate){const p=monthPrefix(d);return (state.extra.expenses||[]).filter(x=>String(x.date||"").startsWith(p))}
-function loadQueue(){try{const q=JSON.parse(localStorage.getItem("myPayCloudQueue")||"[]");return Array.isArray(q)?q:[]}catch{return []}}
-function queueCloudOp(op){const q=loadQueue();const next=q.filter(x=>!(x.type===op.type&&x.date===op.date));next.push({...op,queuedAt:Date.now()});localStorage.setItem("myPayCloudQueue",JSON.stringify(next));showToast("Офлайн: сохраню в облако при подключении")}
-function removeQueuedShift(date,type){const q=loadQueue().filter(x=>!(x.type===type&&x.date===date));localStorage.setItem("myPayCloudQueue",JSON.stringify(q))}
-async function flushCloudQueue(){if(!db||!navigator.onLine||!currentUser)return;const q=loadQueue();if(!q.length)return;const left=[];for(const op of q){try{if(op.type==="saveShift"){const payload={user_id:currentUser.id,work_date:op.date,cases:Number(op.shift.cases)||0,is_holiday:!!op.shift.holiday,base_pay:Number(op.shift.base)||0,piece_pay:Number(op.shift.piece)||0,total_pay:Number(op.shift.total)||0};const {error}=await db.from("shifts").upsert(payload,{onConflict:"user_id,work_date"});if(error)throw error}else if(op.type==="deleteShift"){const {error}=await db.from("shifts").delete().eq("user_id",currentUser.id).eq("work_date",op.date);if(error)throw error}
-else if(op.type==="saveExtra"){const {error}=await db.from(CLOUD_EXTRA_TABLE).upsert({user_id:currentUser.id,payload:state.extra,updated_at:new Date().toISOString()},{onConflict:"user_id"});if(error)throw error}}catch{left.push(op)}}localStorage.setItem("myPayCloudQueue",JSON.stringify(left));if(!left.length)showToast("Офлайн-изменения синхронизированы ✓")}
-window.addEventListener("online",()=>{flushCloudQueue();cloudSaveExtra()});
-
-async function cloudLoadExtra(){
-  if(!currentUser||!db)return false;
-  try{
-    const {data,error}=await db.from(CLOUD_EXTRA_TABLE).select("payload").eq("user_id",currentUser.id).maybeSingle();
-    if(error){console.info("Доп. облачные функции пока локальные:",error.message);return false}
-    if(data?.payload&&typeof data.payload==="object")state.extra={...EXTRA_DEFAULTS,...data.payload};
-    else state.extra={...EXTRA_DEFAULTS,theme:state.extra.theme||"system"};
-    return true;
-  }catch{return false}
-}
-async function cloudSaveExtra(){
-  save();if(!currentUser||!db)return false;
-  if(!navigator.onLine){queueCloudOp({type:"saveExtra"});return false}
-  try{const {error}=await db.from(CLOUD_EXTRA_TABLE).upsert({user_id:currentUser.id,payload:state.extra,updated_at:new Date().toISOString()},{onConflict:"user_id"});if(error){console.info("Доп. данные сохранены локально:",error.message);return false}return true}catch{return false}
-}
-
-function applyTheme(){let t=state.extra.theme||"system";const dark=t==="dark"||(t==="system"&&window.matchMedia?.("(prefers-color-scheme: dark)").matches);document.body.classList.toggle("dark",dark);if($("themeStatus"))$("themeStatus").textContent=t==="system"?"Системная":t==="dark"?"Тёмная":"Светлая"}
-function cycleTheme(){const order=["system","light","dark"],i=order.indexOf(state.extra.theme||"system");state.extra.theme=order[(i+1)%order.length];save();applyTheme();cloudSaveExtra();showToast(`Тема: ${$("themeStatus").textContent}`)}
-window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change",()=>{if((state.extra.theme||"system")==="system")applyTheme()});
-
-function financeNumbers(){const d=new Date(),es=monthEntries(d),income=es.reduce((a,v)=>a+Number(v.total||0),0),expenses=currentMonthExpenses(d).reduce((a,v)=>a+Number(v.amount||0),0),free=income-expenses,forecast=monthForecast()||income,goal=Number(state.settings.goal)||0,days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(),today=new Date(),remainingDays=Math.max(1,days-today.getDate()),daily=Math.max(0,free)/remainingDays,rate=income?Math.round(Math.max(0,free)/income*100):0;return{income,expenses,free,forecast,goal,remainingDays,daily,rate}}
-function renderFinance(){if(!$("financeIncome"))return;const n=financeNumbers();$("financeIncome").textContent=money(n.income);$("financeExpenses").textContent=money(n.expenses);$("freeBalance").textContent=money(n.free);$("financeForecast").textContent=money(n.forecast);$("financeGoalLeft").textContent=money(Math.max(0,n.goal-n.income));$("dailyBudget").textContent=n.free>0?`≈ ${money(n.daily)} в день до конца месяца`:"Расходы уже выше свободного дохода";$("savingsRate").textContent=Math.max(0,n.rate)+"%";renderGoals();renderExpenses();renderTemplates();checkGoalCelebration()}
-function renderGoals(){const box=$("goalsList");if(!box)return;const goals=state.extra.goals||[];if(!goals.length){box.innerHTML='<div class="empty-history">Целей пока нет. Добавь первую — приложение посчитает прогресс.</div>';return}box.innerHTML=goals.map(g=>{const amount=Math.max(1,Number(g.amount)||1),saved=Math.max(0,Number(g.saved)||0),pct=Math.min(100,Math.round(saved/amount*100));return `<div class="goal-item" data-goal="${g.id}"><div class="goal-top"><b>${escapeHtml(g.name)}</b><span>${money(saved)} / ${money(amount)}</span></div><div class="goal-track"><i style="width:${pct}%"></i></div><div class="goal-meta"><span>${pct}%</span><span>осталось ${money(Math.max(0,amount-saved))}</span></div><div class="goal-actions"><button class="tiny-btn" data-goal-add="${g.id}">＋ пополнить</button><button class="tiny-btn danger" data-goal-del="${g.id}">Удалить</button></div></div>`}).join("");box.querySelectorAll("[data-goal-add]").forEach(b=>b.onclick=()=>topUpGoal(b.dataset.goalAdd));box.querySelectorAll("[data-goal-del]").forEach(b=>b.onclick=()=>deleteGoal(b.dataset.goalDel))}
-function escapeHtml(v){return String(v??"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
-function openGoalModal(){$("goalName").value="";$("goalAmount").value="";$("goalSaved").value="0";$("goalModal").classList.remove("hidden")}
-async function saveGoal(){const name=$("goalName").value.trim(),amount=Math.max(0,Number($("goalAmount").value)||0),saved=Math.max(0,Number($("goalSaved").value)||0);if(!name||!amount){showToast("Укажи название и сумму цели");return}state.extra.goals.push({id:uid("goal"),name,amount,saved});save();await cloudSaveExtra();closeModal("goalModal");renderFinance();showToast("Цель добавлена 🎯")}
-async function topUpGoal(id){const g=state.extra.goals.find(x=>x.id===id);if(!g)return;const v=prompt(`Сколько добавить к цели «${g.name}»?`,"1000");if(v===null)return;g.saved=Math.max(0,Number(g.saved)||0)+Math.max(0,Number(String(v).replace(",","."))||0);save();await cloudSaveExtra();renderFinance()}
-async function deleteGoal(id){state.extra.goals=state.extra.goals.filter(x=>x.id!==id);save();await cloudSaveExtra();renderFinance()}
-function checkGoalCelebration(){state.extra.celebratedGoals=Array.isArray(state.extra.celebratedGoals)?state.extra.celebratedGoals:[];for(const g of state.extra.goals||[]){if(Number(g.saved)>=Number(g.amount)&&!state.extra.celebratedGoals.includes(g.id)){state.extra.celebratedGoals.push(g.id);save();cloudSaveExtra();confetti();showToast(`Цель «${g.name}» выполнена! 🎉`);break}}}
-function confetti(){const box=$("confettiLayer");if(!box)return;const colors=["#6b5be7","#50b889","#f4b942","#e95d75","#5d9cec"];for(let i=0;i<60;i++){const el=document.createElement("i");el.className="confetti-piece";el.style.left=Math.random()*100+"vw";el.style.color=colors[i%colors.length];el.style.setProperty("--x",(Math.random()*180-90)+"px");el.style.animationDelay=Math.random()*.5+"s";box.appendChild(el);setTimeout(()=>el.remove(),2600)}}
-
-function openExpenseModal(){$("expenseAmount").value="";$("expenseDate").value=dateKey(new Date());$("expenseNote").value="";$("expenseModal").classList.remove("hidden")}
-async function saveExpense(){const amount=Math.max(0,Number($("expenseAmount").value)||0),category=$("expenseCategory").value,date=$("expenseDate").value||dateKey(new Date()),note=$("expenseNote").value.trim();if(!amount){showToast("Укажи сумму расхода");return}state.extra.expenses.push({id:uid("exp"),amount,category,date,note});save();await cloudSaveExtra();closeModal("expenseModal");renderFinance();showToast("Расход добавлен")}
-async function deleteExpense(id){state.extra.expenses=state.extra.expenses.filter(x=>x.id!==id);save();await cloudSaveExtra();renderFinance()}
-function renderExpenses(){const list=$("expenseList"),bars=$("expenseBars");if(!list||!bars)return;const es=currentMonthExpenses(new Date()).sort((a,b)=>String(b.date).localeCompare(String(a.date)));if(!es.length){bars.innerHTML="";list.innerHTML='<div class="empty-history">Расходов за этот месяц пока нет.</div>';return}const cats={};es.forEach(x=>cats[x.category]=(cats[x.category]||0)+Number(x.amount||0));const max=Math.max(...Object.values(cats),1);bars.innerHTML=Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div class="expense-bar-row"><div class="expense-bar-head"><span>${escapeHtml(c)}</span><b>${money(v)}</b></div><div class="expense-track"><i style="width:${Math.round(v/max*100)}%"></i></div></div>`).join("");list.innerHTML=es.slice(0,12).map(x=>`<div class="expense-row"><div><b>${escapeHtml(x.category)}</b><small>${dateText(fromKey(x.date),{day:"numeric",month:"short"})}${x.note?" • "+escapeHtml(x.note):""}</small></div><strong>−${money(x.amount)}</strong><button class="expense-delete" data-exp-del="${x.id}">×</button></div>`).join("");list.querySelectorAll("[data-exp-del]").forEach(b=>b.onclick=()=>deleteExpense(b.dataset.expDel))}
-
-function openTemplateModal(){$("templateName").value="";$("templateCases").value="";$("templateHours").value="11";$("templateBonus").value="0";$("templateHoliday").checked=false;$("templateModal").classList.remove("hidden")}
-async function saveTemplate(){const name=$("templateName").value.trim(),cases=Math.max(0,Math.floor(Number($("templateCases").value)||0)),hours=Math.max(0,Number($("templateHours").value)||0),bonus=Math.max(0,Number($("templateBonus").value)||0),holiday=$("templateHoliday").checked;if(!name){showToast("Укажи название шаблона");return}state.extra.templates.push({id:uid("tpl"),name,cases,hours,bonus,holiday});save();await cloudSaveExtra();closeModal("templateModal");renderFinance();showToast("Шаблон сохранён")}
-function renderTemplates(){const box=$("templatesList");if(!box)return;const t=state.extra.templates||[];box.innerHTML=t.map(x=>`<button class="template-chip" data-tpl-use="${x.id}">${escapeHtml(x.name)}<small>${integer(x.cases)} шт • ${x.hours||0} ч${x.bonus?" • +"+money(x.bonus):""}</small></button>`).join("");box.querySelectorAll("[data-tpl-use]").forEach(b=>b.onclick=()=>useTemplateToday(b.dataset.tplUse))}
-function renderModalTemplates(){const box=$("modalTemplatePills");if(!box)return;box.innerHTML=(state.extra.templates||[]).map(x=>`<button type="button" class="template-chip" data-modal-tpl="${x.id}">${escapeHtml(x.name)}</button>`).join("");box.querySelectorAll("[data-modal-tpl]").forEach(b=>b.onclick=()=>applyTemplateToModal(b.dataset.modalTpl))}
-function applyTemplateToModal(id){const t=state.extra.templates.find(x=>x.id===id);if(!t)return;$("modalCases").value=t.cases||0;$("modalHours").value=t.hours||11;$("modalBonus").value=t.bonus||0;$("modalHoliday").checked=!!t.holiday;updateModal()}
-function useTemplateToday(id){const k=dateKey(new Date());state.selectedDate=k;openShiftModal(k);applyTemplateToModal(id)}
-
-function exportCsv(){const rows=[["Дата","Чехлы","Праздник","Ставка","Сделка","Премия","Итого","Часы","Доход/час","Комментарий"]];Object.entries(state.shifts).sort().forEach(([k,v])=>{const m=state.extra.shiftMeta?.[k]||{},h=Number(m.hours)||0;rows.push([k,v.cases,v.holiday?"Да":"Нет",v.base,v.piece,Number(m.bonus)||0,v.total,h,h?Number(v.total)/h:"",m.note||""])});const csv="\uFEFF"+rows.map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(";")).join("\n");const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`my-pay-${dateKey(new Date())}.csv`;a.click();URL.revokeObjectURL(url);showToast("CSV скачан ✓")}
-function refreshUndoUI(){const u=state.extra.undo,b=$("undoDeleteBtn");if(!b)return;b.classList.toggle("hidden",!u);if(u)$("undoDeleteMeta").textContent=dateText(fromKey(u.date),{day:"numeric",month:"long"})}
-async function undoLastDelete(){const u=state.extra.undo;if(!u?.shift)return;state.shifts[u.date]=u.shift;if(u.meta)state.extra.shiftMeta[u.date]=u.meta;state.extra.undo=null;save();await cloudSaveShift(u.date,u.shift);await cloudSaveExtra();refreshUndoUI();renderCalendar();renderStats();renderFinance();updateHome();showToast("Смена восстановлена ✓")}
-
-$("addExpenseBtn").onclick=openExpenseModal;$("addExpenseTop").onclick=openExpenseModal;$("expenseSave").onclick=saveExpense;$("addGoalBtn").onclick=openGoalModal;$("goalSave").onclick=saveGoal;$("addTemplateBtn").onclick=openTemplateModal;$("templateSave").onclick=saveTemplate;$("exportCsvBtn").onclick=exportCsv;$("themeBtn").onclick=cycleTheme;$("undoDeleteBtn").onclick=undoLastDelete;
-flushCloudQueue();
-
-// ===== Telegram bot integration =====
-async function openTelegramModal(){
-  if(!currentUser){showToast("Сначала войди в аккаунт");return;}
-  $("telegramCode").textContent="—"; $("telegramModal").classList.remove("hidden");
-}
-async function generateTelegramCode(){
-  if(!db){showToast("Облако недоступно — код привязки получить нельзя");return;}
-  if(!currentUser){showToast("Сначала войди в аккаунт");return;}
-  $("telegramGenerateBtn").disabled=true; $("telegramGenerateBtn").textContent="Генерирую…";
-  try{
-    const {data,error}=await db.rpc("create_telegram_link_code");
-    if(error) throw error;
-    $("telegramCode").textContent=data||"—";
-    showToast("Код готов ✓");
-  }catch(e){console.error(e);showToast("Сначала выполни TELEGRAM_SUPABASE.sql");}
-  finally{$("telegramGenerateBtn").disabled=false;$("telegramGenerateBtn").textContent="Получить код";}
-}
-$("telegramBotBtn")?.addEventListener("click",openTelegramModal);
-$("telegramGenerateBtn")?.addEventListener("click",generateTelegramCode);
-$("telegramHelpBtn")?.addEventListener("click",()=>showToast("Инструкция: telegram_bot_setup.md"));
-
-// Обновляем таймер текущей смены без перезагрузки страницы.
-setInterval(()=>{if(typeof updateNextShiftCard==='function')updateNextShiftCard();},60000);
