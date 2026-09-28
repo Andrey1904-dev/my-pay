@@ -19,14 +19,18 @@
 
 1. Создай бота через `@BotFather` → `/newbot`.
 2. Выполни весь файл `TELEGRAM_SUPABASE.sql` в Supabase SQL Editor.
-3. Создай Edge Function `telegram-mypay` и вставь `supabase/functions/telegram-mypay/index.ts`.
+3. Опубликуй Edge Function:
+   ```bash
+   supabase functions deploy telegram-mypay --no-verify-jwt
+   ```
+   Исходник — `supabase/functions/telegram-mypay/index.ts`.
 4. Добавь Secrets:
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_WEBHOOK_SECRET`
    - стандартный `SUPABASE_URL`
    - стандартный `SUPABASE_SERVICE_ROLE_KEY`
 5. Для Edge Function отключи JWT-проверку: `verify_jwt = false`.
-6. Установи webhook:
+6. Установи webhook (обязательно с `secret_token`, функция проверяет заголовок):
 
 ```text
 https://api.telegram.org/botТОКЕН/setWebhook?url=https://PROJECT_REF.supabase.co/functions/v1/telegram-mypay&secret_token=СЕКРЕТ

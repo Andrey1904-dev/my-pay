@@ -57,12 +57,20 @@
 ├── manifest.webmanifest
 ├── icon-192.png
 ├── icon-512.png
+├── SUPABASE_SCHEMA.sql        <- базовые таблицы + RLS (выполнить первым)
+├── SUPABASE_ULTRA.sql         <- user_app_data: расходы, цели, шаблоны
+├── TELEGRAM_SUPABASE.sql      <- таблицы и коды для Telegram-бота
 ├── supabase/
+│   ├── push_notifications.sql
 │   └── functions/
-│       └── telegram-mypay/
+│       ├── telegram-mypay/
+│       │   └── index.ts
+│       └── send-shift-reminders/
 │           └── index.ts
-├── SUPABASE_ULTRA.sql
-├── TELEGRAM_SUPABASE.sql
+├── tests/
+│   ├── app.test.mjs           <- 31 проверка фронтенда (jsdom)
+│   └── telegram-bot.test.mjs  <- 27 проверок бота (мок API)
+├── AUDIT.md
 └── telegram_bot_setup.md
 ```
 
@@ -78,9 +86,25 @@
 ## Настройка Supabase
 
 1. Создайте или откройте проект Supabase.
-2. Выполните необходимые SQL-скрипты из проекта в SQL Editor.
-3. Разверните Edge Function `telegram-mypay`.
-4. Добавьте секреты функции в Supabase Secrets.
+2. Выполните SQL-скрипты **в этом порядке** в SQL Editor:
+   1. `SUPABASE_SCHEMA.sql` — таблицы `profiles / settings / shifts`, RLS, триггеры `updated_at`;
+   2. `SUPABASE_ULTRA.sql` — таблица `user_app_data` (расходы, цели, шаблоны);
+   3. `TELEGRAM_SUPABASE.sql` — привязка Telegram и функция кодов;
+   4. `supabase/push_notifications.sql` — опционально, для Web Push.
+3. Разверните Edge Function:
+   ```bash
+   supabase functions deploy telegram-mypay --no-verify-jwt
+   ```
+4. Добавьте секреты функции в Supabase Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`.
+5. Установите webhook с `secret_token` — см. `telegram_bot_setup.md`.
+
+## Проверки перед публикацией
+
+```bash
+npm install jsdom typescript
+node tests/app.test.mjs        # фронтенд: 31 проверка
+node tests/telegram-bot.test.mjs   # бот: 27 проверок
+```
 
 > Токен Telegram-бота нельзя хранить в GitHub, frontend-коде или SQL-файлах. Используйте только Supabase Secrets.
 

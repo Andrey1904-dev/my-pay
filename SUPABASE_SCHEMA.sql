@@ -1,0 +1,115 @@
+-- ============================================================
+-- CASE.PLACE SALARY — базовая схема Supabase
+-- Выполни целиком в Supabase → SQL Editor → Run.
+-- Порядок: этот файл → SUPABASE_ULTRA.sql → TELEGRAM_SUPABASE.sql
+-- ============================================================
+
+create extension if not exists pgcrypto;
+
+-- ---------- profiles ----------
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  username text unique,
+  name text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ---------- settings ----------
+-- Дефолты соответствуют текущей модели оплаты:
+--   1 900 ₽ дневной тариф + 727,84 ₽ районный коэффициент = 2 627,84 ₽
+--   сдельная ставка 44 284,28 ₽ / 26 093 чехла = 1,69 ₽ за чехол
+create table if not exists public.settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  base_pay numeric not null default 2627.84,
+  holiday_pay numeric not null default 4050,
+  case_price numeric not null default 1.69,
+  piece_percent numeric not null default 100,
+  schedule_start date not null default current_date,
+  monthly_goal numeric not null default 60000,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ---------- shifts ----------
+create table if not exists public.shifts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  work_date date not null,
+  cases integer not null default 0 check (cases >= 0),
+  is_holiday boolean not null default false,
+  base_pay numeric not null default 2627.84,
+  piece_pay numeric not null default 0,
+  total_pay numeric not null default 2627.84,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(user_id, work_date)
+);
+
+-- Профиль и настройки создаются из браузера после signUp.
+-- Email-подтверждение в Supabase должно быть отключено,
+-- иначе signUp не вернёт session и вход не завершится.
+
+-- ---------- Row Level Security ----------
+alter table public.profiles enable row level security;
+alter table public.settings enable row level security;
+alter table public.shifts enable row level security;
+
+drop policy if exists "profiles_select_own" on public.profiles;
+drop policy if exists "profiles_insert_own" on public.profiles;
+drop policy if exists "profiles_update_own" on public.profiles;
+drop policy if exists "profiles_delete_own" on public.profiles;
+create policy "profiles_select_own" on public.profiles for select using (auth.uid()=id);
+create policy "profiles_insert_own" on public.profiles for insert with check (auth.uid()=id);
+create policy "profiles_update_own" on public.profiles for update using (auth.uid()=id) with check (auth.uid()=id);
+create policy "profiles_delete_own" on public.profiles for delete using (auth.uid()=id);
+
+drop policy if exists "settings_select_own" on public.settings;
+drop policy if exists "settings_insert_own" on public.settings;
+drop policy if exists "settings_update_own" on public.settings;
+drop policy if exists "settings_delete_own" on public.settings;
+create policy "settings_select_own" on public.settings for select using (auth.uid()=user_id);
+create policy "settings_insert_own" on public.settings for insert with check (auth.uid()=user_id);
+create policy "settings_update_own" on public.settings for update using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy "settings_delete_own" on public.settings for delete using (auth.uid()=user_id);
+
+drop policy if exists "shifts_select_own" on public.shifts;
+drop policy if exists "shifts_insert_own" on public.shifts;
+drop policy if exists "shifts_update_own" on public.shifts;
+drop policy if exists "shifts_delete_own" on public.shifts;
+create policy "shifts_select_own" on public.shifts for select using (auth.uid()=user_id);
+create policy "shifts_insert_own" on public.shifts for insert with check (auth.uid()=user_id);
+create policy "shifts_update_own" on public.shifts for update using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy "shifts_delete_own" on public.shifts for delete using (auth.uid()=user_id);
+
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.profiles, public.settings, public.shifts to authenticated;
+
+-- ---------- updated_at триггеры ----------
+create or replace function public.touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_touch_updated_at on public.profiles;
+create trigger profiles_touch_updated_at before update on public.profiles
+for each row execute function public.touch_updated_at();
+
+drop trigger if exists settings_touch_updated_at on public.settings;
+create trigger settings_touch_updated_at before update on public.settings
+for each row execute function public.touch_updated_at();
+
+drop trigger if exists shifts_touch_updated_at on public.shifts;
+create trigger shifts_touch_updated_at before update on public.shifts
+for each row execute function public.touch_updated_at();
+
+-- ---------- Миграция легаси-настроек (2150 / 7 / 20 → новая модель) ----------
+-- Выполни один раз, если аккаунты создавались по старой схеме.
+update public.settings
+set base_pay = 2627.84, case_price = 1.69, piece_percent = 100, holiday_pay = 4050
+where base_pay = 2150 and case_price = 7 and piece_percent = 20;

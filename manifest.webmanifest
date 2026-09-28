@@ -5,7 +5,7 @@
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f4f5f7",
-  "theme_color": "#111522",
+  "theme_color": "#ff5a1f",
   "lang": "ru",
   "id": "./",
   "scope": "./",
