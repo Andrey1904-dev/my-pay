@@ -39,10 +39,10 @@ describe("загрузка и модель", () => {
   test("приложение стартует без ошибок и публикует API", () => {
     const app = open();
     assert.deepEqual(app.errors, []);
-    assert.equal(app.MyPay.version, "1.0");
-    assert.equal(app.text("appVersion"), "v1.0");
-    assert.equal(app.text("brandVersion"), "V 1.0", "версия в шапке рядом с названием");
-    assert.match(app.text("brandVersion").trim(), /^V \d+(\.\d+)+$/);
+    assert.equal(app.MyPay.version, "1.01");
+    assert.equal(app.text("appVersion"), "V1.01");
+    assert.equal(app.text("brandVersion"), "V1.01", "версия в шапке рядом с названием");
+    assert.match(app.text("brandVersion").trim(), /^V\d+(\.\d+)+$/);
     assert.equal(app.MyPay.cloudAvailable, false, "без SDK — локальный режим");
     assert.match(app.text("cloudNotice"), /локальном режиме/);
     assert.ok(app.$("logoutBtn").classList.contains("hidden"), "кнопка выхода скрыта без аккаунта");
@@ -55,25 +55,32 @@ describe("загрузка и модель", () => {
     assert.match(read("sw.js"), new RegExp(`CACHE_NAME="my-pay-v${v.replace(".", "\\.")}"`));
     assert.match(read("index.html"), new RegExp(`script\\.js\\?v=${v.replace(".", "\\.")}"`));
     assert.match(read("sw.js"), new RegExp(`style\\.css\\?v=${v.replace(".", "\\.")}"`));
-    assert.match(read("index.html"), new RegExp(`id="brandVersion">V ${v.replace(".", "\\.")}<`));
-    assert.equal(JSON.parse(read("package.json")).version, `${v}.0`);
+    assert.match(read("index.html"), new RegExp(`id="brandVersion">V${v.replace(".", "\\.")}<`));
+    assert.equal(v, "1.01");
+    assert.equal(JSON.parse(read("package.json")).version, "1.0.1");
+    const lock = JSON.parse(read("package-lock.json"));
+    assert.equal(lock.version, "1.0.1");
+    assert.equal(lock.packages[""].version, "1.0.1");
+    assert.match(read("ios/CasePlaceSalary/Config.swift"), /appVersion = "1\.01"/);
+    const project = read("ios/CasePlaceSalary.xcodeproj/project.pbxproj");
+    assert.equal((project.match(/MARKETING_VERSION = 1\.0\.1;/g) || []).length, 2);
   });
 
   test("дефолты и формула: ставка + чехлы × цена × процент", () => {
     const { MyPay } = open();
-    // (выход 1900 + обед 200) × 1,15 = 2415; сделка 7 × 1,15 = 8,05 × 25% = 2,0125 за чехол
+    // (выход 1900 + обед 200) × 1,15 = 2415; сделка 7 × 25% = 1,75 за чехол
     assert.equal(MyPay.DEFAULTS.basePay, 2415);
-    assert.equal(MyPay.DEFAULTS.holidayPay, 4050);
-    assert.equal(MyPay.DEFAULTS.casePrice, 8.05);
+    assert.equal(MyPay.DEFAULTS.holidayPay, 4600);
+    assert.equal(MyPay.DEFAULTS.casePrice, 7);
     assert.equal(MyPay.DEFAULTS.percent, 25);
     assert.equal(MyPay.total(0, false), 2415);
-    // пример владельца: 1000 чехлов = (1900 + 200 + 1750) × 1,15 = 4427,50
-    assert.equal(Math.round(MyPay.total(1000, false) * 100) / 100, 4427.5);
-    assert.equal(Math.round(MyPay.total(1000, true) * 100) / 100, 6062.5);
+    // 1000 чехлов = (1900 + 200) × 1,15 + 1750 = 4165
+    assert.equal(Math.round(MyPay.total(1000, false) * 100) / 100, 4165);
+    assert.equal(Math.round(MyPay.total(1000, true) * 100) / 100, 6350);
     const s = MyPay.makeShift("1200.7", false, 300);
     assert.equal(s.cases, 1200);
-    assert.equal(Math.round(s.piece * 100) / 100, 2415);
-    assert.equal(Math.round(s.total * 100) / 100, 5130);
+    assert.equal(Math.round(s.piece * 100) / 100, 2100);
+    assert.equal(Math.round(s.total * 100) / 100, 4815);
   });
 
   test("normalizeSettings чинит мусор и мигрирует старый тариф 2150/7/20", () => {
@@ -86,13 +93,31 @@ describe("загрузка и модель", () => {
     assert.equal(bad.goal, 60000);
     const legacy = MyPay.normalizeSettings({ basePay: 2150, casePrice: 7, percent: 20 });
     assert.equal(legacy.basePay, 2415);
-    assert.equal(legacy.casePrice, 8.05);
+    assert.equal(legacy.casePrice, 7);
     assert.equal(legacy.percent, 25);
     const prev = MyPay.normalizeSettings({ basePay: 2627.84, casePrice: 1.69, percent: 100 });
     assert.equal(prev.basePay, 2415, "прежние дефолты 2627.84/1.69/100 тоже мигрируют");
     assert.equal(prev.percent, 25);
     const custom = MyPay.normalizeSettings({ basePay: 2150, casePrice: 7, percent: 30 });
     assert.equal(custom.basePay, 2150, "неполное совпадение — не легаси, оставляем");
+  });
+
+  test("исправление старых настроек и смен сохраняет премии и не меняет свои тарифы", () => {
+    const app = open({ settings: { basePay: 2415, holidayPay: 4050, casePrice: 8.05, percent: 25 }, shifts: {
+      "2026-09-01": { cases: 1000, holiday: false, base: 2415, piece: 2012.5, total: 4727.5 },
+      "2026-09-15": { cases: 1000, holiday: true, base: 4050, piece: 2012.5, total: 6362.5 },
+    }});
+    const { state, correctLegacyShift } = app.MyPay;
+    assert.equal(state.settings.casePrice, 7);
+    assert.equal(state.settings.holidayPay, 4600);
+    assert.equal(state.shifts["2026-09-01"].total, 4465);
+    assert.equal(state.shifts["2026-09-15"].total, 6650);
+    for (const s of Object.values(state.shifts)) assert.deepEqual(plain(correctLegacyShift(s)), plain(s));
+    const custom = { cases: 1000, holiday: true, base: 5000, piece: 2000, total: 7300 };
+    assert.deepEqual(plain(correctLegacyShift(custom)), custom);
+    assert.equal(app.MyPay.normalizeSettings({ basePay: 2415, casePrice: 8.05, percent: 25, holidayPay: 5000 }).holidayPay, 5000);
+    const saved = JSON.parse(app.window.localStorage.getItem("myPayShifts"));
+    assert.equal(saved["2026-09-15"].total, 6650);
   });
 
   test("праздничная ставка читается из настроек, а не захардкожена", () => {
@@ -134,12 +159,12 @@ describe("главный экран", () => {
     const app = open({ settings: { scheduleStart: TODAY } });
     app.input("casesInput", "350");
     assert.equal(app.MyPay.homeDirty, true);
-    assert.match(app.text("shiftTotal"), /3 119,38/);
+    assert.match(app.text("shiftTotal"), /3 027,50/);
     app.click("saveShiftBtn");
     await tick();
     const saved = JSON.parse(app.window.localStorage.getItem("myPayShifts"));
     assert.equal(saved[TODAY].cases, 350);
-    assert.equal(Math.round(saved[TODAY].total * 100) / 100, 3119.38);
+    assert.equal(Math.round(saved[TODAY].total * 100) / 100, 3027.5);
     assert.equal(app.MyPay.homeDirty, false);
     assert.match(app.text("homeMonthShifts"), /1/);
     assert.match(app.text("toast"), /Смена сохранена/);
@@ -165,15 +190,15 @@ describe("главный экран", () => {
     const app = open();
     app.$("holidayInput").checked = true;
     app.$("holidayInput").dispatchEvent(new app.window.Event("change", { bubbles: true }));
-    assert.match(app.text("homeBase"), /4 050/);
-    assert.match(app.text("shiftTotal"), /4 050/);
+    assert.match(app.text("homeBase"), /4 600/);
+    assert.match(app.text("shiftTotal"), /4 600/);
   });
 
   test("сохранённая смена за сегодня подставляется в поле при старте", () => {
     const app = open({ shifts: { [TODAY]: { cases: 777, holiday: true, base: 4050, piece: 1563.71, total: 5613.71 } } });
     assert.equal(app.$("casesInput").value, "777");
     assert.equal(app.$("holidayInput").checked, true);
-    assert.match(app.text("shiftTotal"), /5 613,71/);
+    assert.match(app.text("shiftTotal"), /5 959,75/);
   });
 
   test("статистика месяца: заработано, смены, цель", () => {
@@ -230,11 +255,11 @@ describe("календарь и смены", () => {
     app.input("modalHours", "11");
     app.input("modalBonus", "500");
     app.input("modalNote", "переработка");
-    assert.match(app.text("modalTotal"), /5 330/);
+    assert.match(app.text("modalTotal"), /5 015/);
     app.click("modalSave");
     await tick();
     assert.equal(app.MyPay.state.shifts[k].cases, 1200);
-    assert.equal(Math.round(app.MyPay.state.shifts[k].total * 100) / 100, 5330);
+    assert.equal(Math.round(app.MyPay.state.shifts[k].total * 100) / 100, 5015);
     assert.deepEqual(plain(app.MyPay.state.extra.shiftMeta[k]), { hours: 11, bonus: 500, note: "переработка" });
     assert.ok(app.$("shiftModal").classList.contains("hidden"));
 
@@ -480,13 +505,60 @@ describe("финансы", () => {
     const app = open({ extra: { payday: { advanceDay: 25, salaryDay: 10 } } });
     const info = app.MyPay.paydayInfo(new Date(2026, 8, 20));
     assert.equal(info.type, "advance");
-    assert.equal(info.days, 5);
+    assert.equal(info.days, 3);
     const info2 = app.MyPay.paydayInfo(new Date(2026, 8, 26));
     assert.equal(info2.type, "salary");
-    assert.equal(info2.date.getDate(), 10);
+    assert.equal(info2.date.getDate(), 8);
     assert.equal(info2.date.getMonth(), 9);
+    const s = { cases: 1000, holiday: false, base: 2415, piece: 1750, total: 4165 };
+    const real = open({ shifts: { "2026-09-03": s, "2026-09-20": s }, extra: { payday: { advanceDay: 23, salaryDay: 8 } } });
+    const adv = real.MyPay.paydayInfo(new Date(2026, 8, 10));
+    assert.equal(adv.type, "advance"); assert.equal(adv.date.getDate(), 23);
+    assert.ok(Math.abs(adv.expected - 1900) < 0.01, "23-го — чистый выход за 1–15");
+    const sal = real.MyPay.paydayInfo(new Date(2026, 8, 29));
+    assert.equal(sal.type, "salary"); assert.equal(sal.date.getDate(), 8);
+    assert.ok(Math.abs(sal.expected - (4165 * 2 - 1900)) < 0.01, "8-го — остальное за прошлый месяц");
     const none = open({ extra: { payday: { advanceDay: 0, salaryDay: 0 } } });
     assert.equal(none.MyPay.paydayInfo(), null);
+  });
+
+  test("выплаты: границы 1/15/16/31, праздники, премия и переход года", () => {
+    const app = open();
+    const { state, makeShift, paydayInfo } = app.MyPay;
+    state.shifts = {
+      "2026-12-01": makeShift(1000, false),
+      "2026-12-15": makeShift(1000, true, 300),
+      "2026-12-16": makeShift(1000, false),
+      "2026-12-31": makeShift(1000, true),
+      "2027-01-01": makeShift(1000, false),
+    };
+    const advance = paydayInfo(new Date(2026, 11, 23));
+    assert.equal(advance.days, 0);
+    assert.equal(advance.expected, 5700);
+    const salary = paydayInfo(new Date(2026, 11, 29));
+    assert.equal(salary.date.getFullYear(), 2027);
+    assert.equal(salary.date.getMonth(), 0);
+    assert.equal(salary.date.getDate(), 8);
+    assert.equal(salary.days, 10);
+    // 5700 выходы второй половины + 800 обеды + 1830 районный за весь месяц + 7000 сделка + 300 премия
+    assert.equal(salary.expected, 15630);
+    state.extra.payday.advanceDay = 0; // скрытие отсчёта аванса не добавляет его в зарплату
+    assert.equal(paydayInfo(new Date(2026, 11, 29)).expected, 15630);
+    state.extra.payday.advanceDay = 23;
+    assert.equal(advance.expected + salary.expected, 4165 * 2 + 6350 * 2 + 300);
+    assert.equal(paydayInfo(new Date(2027, 0, 8)).days, 0);
+    assert.equal(paydayInfo(new Date(2027, 0, 9)).expected, 1900);
+    assert.equal(paydayInfo(new Date(2026, 8, 29)).expected, 0);
+  });
+
+  test("выплата 8 марта включает конец февраля, настройки дат не затираются", () => {
+    const app = open();
+    app.MyPay.state.shifts = { "2028-02-29": app.MyPay.makeShift(1000, true) };
+    const p = app.MyPay.paydayInfo(new Date(2028, 1, 29));
+    assert.equal(p.date.getMonth(), 2); assert.equal(p.date.getDate(), 8);
+    assert.equal(p.days, 8); assert.equal(p.expected, 6350);
+    const custom = app.MyPay.normalizeExtra({ payday: { advanceDay: 22, salaryDay: 9 } });
+    assert.deepEqual(plain(custom.payday), { advanceDay: 22, salaryDay: 9 });
   });
 
   test("цель: создание, пополнение через диалог суммы, удаление", async () => {
@@ -539,7 +611,7 @@ describe("настройки, тема, резервные копии", () => {
   test("настройки сохраняются и пересчитывают экран", async () => {
     const app = open();
     app.MyPay.openSettings();
-    assert.equal(app.$("settingHoliday").value, "4050");
+    assert.equal(app.$("settingHoliday").value, "4600");
     app.input("settingBase", "3000");
     app.input("settingHoliday", "4500");
     app.input("settingPrice", "2");

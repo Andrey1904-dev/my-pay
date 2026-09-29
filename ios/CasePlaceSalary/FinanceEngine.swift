@@ -67,6 +67,9 @@ struct FinanceEngine {
     func unpaidRecurring(today: Date = Date()) -> [Recurring] { extra.recurring.filter { $0.lastPaid != DateUtil.monthPrefix(today) } }
 
     // MARK: выплаты
+    private func advancePart(_ es: [MonthEntry]) -> Double {
+        es.filter { (Int($0.key.suffix(2)) ?? 0) <= 15 }.reduce(0) { $0 + max(0, (($1.shift.base / 1.15 - 200) * 100).rounded() / 100) }
+    }
     func payday(today: Date = Date()) -> PaydayInfo? {
         let adv = extra.payday.advanceDay, sal = extra.payday.salaryDay
         guard adv > 0 || sal > 0 else { return nil }
@@ -83,13 +86,14 @@ struct FinanceEngine {
         let days = DateUtil.daysBetween(start, next.1)
         var expected = 0.0
         if next.0 == .advance {
-            let m = DateUtil.sameMonth(next.1, today) ? today : next.1
-            expected = PayModel.monthEntries(shifts, month: m).filter { (Int($0.key.suffix(2)) ?? 0) <= 15 }.reduce(0) { $0 + $1.shift.total }
+            // 23-го: только «чистый» выход за 1–15 (без обедов и районного коэффициента)
+            expected = advancePart(PayModel.monthEntries(shifts, month: next.1))
         } else {
             let prev = DateUtil.addMonths(-1, to: DateUtil.startOfMonth(next.1))
             let es = PayModel.monthEntries(shifts, month: prev)
             let total = es.reduce(0) { $0 + $1.shift.total }
-            let advPart = adv > 0 ? es.filter { (Int($0.key.suffix(2)) ?? 0) <= 15 }.reduce(0) { $0 + $1.shift.total } : 0
+            // 8-го: выход+обеды+районный за 16–31, обеды+районный за 1–15, сделка за весь месяц
+            let advPart = advancePart(es)
             expected = max(0, total - advPart)
         }
         return PaydayInfo(kind: next.0, date: next.1, days: days, expected: expected)

@@ -21,6 +21,7 @@ import {
   monthNameRu,
   monthRange,
   normalizeSettings,
+  correctLegacyShift,
   plural,
   summarizeMonth,
   type FetchLike,
@@ -184,7 +185,7 @@ async function loadSettings(db: Db, userId: string): Promise<Settings> {
 
 async function loadMonth(db: Db, userId: string, key: string): Promise<ShiftRow[]> {
   const { from, to } = monthRange(key);
-  return db.select<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`).catch(() => []);
+  return db.select<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`).then(rows => rows.map(correctLegacyShift)).catch(() => []);
 }
 
 function json(body: unknown, status = 200): Response {

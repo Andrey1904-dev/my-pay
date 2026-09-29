@@ -1,12 +1,12 @@
 /* ==========================================================================
-   CASE.PLACE SALARY — script.js v17
+   CASE.PLACE SALARY — script.js V1.01
    Учёт смен 2/2, упаковки чехлов и заработка. Работает офлайн (localStorage),
    синхронизируется с Supabase, когда есть аккаунт и сеть.
    ========================================================================== */
 "use strict";
 
 // Версия сайта: показывается в шапке и подвале. При выпуске менять здесь, в sw.js (CACHE_NAME и ?v=) и в index.html (?v=).
-const APP_VERSION = "1.0";
+const APP_VERSION = "1.01";
 // Должна совпадать с CACHE_NAME в sw.js, иначе приложение удалит собственный кеш.
 const CACHE_VERSION = "my-pay-v" + APP_VERSION;
 
@@ -37,8 +37,9 @@ try {
 
 /* ---------- Модель оплаты и дефолты ---------- */
 // Выход 1 900 ₽ + обед 200 ₽ = 2 100 ₽; сделка: 7 ₽ за чехол × 25% = 1,75 ₽.
-// Районный коэффициент Екатеринбурга 1,15 (15%) начисляется на всё: 2 100 × 1,15 = 2 415 ₽; 7 × 1,15 = 8,05 ₽ (× 25% = 2,0125 ₽ за чехол).
-const DEFAULTS = { basePay: 2415, holidayPay: 4050, casePrice: 8.05, percent: 25, scheduleStart: todayKey(), goal: 60000 };
+// Районный коэффициент 1,15 — только на выход и обед: 2 100 × 1,15 = 2 415 ₽. На сделку не начисляется.
+// Праздник: (1 900 × 2 + 200) × 1,15 = 4 600 ₽; сделка не удваивается.
+const DEFAULTS = { basePay: 2415, holidayPay: 4600, casePrice: 7, percent: 25, scheduleStart: todayKey(), goal: 60000 };
 const DEFAULT_CATEGORIES = [
   { id: "food", name: "Еда", emoji: "🍔", limit: 0 }, { id: "transport", name: "Транспорт", emoji: "🚌", limit: 0 }, { id: "home", name: "Жильё", emoji: "🏠", limit: 0 },
   { id: "shopping", name: "Покупки", emoji: "🛍️", limit: 0 }, { id: "health", name: "Здоровье", emoji: "💊", limit: 0 }, { id: "fun", name: "Развлечения", emoji: "🎮", limit: 0 },
@@ -46,14 +47,14 @@ const DEFAULT_CATEGORIES = [
 ];
 const EXTRA_DEFAULTS = {
   transactions: [], accounts: [], categories: DEFAULT_CATEGORIES, recurring: [], debts: [], goals: [],
-  payday: { advanceDay: 25, salaryDay: 10 },
+  payday: { advanceDay: 23, salaryDay: 8 },
   templates: [{ id: "default", name: "Обычная", cases: 0, hours: 11, bonus: 0, holiday: false }],
   shiftMeta: {}, theme: "system", undo: null, celebratedGoals: []
 };
 const WORK_START_MIN = 8 * 60;   // 08:00
 const WORK_END_MIN = 19 * 60;    // 19:00
-// Старые тройки настроек (2150/7/20 и прежние дефолты 2627.84/1.69/100) → мигрируем один раз на актуальные.
-const LEGACY_SETS = [{ basePay: 2150, casePrice: 7, percent: 20 }, { basePay: 2627.84, casePrice: 1.69, percent: 100 }];
+// Точные старые стандартные тарифы → актуальная формула, без изменения своих ставок.
+const LEGACY_SETS = [{ basePay: 2415, casePrice: 8.05, percent: 25 }, { basePay: 2150, casePrice: 7, percent: 20 }, { basePay: 2627.84, casePrice: 1.69, percent: 100 }];
 function isLegacySet(b, c, p) { return LEGACY_SETS.some(l => num(b) === l.basePay && num(c) === l.casePrice && num(p) === l.percent); }
 
 /* ---------- Утилиты ---------- */
@@ -96,6 +97,7 @@ function normalizeSettings(s) {
     goal: Math.max(0, num(s.goal, DEFAULTS.goal))
   };
   if (isLegacySet(out.basePay, out.casePrice, out.percent)) {
+    if (out.holidayPay === 4050) out.holidayPay = DEFAULTS.holidayPay;
     out.basePay = DEFAULTS.basePay; out.casePrice = DEFAULTS.casePrice; out.percent = DEFAULTS.percent;
   }
   return out;
@@ -117,6 +119,7 @@ function normalizeExtra(e) {
   out.recurring = Array.isArray(out.recurring) ? out.recurring.filter(r => r && r.id) : [];
   out.debts = Array.isArray(out.debts) ? out.debts.filter(d => d && d.id) : [];
   out.payday = out.payday && typeof out.payday === "object" ? { advanceDay: clamp(Math.round(num(out.payday.advanceDay, 0)), 0, 31), salaryDay: clamp(Math.round(num(out.payday.salaryDay, 0)), 0, 31) } : structuredCloneSafe(EXTRA_DEFAULTS.payday);
+  if (out.payday.advanceDay === 25 && out.payday.salaryDay === 10) out.payday = { advanceDay: 23, salaryDay: 8 }; // старые дефолты → реальные даты выплат
   out.goals = Array.isArray(out.goals) ? out.goals.filter(g => g && g.id).map(g => ({ ...g, deposits: Array.isArray(g.deposits) ? g.deposits : [] })) : [];
   out.templates = Array.isArray(out.templates) && out.templates.length ? out.templates : structuredCloneSafe(EXTRA_DEFAULTS.templates);
   out.shiftMeta = out.shiftMeta && typeof out.shiftMeta === "object" ? out.shiftMeta : {};
@@ -150,6 +153,17 @@ function total(cases, holiday) { return base(holiday) + piece(cases); }
 function makeShift(cases, holiday, bonus = 0) {
   cases = Math.max(0, Math.floor(num(cases))); holiday = !!holiday; bonus = Math.max(0, num(bonus));
   return { cases, holiday, base: base(holiday), piece: piece(cases), total: total(cases, holiday) + bonus };
+}
+// Исправляем только смены со старой стандартной формулой, сохраняя премию из исходных компонентов.
+// Пользовательские ставки не трогаем; повторная обработка уже исправленной смены ничего не меняет.
+function correctLegacyShift(s) {
+  if (!s || typeof s !== "object") return s;
+  const cases = num(s.cases), oldBase = s.holiday ? 4050 : 2415;
+  if (cases < 0 || num(s.base) !== oldBase || Math.abs(num(s.piece) - cases * 2.0125) > .0051) return s;
+  const bonus = num(s.total) - num(s.base) - num(s.piece);
+  if (bonus < -.011) return s;
+  const b = s.holiday ? 4600 : 2415, p = cases * 1.75;
+  return { ...s, base: b, piece: p, total: b + p + Math.max(0, Math.round(bonus * 100) / 100) };
 }
 function isWork(d) {
   const start = fromKey(state.settings.scheduleStart);
@@ -395,11 +409,11 @@ async function cloudLoad() {
     const { data: rows, error: re } = await db.from("shifts").select("*").eq("user_id", currentUser.id).order("work_date", { ascending: true });
     if (re) { console.error("cloudLoad shifts:", re); return false; }
     if (sd) {
-      // Легаси-миграция только по точным старым тройкам (2150/7/20, 2627.84/1.69/100) — иначе затрём настройки пользователя.
+      // Мигрируем только точные старые стандартные тарифы, не пользовательские настройки.
       const legacy = isLegacySet(sd.base_pay, sd.case_price, sd.piece_percent);
       state.settings = normalizeSettings({
-        basePay: legacy ? DEFAULTS.basePay : sd.base_pay, holidayPay: sd.holiday_pay,
-        casePrice: legacy ? DEFAULTS.casePrice : sd.case_price, percent: legacy ? DEFAULTS.percent : sd.piece_percent,
+        basePay: sd.base_pay, holidayPay: sd.holiday_pay,
+        casePrice: sd.case_price, percent: sd.piece_percent,
         scheduleStart: sd.schedule_start || state.settings.scheduleStart, goal: sd.monthly_goal
       });
       if (legacy) await cloudSaveSettings();
@@ -420,10 +434,7 @@ async function cloudLoad() {
     for (const x of rows || []) {
       const key = String(x.work_date).slice(0, 10);
       const cases = num(x.cases), holiday = !!x.is_holiday;
-      // total_pay в облаке включает премию из модалки; сохраняем его, чтобы не терять доплаты.
-      const shift = makeShift(cases, holiday);
-      const cloudTotal = num(x.total_pay);
-      if (cloudTotal > 0) shift.total = cloudTotal;
+      const shift = correctLegacyShift({ cases, holiday, base: num(x.base_pay), piece: num(x.piece_pay), total: num(x.total_pay) });
       cloudShifts[key] = shift;
     }
     state.shifts = cloudShifts;
@@ -434,7 +445,7 @@ async function cloudLoad() {
 }
 function settingsPayload() {
   const s = state.settings;
-  return { user_id: currentUser.id, base_pay: num(s.basePay), holiday_pay: num(s.holidayPay, 4050), case_price: num(s.casePrice), piece_percent: num(s.percent), schedule_start: s.scheduleStart || todayKey(), monthly_goal: num(s.goal) };
+  return { user_id: currentUser.id, base_pay: num(s.basePay), holiday_pay: num(s.holidayPay, DEFAULTS.holidayPay), case_price: num(s.casePrice), piece_percent: num(s.percent), schedule_start: s.scheduleStart || todayKey(), monthly_goal: num(s.goal) };
 }
 async function ensureCloudDefaults() {
   if (!currentUser || !db) return false;
@@ -926,6 +937,10 @@ function unpaidRecurringThisMonth(today = new Date()) {
 }
 
 // Выплаты: до аванса / зарплаты
+const DISTRICT_COEF = 1.15, LUNCH_PAY = 200;
+// «Чистый» выход смены без районного коэффициента и обеда: 2 415 / 1,15 − 200 = 1 900 ₽.
+function rawShiftPay(e) { return Math.max(0, Math.round((num(e.base) / DISTRICT_COEF - LUNCH_PAY) * 100) / 100); }
+function advancePart(entries) { return entries.filter(e => Number(e.k.slice(8, 10)) <= 15).reduce((a, e) => a + rawShiftPay(e), 0); }
 function paydayInfo(today = new Date()) {
   const pd = state.extra.payday || {}; const adv = clamp(Math.round(num(pd.advanceDay, 0)), 0, 31), sal = clamp(Math.round(num(pd.salaryDay, 0)), 0, 31);
   if (!adv && !sal) return null;
@@ -942,16 +957,16 @@ function paydayInfo(today = new Date()) {
   if (!candidates.length) return null;
   candidates.sort((a, b) => a.date - b.date);
   const next = candidates[0], days = Math.round((next.date - start) / 86400000);
-  // Оценка: аванс ≈ заработок за 1–15 число текущего месяца, зарплата ≈ остаток за прошлый месяц.
+  // 23-го (аванс): только «чистый» выход за 1–15 число текущего месяца — без обедов и районного коэффициента.
+  // 8-го (зарплата): всё остальное за прошлый месяц — выход + обеды + районный за 16–31, обеды и районный за 1–15,
+  // сделка за весь месяц и премии. Т.е. весь заработок прошлого месяца минус уже выплаченный аванс.
   let expected = 0;
   if (next.type === "advance") {
-    const m = next.date.getMonth() === today.getMonth() ? today : next.date;
-    expected = monthEntries(m).filter(e => Number(e.k.slice(8, 10)) <= 15).reduce((a, e) => a + num(e.total), 0);
+    expected = advancePart(monthEntries(next.date));
   } else {
     const prev = new Date(next.date.getFullYear(), next.date.getMonth() - 1, 1);
     const es = monthEntries(prev), total = es.reduce((a, e) => a + num(e.total), 0);
-    const advPart = adv ? es.filter(e => Number(e.k.slice(8, 10)) <= 15).reduce((a, e) => a + num(e.total), 0) : 0;
-    expected = Math.max(0, total - advPart);
+    expected = Math.max(0, total - advancePart(es));
   }
   return { type: next.type, date: next.date, days, expected };
 }
@@ -1517,8 +1532,10 @@ function bindEvents() {
 
 /* ---------- Старт ---------- */
 function init() {
-  $("appVersion").textContent = "v" + APP_VERSION;
-  $("brandVersion").textContent = "V " + APP_VERSION;
+  $("appVersion").textContent = "V" + APP_VERSION;
+  $("brandVersion").textContent = "V" + APP_VERSION;
+  state.shifts = Object.fromEntries(Object.entries(state.shifts).map(([k, s]) => [k, correctLegacyShift(s)]));
+  save();
   applyTheme(); bindEvents();
   syncHomeInputsFromCloud(); renderAll(); refreshNotificationUI();
   if ("Notification" in window && Notification.permission === "granted") scheduleShiftReminder();
@@ -1531,7 +1548,7 @@ window.MyPay = {
   version: APP_VERSION, state, DEFAULTS,
   money, moneyShort, integer, plural, dateKey, fromKey, isDateKey, escapeHtml,
   piece, base, total, makeShift, isWork, monthEntries, monthForecast, analyticsForMonth, financeNumbers,
-  normalizeSettings, normalizeExtra, parseBackup, buildBackup, buildCsv,
+  normalizeSettings, normalizeExtra, correctLegacyShift, parseBackup, buildBackup, buildCsv,
   save, renderAll, updateHome, renderCalendar, renderStats, renderInsights, renderFinance,
   saveHomeShift, openShiftModal, saveModal, deleteShift, undoLastDelete, clearMonth, selectCalendarDate, shiftMonth, goToCurrentMonth,
   openSettings, saveSettings, cycleTheme, applyTheme, showScreen, showToast, confirmAction, promptNumber,

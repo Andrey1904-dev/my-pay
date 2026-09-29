@@ -78,8 +78,8 @@ func newID(_ prefix: String) -> String {
 
 struct Settings: Codable, Equatable {
     var basePay: Double = 2415
-    var holidayPay: Double = 4050
-    var casePrice: Double = 8.05
+    var holidayPay: Double = 4600
+    var casePrice: Double = 7
     var percent: Double = 25
     var scheduleStart: String = DateUtil.todayKey
     var goal: Double = 60000
@@ -87,9 +87,22 @@ struct Settings: Codable, Equatable {
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        basePay = max(0, c.num(.basePay, 2415)); holidayPay = max(0, c.num(.holidayPay, 4050)); casePrice = max(0, c.num(.casePrice, 8.05))
+        basePay = max(0, c.num(.basePay, 2415)); holidayPay = max(0, c.num(.holidayPay, 4600)); casePrice = max(0, c.num(.casePrice, 7))
         percent = min(100, max(0, c.num(.percent, 25))); goal = max(0, c.num(.goal, 60000))
         let s = c.str(.scheduleStart); scheduleStart = DateUtil.isKey(s) ? s : DateUtil.todayKey
+        correctLegacyTariff()
+    }
+}
+
+extension Settings {
+    mutating func correctLegacyTariff() {
+        let legacy = (basePay == 2415 && casePrice == 8.05 && percent == 25)
+            || (basePay == 2150 && casePrice == 7 && percent == 20)
+            || (basePay == 2627.84 && casePrice == 1.69 && percent == 100)
+        if legacy {
+            basePay = 2415; casePrice = 7; percent = 25
+            if holidayPay == 4050 { holidayPay = 4600 }
+        }
     }
 }
 
@@ -106,6 +119,20 @@ struct Shift: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         cases = max(0, c.int(.cases)); holiday = c.bool(.holiday); base = c.num(.base); piece = c.num(.piece); total = c.num(.total)
+        self = correctedLegacyTariff()
+    }
+}
+
+extension Shift {
+    // Точное совпадение со старым стандартным расчётом; премии и свои ставки сохраняем.
+    func correctedLegacyTariff() -> Shift {
+        guard cases >= 0, base == (holiday ? 4050 : 2415), abs(piece - Double(cases) * 2.0125) <= 0.0051 else { return self }
+        let bonus = total - base - piece
+        guard bonus >= -0.011 else { return self }
+        var s = self
+        s.base = holiday ? 4600 : 2415; s.piece = Double(cases) * 1.75
+        s.total = s.base + s.piece + max(0, (bonus * 100).rounded() / 100)
+        return s
     }
 }
 
@@ -269,12 +296,13 @@ struct Goal: Codable, Equatable, Identifiable {
 }
 
 struct Payday: Codable, Equatable {
-    var advanceDay: Int = 25
-    var salaryDay: Int = 10
+    var advanceDay: Int = 23
+    var salaryDay: Int = 8
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        advanceDay = min(31, max(0, c.int(.advanceDay, 25))); salaryDay = min(31, max(0, c.int(.salaryDay, 10)))
+        advanceDay = min(31, max(0, c.int(.advanceDay, 23))); salaryDay = min(31, max(0, c.int(.salaryDay, 8)))
+        if advanceDay == 25 && salaryDay == 10 { advanceDay = 23; salaryDay = 8 }
     }
 }
 

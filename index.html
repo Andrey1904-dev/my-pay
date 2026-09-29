@@ -15,7 +15,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>CASE.PLACE SALARY</title>
-  <link rel="stylesheet" href="style.css?v=1.0">
+  <link rel="stylesheet" href="style.css?v=1.01">
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" focusable="false">
@@ -70,7 +70,7 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">₽</div>
       <div class="brand-text">
-        <div class="brand-title">CASE.PLACE <span>SALARY</span> <span class="brand-version" id="brandVersion">V 1.0</span></div>
+        <div class="brand-title">CASE.PLACE <span>SALARY</span> <span class="brand-version" id="brandVersion">V1.01</span></div>
         <div class="brand-subtitle">Смены · чехлы · заработок</div>
       </div>
     </div>
@@ -130,7 +130,7 @@
 
       <label class="card toggle-card" id="holidayCard">
         <span class="toggle-icon" aria-hidden="true"><svg><use href="#i-star"/></svg></span>
-        <span class="toggle-copy"><b>Праздничная смена</b><small>Ставка <strong class="num" id="holidayRateLabel">4 050 ₽</strong> вместо обычной</small></span>
+        <span class="toggle-copy"><b>Праздничная смена</b><small>Ставка <strong class="num" id="holidayRateLabel">4 600 ₽</strong> вместо обычной</small></span>
         <span class="switch"><input type="checkbox" id="holidayInput"><i></i></span>
       </label>
 
@@ -382,7 +382,7 @@
         <svg><use href="#i-bell"/></svg>
         <div><b>Напоминания о сменах</b><p id="notificationTipText">Разреши уведомления, чтобы приложение напоминало о ближайшей смене.</p><button class="btn-text" id="enableNotificationsBtn">Включить уведомления</button></div>
       </article>
-      <div class="app-footer"><span id="appVersion">v1.0</span> · CASE.PLACE SALARY</div>
+      <div class="app-footer"><span id="appVersion">V1.01</span> · CASE.PLACE SALARY</div>
     </section>
   </main>
 
@@ -407,7 +407,7 @@
       <label class="field">Премия / доплата, ₽<input id="modalBonus" type="number" inputmode="decimal" min="0" step="100" placeholder="0"></label>
     </div>
     <label class="field">Комментарий<textarea id="modalNote" rows="2" maxlength="160" placeholder="Например: переработка, сложная смена"></textarea></label>
-    <label class="toggle-row"><span><b>Праздничная смена</b><small>Ставка <span class="num" id="modalHolidayRate">4 050 ₽</span></small></span><span class="switch"><input type="checkbox" id="modalHoliday"><i></i></span></label>
+    <label class="toggle-row"><span><b>Праздничная смена</b><small>Ставка <span class="num" id="modalHolidayRate">4 600 ₽</span></small></span><span class="switch"><input type="checkbox" id="modalHoliday"><i></i></span></label>
     <div class="preview"><span>Итого за смену</span><strong class="num" id="modalTotal">0 ₽</strong></div>
     <div class="preview-sub" id="modalHourly">—</div>
     <button class="btn btn-primary btn-lg" id="modalSave"><span>Сохранить</span></button>
@@ -560,10 +560,10 @@
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-head"><div><span class="eyebrow">Выплаты</span><h2 id="paydayModalTitle">Дни аванса и зарплаты</h2></div><button class="icon-btn" data-close="paydayModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <p class="sheet-text">Укажи числа, когда приходят деньги — покажу обратный отсчёт и ожидаемую сумму.</p>
+    <p class="sheet-text">Аванс — только выходы за 1–15 число текущего месяца. Зарплата — выходы за 16-е–конец прошлого месяца, обеды, районный коэффициент и сделка за весь прошлый месяц. Сумма — по внесённым сменам.</p>
     <div class="grid-2">
-      <label class="field">Аванс — число<input id="paydayAdvance" class="num" type="number" min="1" max="31" step="1" inputmode="numeric" value="25"></label>
-      <label class="field">Зарплата — число<input id="paydaySalary" class="num" type="number" min="1" max="31" step="1" inputmode="numeric" value="10"></label>
+      <label class="field">Аванс — число<input id="paydayAdvance" class="num" type="number" min="1" max="31" step="1" inputmode="numeric" value="23"></label>
+      <label class="field">Зарплата — число<input id="paydaySalary" class="num" type="number" min="1" max="31" step="1" inputmode="numeric" value="8"></label>
     </div>
     <button class="btn btn-primary btn-lg" id="paydaySave"><span>Сохранить</span></button>
   </div>
@@ -648,7 +648,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2" crossorigin="anonymous"></script>
-<script src="script.js?v=1.0"></script>
+<script src="script.js?v=1.01"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
