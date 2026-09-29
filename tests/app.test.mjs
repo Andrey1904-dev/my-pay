@@ -39,11 +39,24 @@ describe("загрузка и модель", () => {
   test("приложение стартует без ошибок и публикует API", () => {
     const app = open();
     assert.deepEqual(app.errors, []);
-    assert.equal(app.MyPay.version, 18);
-    assert.equal(app.text("appVersion"), "v18");
+    assert.equal(app.MyPay.version, "1.0");
+    assert.equal(app.text("appVersion"), "v1.0");
+    assert.equal(app.text("brandVersion"), "V 1.0", "версия в шапке рядом с названием");
+    assert.match(app.text("brandVersion").trim(), /^V \d+(\.\d+)+$/);
     assert.equal(app.MyPay.cloudAvailable, false, "без SDK — локальный режим");
     assert.match(app.text("cloudNotice"), /локальном режиме/);
     assert.ok(app.$("logoutBtn").classList.contains("hidden"), "кнопка выхода скрыта без аккаунта");
+  });
+
+  test("версия одинакова в script.js, sw.js, index.html и package.json", async () => {
+    const fs = await import("node:fs");
+    const read = f => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+    const v = read("script.js").match(/const APP_VERSION = "([\d.]+)"/)[1];
+    assert.match(read("sw.js"), new RegExp(`CACHE_NAME="my-pay-v${v.replace(".", "\\.")}"`));
+    assert.match(read("index.html"), new RegExp(`script\\.js\\?v=${v.replace(".", "\\.")}"`));
+    assert.match(read("sw.js"), new RegExp(`style\\.css\\?v=${v.replace(".", "\\.")}"`));
+    assert.match(read("index.html"), new RegExp(`id="brandVersion">V ${v.replace(".", "\\.")}<`));
+    assert.equal(JSON.parse(read("package.json")).version, `${v}.0`);
   });
 
   test("дефолты и формула: ставка + чехлы × цена × процент", () => {
@@ -558,7 +571,7 @@ describe("настройки, тема, резервные копии", () => {
   test("buildBackup → parseBackup круг, мусор отбрасывается", () => {
     const app = open({ shifts: { [TODAY]: { cases: 300, holiday: false, base: 2627.84, piece: 507, total: 3134.84 } } });
     const backup = app.MyPay.buildBackup();
-    assert.equal(backup.version, 18);
+    assert.equal(backup.version, 1);
     const parsed = app.MyPay.parseBackup(JSON.stringify(backup));
     assert.equal(parsed.shifts[TODAY].cases, 300);
     assert.equal(parsed.settings.basePay, 2415);

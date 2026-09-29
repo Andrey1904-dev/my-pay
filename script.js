@@ -5,9 +5,10 @@
    ========================================================================== */
 "use strict";
 
-const APP_VERSION = 18;
+// Версия сайта: показывается в шапке и подвале. При выпуске менять здесь, в sw.js (CACHE_NAME и ?v=) и в index.html (?v=).
+const APP_VERSION = "1.0";
 // Должна совпадать с CACHE_NAME в sw.js, иначе приложение удалит собственный кеш.
-const CACHE_VERSION = "my-pay-v18";
+const CACHE_VERSION = "my-pay-v" + APP_VERSION;
 
 // Удаляем кеши прошлых версий, но не трогаем активный service worker.
 (async () => {
@@ -816,7 +817,7 @@ function downloadFile(name, content, type) {
   const blob = new Blob([content], { type }), url = URL.createObjectURL(blob), a = document.createElement("a");
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function buildBackup() { return { version: APP_VERSION, exportedAt: new Date().toISOString(), settings: state.settings, shifts: state.shifts, extra: state.extra }; }
+function buildBackup() { return { version: parseInt(APP_VERSION, 10), exportedAt: new Date().toISOString(), settings: state.settings, shifts: state.shifts, extra: state.extra }; }
 function exportData() { downloadFile(`case-place-salary-${todayKey()}.json`, JSON.stringify(buildBackup(), null, 2), "application/json"); showToast("Резервная копия скачана ✓"); }
 function parseBackup(text) {
   const d = JSON.parse(text);
@@ -1517,6 +1518,7 @@ function bindEvents() {
 /* ---------- Старт ---------- */
 function init() {
   $("appVersion").textContent = "v" + APP_VERSION;
+  $("brandVersion").textContent = "V " + APP_VERSION;
   applyTheme(); bindEvents();
   syncHomeInputsFromCloud(); renderAll(); refreshNotificationUI();
   if ("Notification" in window && Notification.permission === "granted") scheduleShiftReminder();

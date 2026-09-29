@@ -336,7 +336,7 @@ struct Extra: Codable, Equatable {
 /// Резервная копия — тот же формат, что экспортирует сайт (можно переносить файлы туда-сюда).
 struct Backup: Codable {
     var app: String = "case-place-salary"
-    var version: Int = AppConfig.appVersion
+    var version: Int = AppConfig.backupVersion
     var exportedAt: String = ISO8601DateFormatter().string(from: Date())
     var settings: Settings
     var shifts: [String: Shift]
