@@ -307,6 +307,11 @@ describe("ввод чехлов", () => {
     bot = makeBot(backend);
   });
 
+  test("дефолтные настройки: 1000 чехлов = (1900 + 200 + 1750) × 1,15 = 4427,50", () => {
+    const s = normalizeSettings({});
+    assert.equal(totalPay(0, false, s), 2415);
+    assert.equal(totalPay(1000, false, s), 4427.5);
+  });
   test("число в пустой день создаёт смену и запись для отмены", async () => {
     await send(bot, "350");
     const shift = backend.db.shifts[0];

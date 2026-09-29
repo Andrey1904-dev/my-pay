@@ -35,9 +35,9 @@ try {
 } catch (e) { console.warn("Supabase init failed:", e); }
 
 /* ---------- Модель оплаты и дефолты ---------- */
-// 1 900 ₽ дневной тариф + 727,84 ₽ районный коэффициент = 2 627,84 ₽ за смену.
-// Сделка по расчётному листку: 44 284,28 ₽ / 26 093 чехла ≈ 1,69 ₽ за чехол.
-const DEFAULTS = { basePay: 2627.84, holidayPay: 4050, casePrice: 1.69, percent: 100, scheduleStart: todayKey(), goal: 60000 };
+// Выход 1 900 ₽ + обед 200 ₽ = 2 100 ₽; сделка: 7 ₽ за чехол × 25% = 1,75 ₽.
+// Районный коэффициент Екатеринбурга 1,15 (15%) начисляется на всё: 2 100 × 1,15 = 2 415 ₽; 7 × 1,15 = 8,05 ₽ (× 25% = 2,0125 ₽ за чехол).
+const DEFAULTS = { basePay: 2415, holidayPay: 4050, casePrice: 8.05, percent: 25, scheduleStart: todayKey(), goal: 60000 };
 const DEFAULT_CATEGORIES = [
   { id: "food", name: "Еда", emoji: "🍔", limit: 0 }, { id: "transport", name: "Транспорт", emoji: "🚌", limit: 0 }, { id: "home", name: "Жильё", emoji: "🏠", limit: 0 },
   { id: "shopping", name: "Покупки", emoji: "🛍️", limit: 0 }, { id: "health", name: "Здоровье", emoji: "💊", limit: 0 }, { id: "fun", name: "Развлечения", emoji: "🎮", limit: 0 },
@@ -51,7 +51,9 @@ const EXTRA_DEFAULTS = {
 };
 const WORK_START_MIN = 8 * 60;   // 08:00
 const WORK_END_MIN = 19 * 60;    // 19:00
-const LEGACY = { basePay: 2150, casePrice: 7, percent: 20 }; // старая тройка настроек → мигрируем один раз
+// Старые тройки настроек (2150/7/20 и прежние дефолты 2627.84/1.69/100) → мигрируем один раз на актуальные.
+const LEGACY_SETS = [{ basePay: 2150, casePrice: 7, percent: 20 }, { basePay: 2627.84, casePrice: 1.69, percent: 100 }];
+function isLegacySet(b, c, p) { return LEGACY_SETS.some(l => num(b) === l.basePay && num(c) === l.casePrice && num(p) === l.percent); }
 
 /* ---------- Утилиты ---------- */
 function $(id) { return document.getElementById(id); }
@@ -92,7 +94,7 @@ function normalizeSettings(s) {
     scheduleStart: isDateKey(s.scheduleStart) ? s.scheduleStart : todayKey(),
     goal: Math.max(0, num(s.goal, DEFAULTS.goal))
   };
-  if (out.basePay === LEGACY.basePay && out.casePrice === LEGACY.casePrice && out.percent === LEGACY.percent) {
+  if (isLegacySet(out.basePay, out.casePrice, out.percent)) {
     out.basePay = DEFAULTS.basePay; out.casePrice = DEFAULTS.casePrice; out.percent = DEFAULTS.percent;
   }
   return out;
@@ -392,8 +394,8 @@ async function cloudLoad() {
     const { data: rows, error: re } = await db.from("shifts").select("*").eq("user_id", currentUser.id).order("work_date", { ascending: true });
     if (re) { console.error("cloudLoad shifts:", re); return false; }
     if (sd) {
-      // Легаси-миграция только по точной старой тройке 2150 / 7 / 20 — иначе затрём настройки пользователя.
-      const legacy = num(sd.base_pay) === LEGACY.basePay && num(sd.case_price) === LEGACY.casePrice && num(sd.piece_percent) === LEGACY.percent;
+      // Легаси-миграция только по точным старым тройкам (2150/7/20, 2627.84/1.69/100) — иначе затрём настройки пользователя.
+      const legacy = isLegacySet(sd.base_pay, sd.case_price, sd.piece_percent);
       state.settings = normalizeSettings({
         basePay: legacy ? DEFAULTS.basePay : sd.base_pay, holidayPay: sd.holiday_pay,
         casePrice: legacy ? DEFAULTS.casePrice : sd.case_price, percent: legacy ? DEFAULTS.percent : sd.piece_percent,

@@ -17,10 +17,10 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  base_pay: 2627.84,
+  base_pay: 2415,
   holiday_pay: 4050,
-  case_price: 1.69,
-  piece_percent: 100,
+  case_price: 8.05,
+  piece_percent: 25,
   schedule_start: null,
   monthly_goal: 60000,
 };

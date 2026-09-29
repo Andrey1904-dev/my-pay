@@ -17,14 +17,14 @@ create table if not exists public.profiles (
 
 -- ---------- settings ----------
 -- Дефолты соответствуют текущей модели оплаты:
---   1 900 ₽ дневной тариф + 727,84 ₽ районный коэффициент = 2 627,84 ₽
---   сдельная ставка 44 284,28 ₽ / 26 093 чехла = 1,69 ₽ за чехол
+--   (1 900 ₽ выход + 200 ₽ обед) × 1,15 районный коэффициент Екатеринбурга = 2 415 ₽
+--   сделка: 7 ₽ за чехол × 1,15 = 8,05 ₽, из них 25% → 2,0125 ₽ за чехол
 create table if not exists public.settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  base_pay numeric not null default 2627.84,
+  base_pay numeric not null default 2415,
   holiday_pay numeric not null default 4050,
-  case_price numeric not null default 1.69,
-  piece_percent numeric not null default 100,
+  case_price numeric not null default 8.05,
+  piece_percent numeric not null default 25,
   schedule_start date not null default current_date,
   monthly_goal numeric not null default 60000,
   created_at timestamptz not null default now(),
@@ -38,7 +38,7 @@ create table if not exists public.shifts (
   work_date date not null,
   cases integer not null default 0 check (cases >= 0),
   is_holiday boolean not null default false,
-  base_pay numeric not null default 2627.84,
+  base_pay numeric not null default 2415,
   piece_pay numeric not null default 0,
   total_pay numeric not null default 2627.84,
   created_at timestamptz not null default now(),
@@ -108,8 +108,9 @@ drop trigger if exists shifts_touch_updated_at on public.shifts;
 create trigger shifts_touch_updated_at before update on public.shifts
 for each row execute function public.touch_updated_at();
 
--- ---------- Миграция легаси-настроек (2150 / 7 / 20 → новая модель) ----------
+-- ---------- Миграция легаси-настроек (2150 / 7 / 20 и 2627.84 / 1.69 / 100 → новая модель) ----------
 -- Выполни один раз, если аккаунты создавались по старой схеме.
 update public.settings
-set base_pay = 2627.84, case_price = 1.69, piece_percent = 100, holiday_pay = 4050
-where base_pay = 2150 and case_price = 7 and piece_percent = 20;
+set base_pay = 2415, case_price = 8.05, piece_percent = 25, holiday_pay = 4050
+where (base_pay = 2150 and case_price = 7 and piece_percent = 20)
+   or (base_pay = 2627.84 and case_price = 1.69 and piece_percent = 100);
