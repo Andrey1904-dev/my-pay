@@ -77,18 +77,18 @@ func newID(_ prefix: String) -> String {
 // MARK: - Настройки расчёта
 
 struct Settings: Codable, Equatable {
-    var basePay: Double = 2627.84
+    var basePay: Double = 2415
     var holidayPay: Double = 4050
-    var casePrice: Double = 1.69
-    var percent: Double = 100
+    var casePrice: Double = 8.05
+    var percent: Double = 25
     var scheduleStart: String = DateUtil.todayKey
     var goal: Double = 60000
 
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        basePay = max(0, c.num(.basePay, 2627.84)); holidayPay = max(0, c.num(.holidayPay, 4050)); casePrice = max(0, c.num(.casePrice, 1.69))
-        percent = min(100, max(0, c.num(.percent, 100))); goal = max(0, c.num(.goal, 60000))
+        basePay = max(0, c.num(.basePay, 2415)); holidayPay = max(0, c.num(.holidayPay, 4050)); casePrice = max(0, c.num(.casePrice, 8.05))
+        percent = min(100, max(0, c.num(.percent, 25))); goal = max(0, c.num(.goal, 60000))
         let s = c.str(.scheduleStart); scheduleStart = DateUtil.isKey(s) ? s : DateUtil.todayKey
     }
 }
@@ -336,7 +336,7 @@ struct Extra: Codable, Equatable {
 /// Резервная копия — тот же формат, что экспортирует сайт (можно переносить файлы туда-сюда).
 struct Backup: Codable {
     var app: String = "case-place-salary"
-    var version: Int = AppConfig.appVersion
+    var version: Int = AppConfig.backupVersion
     var exportedAt: String = ISO8601DateFormatter().string(from: Date())
     var settings: Settings
     var shifts: [String: Shift]

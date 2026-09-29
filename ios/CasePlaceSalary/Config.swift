@@ -4,7 +4,8 @@ import Foundation
 /// поэтому iPhone, сайт и Telegram-бот работают с одним аккаунтом и одними данными.
 enum AppConfig {
     static let appName = "CASE.PLACE SALARY"
-    static let appVersion = 17
+    static let appVersion = "1.0"
+    static let backupVersion = 1
 
     static let supabaseURL = URL(string: "https://dyixwxxpjmyycgigcbtx.supabase.co")!
     /// Публичный (publishable) ключ — безопасен для клиента, права ограничены RLS-политиками.
