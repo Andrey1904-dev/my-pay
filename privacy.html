@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Политика конфиденциальности — CASE.PLACE SALARY</title>
+<meta name="description" content="Какие данные хранит приложение CASE.PLACE SALARY, зачем, где и как их удалить.">
+<meta name="theme-color" content="#eeeeea">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root { color-scheme: light dark; --bg: #eeeeea; --surface: #fff; --ink: #111318; --muted: #646972; --line: #dcdcd7; --accent: #ff5a1f; --accent-text: #b5370a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0a0c0f; --surface: #171b21; --ink: #f4f5f7; --muted: #979da7; --line: #2f3540; --accent: #ff6a33; --accent-text: #ff9a70; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; text-decoration: none; color: inherit; }
+  .mark { width: 40px; height: 40px; border-radius: 12px; background: #14161a; color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 18px; }
+  .brand b { font-weight: 800; letter-spacing: -0.01em; }
+  .brand b span { color: var(--accent); }
+  .eyebrow { display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); }
+  h1 { font-size: clamp(28px, 6vw, 38px); letter-spacing: -0.03em; line-height: 1.1; margin: 6px 0 8px; }
+  h2 { font-size: 20px; letter-spacing: -0.02em; margin: 32px 0 10px; }
+  p, li { color: var(--ink); }
+  .muted { color: var(--muted); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; margin: 14px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
+  a { color: var(--accent-text); font-weight: 600; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="./"><span class="mark">₽</span><b>CASE.PLACE <span>SALARY</span></b></a>
+  <span class="eyebrow">Документ</span>
+  <h1>Политика конфиденциальности</h1>
+  <p class="muted">Действует с 29 сентября 2026 г. Относится к веб-приложению, приложению для iPhone и Telegram-боту CASE.PLACE SALARY (далее — «приложение»).</p>
+
+  <h2>Коротко</h2>
+  <div class="card">
+    <ul>
+      <li>Приложение — личный калькулятор смен и бюджета. Мы не продаём и не передаём данные третьим лицам и не показываем рекламу.</li>
+      <li>Без аккаунта все данные хранятся только на вашем устройстве.</li>
+      <li>С аккаунтом данные синхронизируются через защищённое облако Supabase и доступны только вам (правила Row Level Security).</li>
+      <li>Аккаунт вместе со всеми данными можно удалить в один клик: «Ещё → Удалить аккаунт».</li>
+    </ul>
+  </div>
+
+  <h2>Какие данные мы храним</h2>
+  <div class="card">
+    <table>
+      <tr><th>Данные</th><th>Зачем</th><th>Где</th></tr>
+      <tr><td>Email, имя (при входе через Apple/Google — те, что вы разрешили передать)</td><td>Вход в аккаунт, подпись профиля</td><td>Supabase Auth, таблица <code>profiles</code></td></tr>
+      <tr><td>Смены: дата, количество упаковок, праздничный день, рассчитанный заработок</td><td>Основная функция — расчёт зарплаты</td><td><code>shifts</code>, локально на устройстве</td></tr>
+      <tr><td>Настройки расчёта: ставки, доля от сделки, график, цель</td><td>Расчёт и прогноз</td><td><code>settings</code>, локально</td></tr>
+      <tr><td>Финансы: счета и их балансы, операции, категории, лимиты, регулярные платежи, долги, копилки, дни выплат</td><td>Учёт бюджета и подсказки советника</td><td><code>user_app_data</code> (JSON), локально</td></tr>
+      <tr><td>Привязка Telegram: числовой ID чата, настройки напоминаний</td><td>Ввод смен и напоминания через бота (только если вы сами привязали чат)</td><td><code>telegram_links</code>, <code>telegram_preferences</code></td></tr>
+      <tr><td>Технические журналы (время запроса, код ошибки)</td><td>Диагностика сбоев, максимум 30 дней</td><td>Supabase / Edge Functions</td></tr>
+    </table>
+  </div>
+  <p>Мы <b>не</b> собираем геолокацию, контакты, фотографии, рекламные идентификаторы и не отслеживаем вас в других приложениях и на сайтах. Аналитика третьих сторон не используется.</p>
+
+  <h2>Вход через Apple и Google</h2>
+  <p>При входе через Apple или Google мы получаем только идентификатор, email (у Apple — по вашему выбору может быть скрытый relay-адрес) и имя. Пароли этих сервисов нам недоступны. Отозвать доступ можно в настройках Apple ID («Вход с Apple») или аккаунта Google.</p>
+
+  <h2>Уведомления</h2>
+  <p>Локальные напоминания на iPhone («внеси смену», «завтра рабочий день») создаются на устройстве и никуда не отправляются. Напоминания в Telegram приходят только после того, как вы сами привязали чат к аккаунту; их можно выключить командой <code>/notify_off</code> или отвязать чат командой <code>/unlink</code>.</p>
+
+  <h2>Где хранятся данные и как защищены</h2>
+  <p>Облачная часть работает на платформе <a href="https://supabase.com" rel="noopener" target="_blank">Supabase</a> (PostgreSQL, шифрование при передаче TLS и при хранении). Доступ к строкам ограничен политиками Row Level Security: каждый пользователь видит и изменяет только свои записи. Сессия хранится в защищённом хранилище устройства (Keychain на iPhone, localStorage в браузере).</p>
+
+  <h2>Сколько храним</h2>
+  <p>Пока у вас есть аккаунт. После удаления аккаунта все связанные данные удаляются немедленно и безвозвратно (включая резервные копии в течение 30 дней согласно политике платформы).</p>
+
+  <h2>Как удалить данные</h2>
+  <div class="card">
+    <ol>
+      <li>В приложении: <b>Ещё → Удалить аккаунт</b> → подтвердить. Удаляются аккаунт, профиль, смены, настройки, финансы и привязка Telegram.</li>
+      <li>Без аккаунта: данные лежат только на устройстве — удалите приложение или очистите данные сайта в браузере.</li>
+      <li>Резервные копии, которые вы экспортировали сами (JSON/CSV), остаются под вашим контролем.</li>
+    </ol>
+  </div>
+
+  <h2>Дети</h2>
+  <p>Приложение предназначено для совершеннолетних сотрудников и не адресовано детям младше 16 лет; мы сознательно не собираем данные детей.</p>
+
+  <h2>Изменения</h2>
+  <p>При существенных изменениях мы обновим дату вверху документа и сообщим об этом в приложении.</p>
+
+  <h2>Контакты</h2>
+  <p>Вопросы о данных и запросы на удаление: <a href="https://github.com/Andrey1904-dev/my-pay/issues" rel="noopener" target="_blank">github.com/Andrey1904-dev/my-pay/issues</a>.</p>
+  <p class="muted">Разработчик: Andrey1904-dev. Приложение не аффилировано с работодателем; расчёты носят справочный характер.</p>
+</main>
+</body>
+</html>

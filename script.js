@@ -1,13 +1,13 @@
 /* ==========================================================================
-   CASE.PLACE SALARY — script.js v16
+   CASE.PLACE SALARY — script.js v17
    Учёт смен 2/2, упаковки чехлов и заработка. Работает офлайн (localStorage),
    синхронизируется с Supabase, когда есть аккаунт и сеть.
    ========================================================================== */
 "use strict";
 
-const APP_VERSION = 16;
+const APP_VERSION = 18;
 // Должна совпадать с CACHE_NAME в sw.js, иначе приложение удалит собственный кеш.
-const CACHE_VERSION = "my-pay-v16";
+const CACHE_VERSION = "my-pay-v18";
 
 // Удаляем кеши прошлых версий, но не трогаем активный service worker.
 (async () => {
@@ -27,7 +27,7 @@ let db = null;
 try {
   if (window.supabase && typeof window.supabase.createClient === "function") {
     db = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" }
     });
   } else {
     console.warn("Supabase SDK не загрузился — работаем в локальном режиме.");
@@ -38,8 +38,14 @@ try {
 // 1 900 ₽ дневной тариф + 727,84 ₽ районный коэффициент = 2 627,84 ₽ за смену.
 // Сделка по расчётному листку: 44 284,28 ₽ / 26 093 чехла ≈ 1,69 ₽ за чехол.
 const DEFAULTS = { basePay: 2627.84, holidayPay: 4050, casePrice: 1.69, percent: 100, scheduleStart: todayKey(), goal: 60000 };
+const DEFAULT_CATEGORIES = [
+  { id: "food", name: "Еда", emoji: "🍔", limit: 0 }, { id: "transport", name: "Транспорт", emoji: "🚌", limit: 0 }, { id: "home", name: "Жильё", emoji: "🏠", limit: 0 },
+  { id: "shopping", name: "Покупки", emoji: "🛍️", limit: 0 }, { id: "health", name: "Здоровье", emoji: "💊", limit: 0 }, { id: "fun", name: "Развлечения", emoji: "🎮", limit: 0 },
+  { id: "connect", name: "Связь", emoji: "📱", limit: 0 }, { id: "family", name: "Семья", emoji: "👨‍👩‍👧", limit: 0 }, { id: "other", name: "Другое", emoji: "📦", limit: 0 }
+];
 const EXTRA_DEFAULTS = {
-  expenses: [], goals: [],
+  transactions: [], accounts: [], categories: DEFAULT_CATEGORIES, recurring: [], debts: [], goals: [],
+  payday: { advanceDay: 25, salaryDay: 10 },
   templates: [{ id: "default", name: "Обычная", cases: 0, hours: 11, bonus: 0, holiday: false }],
   shiftMeta: {}, theme: "system", undo: null, celebratedGoals: []
 };
@@ -53,7 +59,7 @@ function num(v, fallback = 0) { if (v === null || v === undefined || v === "") r
 function clamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
 function money(n) {
   const v = Math.round(num(n) * 100) / 100;
-  return new Intl.NumberFormat("ru-RU", { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 }).format(v) + " ₽";
+  return new Intl.NumberFormat("ru-RU", { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 }).format(v) + "\u00a0₽"; // неразрывный пробел — знак ₽ не уезжает на новую строку
 }
 function moneyShort(n) { n = num(n); return n >= 1000 ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(n / 1000) + "к" : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(n); }
 function integer(n) { return new Intl.NumberFormat("ru-RU").format(num(n)); }
@@ -94,8 +100,21 @@ function normalizeSettings(s) {
 function normalizeExtra(e) {
   e = e && typeof e === "object" ? e : {};
   const out = { ...structuredCloneSafe(EXTRA_DEFAULTS), ...e };
-  out.expenses = Array.isArray(out.expenses) ? out.expenses : [];
-  out.goals = Array.isArray(out.goals) ? out.goals : [];
+  // v17: расходы стали операциями (расход / доход / перевод). Старый список expenses переносим один раз.
+  out.transactions = Array.isArray(out.transactions) ? out.transactions.filter(t => t && typeof t === "object") : [];
+  if (Array.isArray(e.expenses) && e.expenses.length) {
+    const known = new Set(out.transactions.map(t => t.id));
+    e.expenses.forEach(x => { if (x && x.id && !known.has(x.id)) out.transactions.push({ id: x.id, type: "expense", amount: num(x.amount), category: x.category || "Другое", accountId: null, toAccountId: null, date: isDateKey(x.date) ? x.date : todayKey(), note: x.note || "" }); });
+  }
+  delete out.expenses;
+  out.transactions.forEach(t => { if (!["expense", "income", "transfer"].includes(t.type)) t.type = "expense"; t.amount = Math.max(0, num(t.amount)); if (!isDateKey(t.date)) t.date = todayKey(); });
+  out.accounts = Array.isArray(out.accounts) ? out.accounts.filter(a => a && a.id) : [];
+  out.categories = Array.isArray(out.categories) && out.categories.length ? out.categories.filter(c => c && c.name) : structuredCloneSafe(DEFAULT_CATEGORIES);
+  out.transactions.forEach(t => { if (t.type === "expense" && t.category && !out.categories.find(c => c.name === t.category)) out.categories.push({ id: uid("cat"), name: t.category, emoji: "🏷️", limit: 0 }); });
+  out.recurring = Array.isArray(out.recurring) ? out.recurring.filter(r => r && r.id) : [];
+  out.debts = Array.isArray(out.debts) ? out.debts.filter(d => d && d.id) : [];
+  out.payday = out.payday && typeof out.payday === "object" ? { advanceDay: clamp(Math.round(num(out.payday.advanceDay, 0)), 0, 31), salaryDay: clamp(Math.round(num(out.payday.salaryDay, 0)), 0, 31) } : structuredCloneSafe(EXTRA_DEFAULTS.payday);
+  out.goals = Array.isArray(out.goals) ? out.goals.filter(g => g && g.id).map(g => ({ ...g, deposits: Array.isArray(g.deposits) ? g.deposits : [] })) : [];
   out.templates = Array.isArray(out.templates) && out.templates.length ? out.templates : structuredCloneSafe(EXTRA_DEFAULTS.templates);
   out.shiftMeta = out.shiftMeta && typeof out.shiftMeta === "object" ? out.shiftMeta : {};
   out.celebratedGoals = Array.isArray(out.celebratedGoals) ? out.celebratedGoals : [];
@@ -274,12 +293,49 @@ async function initCloudAuth() {
   if (!db) { showAuth(false); showCloudNotice(); updateProfileUI(); return; }
   try {
     const { data: { session } } = await db.auth.getSession();
+    cleanOAuthUrl();
     if (session?.user) { currentUser = session.user; await afterLogin(); } else showAuth(true);
     db.auth.onAuthStateChange(async (_event, s) => {
       if (s?.user && !currentUser) { currentUser = s.user; await afterLogin(); }
       else if (!s && currentUser) { currentUser = null; currentProfile = null; hideCloudNotice(); showAuth(true); backAuth(); }
     });
   } catch (e) { console.error("initCloudAuth:", e); showAuth(false); showCloudNotice(); }
+}
+async function oauthSignIn(provider) {
+  if (!db) { showToast("Облако недоступно — вход без интернета невозможен"); return; }
+  const btn = $(provider === "apple" ? "oauthApple" : "oauthGoogle"); btn.disabled = true;
+  try {
+    const redirectTo = location.origin + location.pathname.replace(/[^/]*$/, "");
+    const { error } = await db.auth.signInWithOAuth({ provider, options: { redirectTo, scopes: provider === "apple" ? "name email" : "email profile", queryParams: provider === "google" ? { access_type: "online", prompt: "select_account" } : undefined } });
+    if (error) throw error;
+  } catch (e) { console.error("oauth:", e); showToast(provider === "apple" ? "Вход через Apple не удался: " + humanAuthError(e) : "Вход через Google не удался: " + humanAuthError(e), 4200); btn.disabled = false; }
+}
+function humanAuthError(e) {
+  const m = String(e?.message || e || "");
+  if (/provider is not enabled|Unsupported provider/i.test(m)) return "провайдер не включён в Supabase";
+  if (/network|fetch/i.test(m)) return "нет сети";
+  return m || "неизвестная ошибка";
+}
+function cleanOAuthUrl() {
+  try {
+    const u = new URL(location.href);
+    if (u.searchParams.has("code") || u.searchParams.has("error_description") || u.hash.includes("access_token")) { u.search = ""; u.hash = ""; history.replaceState(null, "", u.toString()); }
+  } catch { /* ignore */ }
+}
+async function deleteOwnAccount() {
+  if (!currentUser || !db) { showToast("Сначала войди в аккаунт"); return; }
+  const ok = await confirmAction({ title: "Удалить аккаунт навсегда?", text: "Будут стёрты профиль, смены, настройки, финансы и привязка Telegram. Это действие нельзя отменить.", okText: "Удалить всё", danger: true });
+  if (!ok) return;
+  const sure = await promptNumber({ title: "Подтверждение", text: "Чтобы подтвердить удаление, введи число 1904.", label: "Код подтверждения", value: "", okText: "Удалить аккаунт" });
+  if (sure !== 1904) { if (sure !== null) showToast("Код не совпал — ничего не удалено"); return; }
+  try {
+    const { error } = await db.rpc("delete_own_account");
+    if (error) throw error;
+  } catch (e) { console.error("deleteOwnAccount:", e); showToast("Не удалось удалить аккаунт: " + humanAuthError(e) + ". Напиши в поддержку.", 5000); return; }
+  try { await db.auth.signOut(); } catch { /* сессия уже недействительна */ }
+  currentUser = null; currentProfile = null; homeDirty = false;
+  state.shifts = {}; state.settings = normalizeSettings({ ...DEFAULTS, scheduleStart: todayKey() }); state.extra = normalizeExtra({});
+  localStorage.removeItem("myPayCloudQueue"); save(); renderAll(); showAuth(true); backAuth(); showToast("Аккаунт удалён. Спасибо, что был с нами.", 4200);
 }
 async function logout() {
   const ok = await confirmAction({ title: "Выйти из аккаунта?", text: "Данные останутся в облаке. На этом устройстве они будут очищены.", okText: "Выйти", danger: false });
@@ -349,6 +405,11 @@ async function cloudLoad() {
     const { data: profile, error: pe } = await db.from("profiles").select("id,name").eq("id", currentUser.id).maybeSingle();
     if (pe) { console.error("cloudLoad profile:", pe); return false; }
     currentProfile = profile || null;
+    // Вход через Apple/Google: имя приходит в user_metadata — сохраняем в профиль один раз, чтобы Telegram-бот и iOS видели его.
+    if (!currentProfile?.name) {
+      const meta = currentUser.user_metadata || {}, oauthName = String(meta.full_name || meta.name || [meta.given_name, meta.family_name].filter(Boolean).join(" ") || "").trim();
+      if (oauthName) { const { data: created } = await db.from("profiles").upsert({ id: currentUser.id, name: oauthName }, { onConflict: "id" }).select().maybeSingle(); if (created) currentProfile = created; }
+    }
 
     // Облако — источник истины для аккаунта: пустой ответ очищает старые локальные смены,
     // чтобы один аккаунт никогда не видел смены другого на том же устройстве.
@@ -732,6 +793,7 @@ function openSettings() {
   const s = state.settings;
   $("settingBase").value = s.basePay; $("settingHoliday").value = s.holidayPay; $("settingPrice").value = s.casePrice;
   $("settingPercent").value = s.percent; $("settingStart").value = s.scheduleStart; $("settingGoal").value = s.goal;
+  $("settingAdvanceDay").value = state.extra.payday?.advanceDay || ""; $("settingSalaryDay").value = state.extra.payday?.salaryDay || "";
   openModal("settingsModal");
 }
 async function saveSettings() {
@@ -739,6 +801,8 @@ async function saveSettings() {
     basePay: $("settingBase").value, holidayPay: $("settingHoliday").value, casePrice: $("settingPrice").value,
     percent: $("settingPercent").value, scheduleStart: $("settingStart").value || state.settings.scheduleStart, goal: $("settingGoal").value
   });
+  const payday = { advanceDay: clamp(Math.round(num($("settingAdvanceDay").value, 0)), 0, 31), salaryDay: clamp(Math.round(num($("settingSalaryDay").value, 0)), 0, 31) };
+  if (JSON.stringify(payday) !== JSON.stringify(state.extra.payday)) { state.extra.payday = payday; cloudSaveExtra(); }
   save();
   const ok = currentUser ? await cloudSaveSettings() : true;
   renderAll(); closeModal("settingsModal");
@@ -807,7 +871,7 @@ function applyTheme() {
   document.body.classList.toggle("dark", dark);
   const status = $("themeStatus"); if (status) status.textContent = t === "system" ? "Как в системе" : t === "dark" ? "Тёмная" : "Светлая";
   const themeIcon = $("themeBtn")?.querySelector("use"); if (themeIcon) themeIcon.setAttribute("href", dark ? "#i-sun" : "#i-moon");
-  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute("content", dark ? "#0f1114" : "#f4f4f2"));
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute("content", dark ? "#0a0c0f" : "#eeeeea"));
 }
 function cycleTheme() {
   const order = ["system", "light", "dark"], i = order.indexOf(state.extra.theme || "system");
@@ -816,57 +880,433 @@ function cycleTheme() {
 }
 
 /* ---------- Финансы: расходы, цели, шаблоны ---------- */
-function currentMonthExpenses(d = new Date()) { const p = monthPrefix(d); return (state.extra.expenses || []).filter(x => String(x.date || "").startsWith(p)); }
+/* ---------- Финансы: счета, операции, лимиты, регулярные платежи, долги, копилки ---------- */
+const INCOME_CATEGORIES = ["Аванс", "Зарплата", "Подработка", "Подарок", "Другое"];
+const GOAL_EMOJI = ["🎯", "📱", "✈️", "🚗", "🏠", "💍", "🎓", "🛋️", "🏖️", "💻", "🎁", "🛡️"];
+const ACCOUNT_TYPES = { card: { label: "Карта", icon: "i-card" }, cash: { label: "Наличные", icon: "i-wallet" }, savings: { label: "Накопительный", icon: "i-target" }, credit: { label: "Кредитка", icon: "i-card" } };
+
+function monthTransactions(d = new Date(), type = null) {
+  const p = monthPrefix(d);
+  return (state.extra.transactions || []).filter(x => String(x.date || "").startsWith(p) && (!type || x.type === type));
+}
+function currentMonthExpenses(d = new Date()) { return monthTransactions(d, "expense"); }
+function sumAmount(list) { return list.reduce((a, v) => a + num(v.amount), 0); }
+function categoryByName(name) { return (state.extra.categories || []).find(c => c.name === name) || null; }
+function categoryEmoji(name, type = "expense") { if (type === "income") return "💰"; if (type === "transfer") return "🔁"; return categoryByName(name)?.emoji || "📦"; }
+function accountById(id) { return (state.extra.accounts || []).find(a => a.id === id) || null; }
+function accountBalance(acc) {
+  let b = num(acc.balance);
+  for (const t of state.extra.transactions || []) {
+    const a = num(t.amount);
+    if (t.type === "income" && t.accountId === acc.id) b += a;
+    else if (t.type === "expense" && t.accountId === acc.id) b -= a;
+    else if (t.type === "transfer") { if (t.accountId === acc.id) b -= a; if (t.toAccountId === acc.id) b += a; }
+  }
+  return b;
+}
+function totalBalance() { return (state.extra.accounts || []).reduce((a, acc) => a + accountBalance(acc), 0); }
+
+// Регулярные платежи: следующая дата и статус «оплачен в этом месяце»
+function recurringNext(r, today = new Date()) {
+  const p = monthPrefix(today), day = clamp(Math.round(num(r.day, 1)), 1, 31);
+  const inMonth = (y, m) => new Date(y, m, Math.min(day, new Date(y, m + 1, 0).getDate()));
+  if (r.lastPaid === p) return inMonth(today.getFullYear(), today.getMonth() + 1);
+  return inMonth(today.getFullYear(), today.getMonth());
+}
+function upcomingRecurring(days = 7, today = new Date()) {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return (state.extra.recurring || []).map(r => ({ r, next: recurringNext(r, today) })).filter(x => (x.next - start) / 86400000 <= days).sort((a, b) => a.next - b.next);
+}
+function unpaidRecurringThisMonth(today = new Date()) {
+  const p = monthPrefix(today);
+  return (state.extra.recurring || []).filter(r => r.lastPaid !== p);
+}
+
+// Выплаты: до аванса / зарплаты
+function paydayInfo(today = new Date()) {
+  const pd = state.extra.payday || {}; const adv = clamp(Math.round(num(pd.advanceDay, 0)), 0, 31), sal = clamp(Math.round(num(pd.salaryDay, 0)), 0, 31);
+  if (!adv && !sal) return null;
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const candidates = [];
+  for (const [type, day] of [["advance", adv], ["salary", sal]]) {
+    if (!day) continue;
+    for (let k = 0; k < 3; k++) {
+      const y = today.getFullYear(), m = today.getMonth() + k;
+      const d = new Date(y, m, Math.min(day, new Date(y, m + 1, 0).getDate()));
+      if (d >= start) { candidates.push({ type, date: d }); break; }
+    }
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a.date - b.date);
+  const next = candidates[0], days = Math.round((next.date - start) / 86400000);
+  // Оценка: аванс ≈ заработок за 1–15 число текущего месяца, зарплата ≈ остаток за прошлый месяц.
+  let expected = 0;
+  if (next.type === "advance") {
+    const m = next.date.getMonth() === today.getMonth() ? today : next.date;
+    expected = monthEntries(m).filter(e => Number(e.k.slice(8, 10)) <= 15).reduce((a, e) => a + num(e.total), 0);
+  } else {
+    const prev = new Date(next.date.getFullYear(), next.date.getMonth() - 1, 1);
+    const es = monthEntries(prev), total = es.reduce((a, e) => a + num(e.total), 0);
+    const advPart = adv ? es.filter(e => Number(e.k.slice(8, 10)) <= 15).reduce((a, e) => a + num(e.total), 0) : 0;
+    expected = Math.max(0, total - advPart);
+  }
+  return { type: next.type, date: next.date, days, expected };
+}
+
 function financeNumbers() {
   const d = new Date(), es = monthEntries(d), income = monthSum(es);
-  const expenses = currentMonthExpenses(d).reduce((a, v) => a + num(v.amount), 0);
-  const free = income - expenses, forecast = monthForecast(d) ?? income, goal = num(state.settings.goal);
+  const expenses = sumAmount(monthTransactions(d, "expense")), received = sumAmount(monthTransactions(d, "income"));
+  const free = income - expenses, goal = num(state.settings.goal);
   const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(), remainingDays = Math.max(1, days - d.getDate() + 1);
-  const daily = Math.max(0, free) / remainingDays, rate = income > 0 ? Math.round(clamp(free / income, 0, 1) * 100) : 0;
-  return { income, expenses, free, forecast, goal, remainingDays, daily, rate };
+  const upcoming = sumAmount(unpaidRecurringThisMonth(d)), forecast = (monthForecast(d) ?? income) - expenses - upcoming;
+  const daily = Math.max(0, free - upcoming) / remainingDays, rate = income > 0 ? Math.round(clamp(free / income, 0, 1) * 100) : 0;
+  return { income, expenses, received, free, forecast, upcoming, goal, remainingDays, daily, rate, balance: totalBalance() };
 }
+
+// Рекомендации «советника» — правила без ИИ, зато честные и объяснимые.
+function buildInsights() {
+  const out = [], d = new Date(), n = financeNumbers(), today = todayKey();
+  const push = (tone, text) => out.push({ tone, text });
+  const due = upcomingRecurring(7, d);
+  if (due.length) {
+    const sum = sumAmount(due.map(x => x.r));
+    const first = due[0], firstDays = Math.round((first.next - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    const when = firstDays === 0 ? "сегодня" : firstDays === 1 ? "завтра" : firstDays < 0 ? `просрочен на ${-firstDays} ${plural(-firstDays, "день", "дня", "дней")}` : `через ${firstDays} ${plural(firstDays, "день", "дня", "дней")}`;
+    if (sum > Math.max(0, n.free)) push("warn", `Ближайшие платежи на ${money(sum)} (${escapeHtml(first.r.name)} ${when}) — свободных денег ${money(Math.max(0, n.free))}, не хватает ${money(sum - Math.max(0, n.free))}.`);
+    else push("info", `${escapeHtml(first.r.name)} ${money(first.r.amount)} — ${when}. После всех платежей недели останется ${money(n.free - sum)}.`);
+  }
+  const spentBy = {}; monthTransactions(d, "expense").forEach(t => spentBy[t.category] = (spentBy[t.category] || 0) + num(t.amount));
+  for (const c of state.extra.categories || []) {
+    const limit = num(c.limit); if (!limit) continue;
+    const spent = spentBy[c.name] || 0, pct = spent / limit;
+    if (pct >= 1) push("warn", `Лимит «${escapeHtml(c.name)}» превышен на ${money(spent - limit)} — в этом месяце лучше притормозить.`);
+    else if (pct >= .8) push("info", `Лимит «${escapeHtml(c.name)}» почти исчерпан: ${Math.round(pct * 100)}% (${money(limit - spent)} в запасе).`);
+  }
+  const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1), dayN = d.getDate();
+  const prevSame = sumAmount(monthTransactions(prev, "expense").filter(t => Number(t.date.slice(8, 10)) <= dayN));
+  if (prevSame > 0 && n.expenses > prevSame * 1.15) push("warn", `Тратишь на ${Math.round((n.expenses / prevSame - 1) * 100)}% больше, чем в прошлом месяце к этому дню (${money(n.expenses)} против ${money(prevSame)}).`);
+  else if (prevSame > 0 && n.expenses < prevSame * .85) push("good", `Расходы ниже прошлого месяца на ${Math.round((1 - n.expenses / prevSame) * 100)}% — так держать 👍`);
+  const top = Object.entries(spentBy).sort((a, b) => b[1] - a[1])[0];
+  if (top && n.expenses > 0 && top[1] / n.expenses >= .45 && Object.keys(spentBy).length > 1) push("info", `${Math.round(top[1] / n.expenses * 100)}% расходов месяца — «${escapeHtml(top[0])}». Если хочется экономить, начинать стоит здесь.`);
+  for (const g of state.extra.goals || []) {
+    const left = num(g.amount) - num(g.saved); if (left <= 0 || !isDateKey(g.deadline)) continue;
+    const months = Math.max(1, Math.ceil((fromKey(g.deadline) - d) / (30.4 * 86400000)));
+    if (fromKey(g.deadline) < d) { push("warn", `Срок цели «${escapeHtml(g.name)}» прошёл, не хватает ${money(left)}. Передвинь дату или пополни копилку.`); continue; }
+    push("info", `Чтобы успеть с «${escapeHtml(g.name)}» к ${dateText(fromKey(g.deadline), { day: "numeric", month: "long" })}, откладывай ≈ ${money(left / months)} в месяц.`);
+  }
+  for (const dbt of state.extra.debts || []) {
+    const left = num(dbt.amount) - num(dbt.paid); if (left <= 0 || !isDateKey(dbt.due) || dbt.due >= today) continue;
+    const days = Math.round((fromKey(today) - fromKey(dbt.due)) / 86400000);
+    push("warn", dbt.direction === "owed" ? `${escapeHtml(dbt.person)} задерживает ${money(left)} уже ${days} ${plural(days, "день", "дня", "дней")} — самое время напомнить.` : `Долг ${escapeHtml(dbt.person)} на ${money(left)} просрочен на ${days} ${plural(days, "день", "дня", "дней")}.`);
+  }
+  const pay = paydayInfo(d);
+  if (pay && !due.length) push("info", `${pay.type === "advance" ? "Аванс" : "Зарплата"} через ${pay.days} ${plural(pay.days, "день", "дня", "дней")}${pay.expected ? ` (≈ ${money(pay.expected)})` : ""}. До этого можно тратить ≈ ${money(Math.max(0, n.free) / Math.max(1, pay.days))} в день.`);
+  if (n.income > 0 && n.rate >= 30 && n.expenses > 0) push("good", `Остаётся ${n.rate}% заработка — отличный темп. Отложи часть в копилку, пока не потратилось.`);
+  if (!out.length) push("info", n.income > 0 ? "Пока всё ровно: расходы под контролем, платежей на неделе нет. Добавь лимиты и цели — подскажу больше." : "Внеси смены и расходы — начну подсказывать, где деньги утекают и сколько можно отложить.");
+  const order = { warn: 0, info: 1, good: 2 };
+  return out.sort((a, b) => order[a.tone] - order[b.tone]).slice(0, 4);
+}
+
 function renderFinance() {
   if (!$("financeIncome")) return;
   const n = financeNumbers();
   $("financeIncome").textContent = money(n.income); $("financeExpenses").textContent = money(n.expenses);
-  $("freeBalance").textContent = money(n.free); $("financeForecast").textContent = money(n.forecast);
-  $("financeGoalLeft").textContent = money(Math.max(0, n.goal - n.income));
-  $("dailyBudget").textContent = n.income <= 0 && n.expenses <= 0 ? "Внеси смены и расходы — посчитаем, сколько остаётся" : n.free > 0 ? `≈ ${money(n.daily)} в день до конца месяца` : "Расходы уже выше дохода за месяц";
+  $("financeReceived").textContent = money(n.received); $("financeForecast").textContent = money(n.forecast);
+  $("freeBalance").textContent = money(n.free);
+  $("dailyBudget").textContent = n.income <= 0 && n.expenses <= 0 ? "Внеси смены и расходы — посчитаем, сколько остаётся" : n.free > 0 ? `≈ ${money(n.daily)} в день до конца месяца${n.upcoming ? " с учётом платежей" : ""}` : "Расходы уже выше заработка за месяц";
   $("savingsRate").textContent = n.rate + "%"; $("savingsRing").style.setProperty("--p", n.rate);
-  renderGoals(); renderExpenses(); renderTemplates(); checkGoalCelebration();
+  renderPayday(); renderAccounts(); renderInsights2(); renderLimits(); renderRecurring(); renderDebts(); renderGoals(); renderTransactions(); renderTemplates(); checkGoalCelebration();
+}
+function renderPayday() {
+  const strip = $("paydayStrip"); if (!strip) return;
+  const p = paydayInfo();
+  strip.hidden = false;
+  if (!p) { $("paydayTitle").textContent = "Когда аванс и зарплата?"; $("paydayMeta").textContent = "Укажи даты — покажу обратный отсчёт"; return; }
+  const label = p.type === "advance" ? "аванса" : "зарплаты";
+  $("paydayTitle").textContent = p.days === 0 ? `Сегодня день ${label} 🎉` : `До ${label} ${p.days} ${plural(p.days, "день", "дня", "дней")}`;
+  $("paydayMeta").textContent = `${dateText(p.date, { day: "numeric", month: "long" })}${p.expected ? ` · ожидаемо ≈ ${money(p.expected)}` : ""}`;
+}
+function renderAccounts() {
+  const row = $("accountsRow"); if (!row) return;
+  const accs = state.extra.accounts || [];
+  if (!accs.length) { row.innerHTML = '<button type="button" class="account-card account-empty" id="accountsEmptyBtn"><b>Добавь счета</b><small>Карта, наличные, накопительный — балансы будут считаться сами</small></button>'; $("accountsEmptyBtn").onclick = () => openAccountModal(); return; }
+  const total = totalBalance();
+  row.innerHTML = `<div class="account-card account-total"><small>Всего на счетах</small><b class="num">${money(total)}</b><span>${accs.length} ${plural(accs.length, "счёт", "счёта", "счетов")}</span></div>` +
+    accs.map(a => { const t = ACCOUNT_TYPES[a.type] || ACCOUNT_TYPES.card, b = accountBalance(a); return `<button type="button" class="account-card ${b < 0 ? "is-negative" : ""}" data-acc="${escapeHtml(a.id)}"><span class="account-icon">${icon(t.icon)}</span><small>${escapeHtml(a.name)}</small><b class="num">${money(b)}</b><span>${t.label}</span></button>`; }).join("");
+  row.querySelectorAll("[data-acc]").forEach(b => b.onclick = () => openAccountModal(b.dataset.acc));
+}
+function renderInsights2() {
+  const box = $("insightsList"); if (!box) return;
+  const icons = { warn: "⚠️", info: "💡", good: "✅" };
+  box.innerHTML = buildInsights().map(i => `<div class="insight insight-${i.tone}"><span>${icons[i.tone]}</span><p>${i.text}</p></div>`).join("");
+}
+function renderLimits() {
+  const box = $("limitsList"); if (!box) return;
+  const spentBy = {}; monthTransactions(new Date(), "expense").forEach(t => spentBy[t.category] = (spentBy[t.category] || 0) + num(t.amount));
+  const cats = (state.extra.categories || []).filter(c => num(c.limit) > 0 || spentBy[c.name]);
+  Object.keys(spentBy).forEach(name => { if (!cats.find(c => c.name === name)) cats.push({ id: "tmp_" + name, name, emoji: "📦", limit: 0 }); });
+  if (!cats.length) { box.innerHTML = '<div class="empty">Расходов пока нет. Добавь первую трату или задай лимиты по категориям.</div>'; return; }
+  const max = Math.max(...cats.map(c => Math.max(spentBy[c.name] || 0, num(c.limit))), 1);
+  box.innerHTML = cats.sort((a, b) => (spentBy[b.name] || 0) - (spentBy[a.name] || 0)).map(c => {
+    const spent = spentBy[c.name] || 0, limit = num(c.limit), pct = limit ? Math.min(100, Math.round(spent / limit * 100)) : Math.round(spent / max * 100);
+    const state_ = limit && spent >= limit ? "is-over" : limit && spent / limit >= .8 ? "is-warn" : "";
+    return `<div class="limit-row ${state_}"><div class="limit-head"><span>${c.emoji || "📦"} ${escapeHtml(c.name)}</span><b class="num">${money(spent)}${limit ? ` <em>/ ${money(limit)}</em>` : ""}</b></div><div class="track"><i style="width:${pct}%"></i></div>${limit ? `<small>${spent >= limit ? "Превышен на " + money(spent - limit) : "Осталось " + money(limit - spent)}</small>` : ""}</div>`;
+  }).join("");
+}
+function renderRecurring() {
+  const box = $("recurringList"); if (!box) return;
+  const list = (state.extra.recurring || []).map(r => ({ r, next: recurringNext(r) })).sort((a, b) => a.next - b.next);
+  if (!list.length) { box.innerHTML = '<div class="empty">Аренда, кредит, связь, подписки — добавь, и я напомню заранее и учту в остатке.</div>'; return; }
+  const p = monthPrefix(new Date()), start = fromKey(todayKey());
+  box.innerHTML = list.map(({ r, next }) => {
+    const days = Math.round((next - start) / 86400000), paid = r.lastPaid === p;
+    const when = paid ? "оплачено в этом месяце" : days < 0 ? `просрочен на ${-days} ${plural(-days, "день", "дня", "дней")}` : days === 0 ? "сегодня" : days === 1 ? "завтра" : `через ${days} ${plural(days, "день", "дня", "дней")} · ${dateText(next, { day: "numeric", month: "short" })}`;
+    return `<div class="rec-row ${paid ? "is-paid" : days <= 3 ? "is-soon" : ""}"><button type="button" class="rec-main" data-rec-edit="${escapeHtml(r.id)}"><b>${categoryEmoji(r.category)} ${escapeHtml(r.name)}</b><small>${when}</small></button><strong class="num">${money(r.amount)}</strong>${paid ? `<span class="rec-done">${icon("i-check")}</span>` : `<button type="button" class="btn btn-soft btn-sm" data-rec-pay="${escapeHtml(r.id)}">Оплатил</button>`}</div>`;
+  }).join("");
+  box.querySelectorAll("[data-rec-pay]").forEach(b => b.onclick = () => payRecurring(b.dataset.recPay));
+  box.querySelectorAll("[data-rec-edit]").forEach(b => b.onclick = () => openRecurringModal(b.dataset.recEdit));
+}
+function renderDebts() {
+  const box = $("debtsList"), totals = $("debtTotals"); if (!box) return;
+  const debts = (state.extra.debts || []).filter(x => num(x.amount) - num(x.paid) > 0.001);
+  const iOwe = sumAmount(debts.filter(x => x.direction !== "owed").map(x => ({ amount: num(x.amount) - num(x.paid) })));
+  const owed = sumAmount(debts.filter(x => x.direction === "owed").map(x => ({ amount: num(x.amount) - num(x.paid) })));
+  totals.innerHTML = debts.length ? `<div class="debt-total"><small>Я должен</small><b class="num">${money(iOwe)}</b></div><div class="debt-total"><small>Мне должны</small><b class="num">${money(owed)}</b></div><div class="debt-total"><small>Баланс</small><b class="num ${owed - iOwe >= 0 ? "pos" : "neg"}">${owed - iOwe >= 0 ? "+" : "−"}${money(Math.abs(owed - iOwe))}</b></div>` : "";
+  if (!debts.length) { box.innerHTML = '<div class="empty">Одолжил другу или взял до зарплаты — запиши, чтобы ничего не потерялось.</div>'; return; }
+  const today = todayKey();
+  box.innerHTML = debts.sort((a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999"))).map(x => {
+    const left = num(x.amount) - num(x.paid), pct = Math.round(num(x.paid) / Math.max(1, num(x.amount)) * 100), overdue = isDateKey(x.due) && x.due < today;
+    return `<div class="debt-row ${x.direction === "owed" ? "is-owed" : "is-mine"} ${overdue ? "is-overdue" : ""}"><button type="button" class="debt-main" data-debt-edit="${escapeHtml(x.id)}"><b>${x.direction === "owed" ? "→ " : "← "}${escapeHtml(x.person)}</b><small>${x.direction === "owed" ? "должен тебе" : "ты должен"} · ${isDateKey(x.due) ? (overdue ? "просрочено с " : "до ") + dateText(fromKey(x.due), { day: "numeric", month: "short" }) : "без срока"}${x.note ? " · " + escapeHtml(x.note) : ""}</small><div class="track"><i style="width:${pct}%"></i></div></button><div class="debt-side"><strong class="num">${money(left)}</strong><button type="button" class="btn btn-soft btn-sm" data-debt-pay="${escapeHtml(x.id)}">${x.direction === "owed" ? "Вернули" : "Вернул"}</button></div></div>`;
+  }).join("");
+  box.querySelectorAll("[data-debt-pay]").forEach(b => b.onclick = () => addDebtPayment(b.dataset.debtPay));
+  box.querySelectorAll("[data-debt-edit]").forEach(b => b.onclick = () => openDebtModal(b.dataset.debtEdit));
+}
+function goalForecast(g) {
+  const left = num(g.amount) - num(g.saved); if (left <= 0) return { done: true };
+  const deposits = (g.deposits || []).filter(x => isDateKey(x.date)).sort((a, b) => a.date.localeCompare(b.date));
+  if (deposits.length < 2) return { done: false };
+  const spanDays = Math.max(7, (fromKey(deposits.at(-1).date) - fromKey(deposits[0].date)) / 86400000 + 1);
+  const perDay = sumAmount(deposits) / spanDays; if (perDay <= 0) return { done: false };
+  const eta = new Date(); eta.setDate(eta.getDate() + Math.ceil(left / perDay));
+  return { done: false, eta, perMonth: perDay * 30.4 };
 }
 function renderGoals() {
   const box = $("goalsList"); if (!box) return;
   const goals = state.extra.goals || [];
-  if (!goals.length) { box.innerHTML = '<div class="empty">Целей пока нет. Добавь первую — приложение посчитает прогресс и остаток.</div>'; return; }
+  if (!goals.length) { box.innerHTML = '<div class="empty">Копилок пока нет. Создай первую — покажу прогресс, срок и сколько откладывать.</div>'; return; }
   box.innerHTML = goals.map(g => {
-    const amount = Math.max(1, num(g.amount, 1)), saved = Math.max(0, num(g.saved)), pct = Math.min(100, Math.round(saved / amount * 100));
+    const amount = Math.max(1, num(g.amount, 1)), saved = Math.max(0, num(g.saved)), pct = Math.min(100, Math.round(saved / amount * 100)), f = goalForecast(g);
+    let meta = pct >= 100 ? "Цель достигнута 🎉" : "осталось " + money(Math.max(0, amount - saved));
+    let hint = "";
+    if (pct < 100 && isDateKey(g.deadline)) {
+      const months = Math.max(1, Math.ceil((fromKey(g.deadline) - new Date()) / (30.4 * 86400000)));
+      hint = fromKey(g.deadline) < new Date() ? "срок прошёл" : `к ${dateText(fromKey(g.deadline), { day: "numeric", month: "short" })} · ≈ ${money((amount - saved) / months)} в мес.`;
+    } else if (pct < 100 && f.eta) hint = `при таком темпе — к ${dateText(f.eta, { day: "numeric", month: "short" })}`;
     return `<div class="goal-item" data-goal="${escapeHtml(g.id)}">
-      <div class="goal-top"><b>${escapeHtml(g.name)}</b><span class="num">${money(saved)} / ${money(amount)}</span></div>
+      <div class="goal-top"><span class="goal-emoji">${g.emoji || "🎯"}</span><b>${escapeHtml(g.name)}</b><span class="num">${money(saved)} / ${money(amount)}</span></div>
       <div class="track"><i class="${pct >= 100 ? "is-done" : ""}" style="width:${pct}%"></i></div>
-      <div class="goal-meta"><span>${pct}%</span><span>${pct >= 100 ? "Цель достигнута" : "осталось " + money(Math.max(0, amount - saved))}</span></div>
-      <div class="goal-actions"><button type="button" class="btn btn-soft btn-sm" data-goal-add="${escapeHtml(g.id)}">${icon("i-plus")}Пополнить</button><button type="button" class="btn btn-soft btn-sm danger" data-goal-del="${escapeHtml(g.id)}">${icon("i-trash")}Удалить</button></div>
+      <div class="goal-meta"><span>${pct}%${hint ? " · " + hint : ""}</span><span>${meta}</span></div>
+      <div class="goal-actions"><button type="button" class="btn btn-soft btn-sm" data-goal-add="${escapeHtml(g.id)}">${icon("i-plus")}Пополнить</button><button type="button" class="btn btn-ghost btn-sm" data-goal-hist="${escapeHtml(g.id)}">${(g.deposits || []).length} ${plural((g.deposits || []).length, "взнос", "взноса", "взносов")}</button><button type="button" class="btn btn-soft btn-sm danger" data-goal-del="${escapeHtml(g.id)}">${icon("i-trash")}</button></div>
     </div>`;
   }).join("");
   box.querySelectorAll("[data-goal-add]").forEach(b => b.onclick = () => topUpGoal(b.dataset.goalAdd));
   box.querySelectorAll("[data-goal-del]").forEach(b => b.onclick = () => deleteGoal(b.dataset.goalDel));
+  box.querySelectorAll("[data-goal-hist]").forEach(b => b.onclick = () => showGoalHistory(b.dataset.goalHist));
 }
-function openGoalModal() { $("goalName").value = ""; $("goalAmount").value = ""; $("goalSaved").value = "0"; openModal("goalModal"); setTimeout(() => $("goalName").focus(), 80); }
+let txFilter = "all", txLimit = 12;
+function renderTransactions() {
+  const list = $("expenseList"), more = $("txMoreBtn"); if (!list) return;
+  const all = (state.extra.transactions || []).filter(t => txFilter === "all" || t.type === txFilter).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.id).localeCompare(String(a.id)));
+  if (!all.length) { list.innerHTML = '<div class="empty">Операций пока нет. Нажми «Расход» или «Доход» вверху экрана.</div>'; more.classList.add("hidden"); return; }
+  let lastMonth = "";
+  list.innerHTML = all.slice(0, txLimit).map(t => {
+    const m = String(t.date).slice(0, 7), head = m !== lastMonth ? `<div class="tx-month">${dateText(fromKey(t.date), { month: "long", year: "numeric" }).replace(" г.", "")}</div>` : ""; lastMonth = m;
+    const acc = accountById(t.accountId), to = accountById(t.toAccountId);
+    const title = t.type === "transfer" ? `${acc ? escapeHtml(acc.name) : "?"} → ${to ? escapeHtml(to.name) : "?"}` : escapeHtml(t.category || (t.type === "income" ? "Доход" : "Расход"));
+    const sub = [dateText(fromKey(t.date), { day: "numeric", month: "short" }), t.type !== "transfer" && acc ? escapeHtml(acc.name) : "", t.note ? escapeHtml(t.note) : ""].filter(Boolean).join(" · ");
+    const sign = t.type === "income" ? "+" : t.type === "expense" ? "−" : "";
+    return `${head}<div class="expense-row tx-${t.type}"><span class="tx-emoji">${categoryEmoji(t.category, t.type)}</span><div><b>${title}</b><small>${sub}</small></div><strong class="num">${sign}${money(t.amount)}</strong><button type="button" class="expense-delete" data-tx-del="${escapeHtml(t.id)}" aria-label="Удалить операцию">${icon("i-x")}</button></div>`;
+  }).join("");
+  more.classList.toggle("hidden", all.length <= txLimit);
+  list.querySelectorAll("[data-tx-del]").forEach(b => b.onclick = () => deleteTransaction(b.dataset.txDel));
+}
+
+/* --- модалки финансов --- */
+let txType = "expense";
+function fillSelect(sel, items, value) { sel.innerHTML = items.map(i => `<option value="${escapeHtml(i.value)}">${escapeHtml(i.label)}</option>`).join(""); if (value !== undefined) sel.value = value; }
+function accountOptions(withNone = true) { const list = (state.extra.accounts || []).map(a => ({ value: a.id, label: a.name })); return withNone ? [{ value: "", label: "Без счёта" }, ...list] : list; }
+function setTxType(type) {
+  txType = type;
+  document.querySelectorAll("#txTypeSeg button").forEach(b => { const on = b.dataset.type === type; b.classList.toggle("active", on); b.setAttribute("aria-selected", on); });
+  const cats = type === "income" ? INCOME_CATEGORIES.map(c => ({ value: c, label: c })) : (state.extra.categories || []).map(c => ({ value: c.name, label: `${c.emoji || ""} ${c.name}`.trim() }));
+  fillSelect($("expenseCategory"), cats);
+  $("txCategoryWrap").classList.toggle("hidden", type === "transfer");
+  $("txToAccountWrap").classList.toggle("hidden", type !== "transfer");
+  fillSelect($("txAccount"), accountOptions(type !== "transfer")); fillSelect($("txToAccount"), accountOptions(false));
+  const accs = state.extra.accounts || [];
+  if (type === "transfer" && accs.length > 1) $("txToAccount").value = accs[1].id;
+  $("expenseTitle").textContent = type === "expense" ? "Новая трата" : type === "income" ? "Новый доход" : "Перевод между счетами";
+  $("expenseSave").querySelector("span").textContent = type === "expense" ? "Добавить расход" : type === "income" ? "Добавить доход" : "Перевести";
+}
+function openExpenseModal(type = "expense") {
+  $("expenseAmount").value = ""; $("expenseDate").value = todayKey(); $("expenseNote").value = "";
+  setTxType(type); openModal("expenseModal"); setTimeout(() => $("expenseAmount").focus(), 80);
+}
+async function saveExpense() {
+  const amount = Math.max(0, num($("expenseAmount").value)), date = isDateKey($("expenseDate").value) ? $("expenseDate").value : todayKey(), note = $("expenseNote").value.trim();
+  if (!amount) { showToast("Укажи сумму"); return; }
+  const tx = { id: uid("tx"), type: txType, amount, category: txType === "transfer" ? "" : $("expenseCategory").value, accountId: $("txAccount").value || null, toAccountId: txType === "transfer" ? $("txToAccount").value || null : null, date, note };
+  if (txType === "transfer" && (!tx.accountId || !tx.toAccountId || tx.accountId === tx.toAccountId)) { showToast("Выбери два разных счёта"); return; }
+  state.extra.transactions.push(tx); save(); cloudSaveExtra();
+  closeModal("expenseModal"); renderFinance(); showToast(txType === "expense" ? "Расход добавлен" : txType === "income" ? "Доход добавлен" : "Перевод записан");
+}
+async function deleteExpense(id) { return deleteTransaction(id); }
+async function deleteTransaction(id) {
+  state.extra.transactions = state.extra.transactions.filter(x => x.id !== id); save(); cloudSaveExtra(); renderFinance(); showToast("Операция удалена");
+}
+
+let editingAccount = null;
+function openAccountModal(id = null) {
+  const a = id ? accountById(id) : null; editingAccount = a ? a.id : null;
+  $("accountTitle").textContent = a ? "Счёт" : "Новый счёт";
+  $("accountName").value = a ? a.name : ""; $("accountType").value = a ? a.type : "card";
+  $("accountBalance").value = a ? String(Math.round(accountBalance(a) * 100) / 100) : "";
+  $("accountDelete").classList.toggle("hidden", !a);
+  openModal("accountModal"); setTimeout(() => $("accountName").focus(), 80);
+}
+async function saveAccount() {
+  const name = $("accountName").value.trim(), type = $("accountType").value, wanted = num($("accountBalance").value);
+  if (!name) { showToast("Назови счёт"); return; }
+  if (editingAccount) {
+    const a = accountById(editingAccount); if (!a) return;
+    const current = accountBalance(a); a.name = name; a.type = type; a.balance = num(a.balance) + (wanted - current); // корректируем стартовый остаток так, чтобы текущий стал введённым
+  } else state.extra.accounts.push({ id: uid("acc"), name, type, balance: wanted });
+  save(); cloudSaveExtra(); closeModal("accountModal"); renderFinance(); showToast("Счёт сохранён");
+}
+async function deleteAccount() {
+  const a = accountById(editingAccount); if (!a) return;
+  if (!await confirmAction({ title: "Удалить счёт?", text: `«${a.name}» будет удалён. Операции останутся, но перестанут относиться к счёту.` })) return;
+  state.extra.accounts = state.extra.accounts.filter(x => x.id !== a.id);
+  state.extra.transactions.forEach(t => { if (t.accountId === a.id) t.accountId = null; if (t.toAccountId === a.id) t.toAccountId = null; });
+  save(); cloudSaveExtra(); closeModal("accountModal"); renderFinance();
+}
+
+function openLimitsModal() {
+  const box = $("limitsEditor");
+  box.innerHTML = (state.extra.categories || []).map(c => `<div class="limit-edit" data-cat="${escapeHtml(c.id)}"><span>${c.emoji || "📦"} ${escapeHtml(c.name)}</span><input type="number" min="0" step="500" inputmode="decimal" placeholder="без лимита" value="${num(c.limit) ? num(c.limit) : ""}"><button type="button" class="icon-btn icon-btn-sm" data-cat-del="${escapeHtml(c.id)}" aria-label="Удалить категорию">${icon("i-x")}</button></div>`).join("");
+  box.querySelectorAll("[data-cat-del]").forEach(b => b.onclick = async () => {
+    const c = state.extra.categories.find(x => x.id === b.dataset.catDel); if (!c) return;
+    const used = (state.extra.transactions || []).some(t => t.type === "expense" && t.category === c.name);
+    if (used) { showToast("Категория используется в операциях — сначала удали их"); return; }
+    state.extra.categories = state.extra.categories.filter(x => x.id !== c.id); save(); cloudSaveExtra(); openLimitsModal();
+  });
+  $("newCategoryName").value = ""; openModal("limitsModal");
+}
+function addCategory() {
+  const name = $("newCategoryName").value.trim(); if (!name) return;
+  if (categoryByName(name)) { showToast("Такая категория уже есть"); return; }
+  state.extra.categories.push({ id: uid("cat"), name, emoji: "🏷️", limit: 0 }); save(); cloudSaveExtra(); openLimitsModal();
+}
+async function saveLimits() {
+  document.querySelectorAll("#limitsEditor .limit-edit").forEach(row => { const c = state.extra.categories.find(x => x.id === row.dataset.cat); if (c) c.limit = Math.max(0, num(row.querySelector("input").value)); });
+  save(); cloudSaveExtra(); closeModal("limitsModal"); renderFinance(); showToast("Лимиты сохранены");
+}
+
+let editingRecurring = null;
+function openRecurringModal(id = null) {
+  const r = id ? (state.extra.recurring || []).find(x => x.id === id) : null; editingRecurring = r ? r.id : null;
+  $("recurringTitle").textContent = r ? "Платёж" : "Новый платёж";
+  $("recName").value = r ? r.name : ""; $("recAmount").value = r ? r.amount : ""; $("recDay").value = r ? r.day : new Date().getDate();
+  fillSelect($("recCategory"), (state.extra.categories || []).map(c => ({ value: c.name, label: `${c.emoji || ""} ${c.name}`.trim() })), r ? r.category : "Жильё");
+  fillSelect($("recAccount"), accountOptions(true), r ? r.accountId || "" : "");
+  $("recurringDelete").classList.toggle("hidden", !r);
+  openModal("recurringModal"); setTimeout(() => $("recName").focus(), 80);
+}
+async function saveRecurring() {
+  const name = $("recName").value.trim(), amount = Math.max(0, num($("recAmount").value)), day = clamp(Math.round(num($("recDay").value, 1)), 1, 31);
+  if (!name || !amount) { showToast("Укажи название и сумму"); return; }
+  const data = { name, amount, day, category: $("recCategory").value, accountId: $("recAccount").value || null };
+  const r = editingRecurring ? state.extra.recurring.find(x => x.id === editingRecurring) : null;
+  if (r) Object.assign(r, data); else state.extra.recurring.push({ id: uid("rec"), lastPaid: null, ...data });
+  save(); cloudSaveExtra(); closeModal("recurringModal"); renderFinance(); showToast("Платёж сохранён");
+}
+async function deleteRecurring() {
+  const r = state.extra.recurring.find(x => x.id === editingRecurring); if (!r) return;
+  if (!await confirmAction({ title: "Удалить платёж?", text: `«${r.name}» больше не будет напоминать о себе.` })) return;
+  state.extra.recurring = state.extra.recurring.filter(x => x.id !== r.id); save(); cloudSaveExtra(); closeModal("recurringModal"); renderFinance();
+}
+async function payRecurring(id) {
+  const r = (state.extra.recurring || []).find(x => x.id === id); if (!r) return;
+  state.extra.transactions.push({ id: uid("tx"), type: "expense", amount: num(r.amount), category: r.category || "Другое", accountId: r.accountId || null, toAccountId: null, date: todayKey(), note: r.name });
+  r.lastPaid = monthPrefix(new Date()); save(); cloudSaveExtra(); renderFinance(); showToast(`${r.name}: ${money(r.amount)} записано в расходы`);
+}
+
+let editingDebt = null, debtDir = "i_owe";
+function setDebtDir(dir) { debtDir = dir; document.querySelectorAll("#debtDirSeg button").forEach(b => { const on = b.dataset.dir === dir; b.classList.toggle("active", on); b.setAttribute("aria-selected", on); }); }
+function openDebtModal(id = null) {
+  const x = id ? (state.extra.debts || []).find(d => d.id === id) : null; editingDebt = x ? x.id : null;
+  $("debtTitle").textContent = x ? "Долг" : "Новый долг";
+  setDebtDir(x ? x.direction : "i_owe");
+  $("debtPerson").value = x ? x.person : ""; $("debtAmount").value = x ? x.amount : ""; $("debtDue").value = x && isDateKey(x.due) ? x.due : ""; $("debtNote").value = x ? x.note || "" : "";
+  $("debtDelete").classList.toggle("hidden", !x);
+  openModal("debtModal"); setTimeout(() => $("debtPerson").focus(), 80);
+}
+async function saveDebt() {
+  const person = $("debtPerson").value.trim(), amount = Math.max(0, num($("debtAmount").value)), due = isDateKey($("debtDue").value) ? $("debtDue").value : null, note = $("debtNote").value.trim();
+  if (!person || !amount) { showToast("Укажи имя и сумму"); return; }
+  const x = editingDebt ? state.extra.debts.find(d => d.id === editingDebt) : null;
+  if (x) Object.assign(x, { person, amount, due, note, direction: debtDir }); else state.extra.debts.push({ id: uid("debt"), person, amount, paid: 0, due, note, direction: debtDir, createdAt: todayKey() });
+  save(); cloudSaveExtra(); closeModal("debtModal"); renderFinance(); showToast("Долг сохранён");
+}
+async function deleteDebt() {
+  const x = state.extra.debts.find(d => d.id === editingDebt); if (!x) return;
+  if (!await confirmAction({ title: "Удалить долг?", text: `Запись «${x.person} · ${money(x.amount)}» будет удалена.` })) return;
+  state.extra.debts = state.extra.debts.filter(d => d.id !== x.id); save(); cloudSaveExtra(); closeModal("debtModal"); renderFinance();
+}
+async function addDebtPayment(id) {
+  const x = (state.extra.debts || []).find(d => d.id === id); if (!x) return;
+  const left = num(x.amount) - num(x.paid);
+  const v = await promptNumber({ title: x.direction === "owed" ? "Сколько вернули?" : "Сколько вернул?", text: `${x.person}: осталось ${money(left)}.`, label: "Сумма, ₽", value: Math.round(left), okText: "Записать" });
+  if (v === null || v <= 0) return;
+  x.paid = Math.min(num(x.amount), num(x.paid) + v); save(); cloudSaveExtra(); renderFinance();
+  if (num(x.amount) - num(x.paid) <= 0.001) { showToast("Долг закрыт ✓"); confetti(); }
+}
+
+let goalEmoji = GOAL_EMOJI[0];
+function renderGoalEmojiRow() {
+  const row = $("goalEmojiRow"); if (!row) return;
+  row.innerHTML = GOAL_EMOJI.map(e => `<button type="button" class="emoji-pick ${e === goalEmoji ? "active" : ""}" data-emoji="${e}" role="radio" aria-checked="${e === goalEmoji}">${e}</button>`).join("");
+  row.querySelectorAll("[data-emoji]").forEach(b => b.onclick = () => { goalEmoji = b.dataset.emoji; renderGoalEmojiRow(); });
+}
+function openGoalModal() { goalEmoji = GOAL_EMOJI[0]; renderGoalEmojiRow(); $("goalName").value = ""; $("goalAmount").value = ""; $("goalSaved").value = "0"; $("goalDeadline").value = ""; openModal("goalModal"); setTimeout(() => $("goalName").focus(), 80); }
 async function saveGoal() {
-  const name = $("goalName").value.trim(), amount = Math.max(0, num($("goalAmount").value)), saved = Math.max(0, num($("goalSaved").value));
+  const name = $("goalName").value.trim(), amount = Math.max(0, num($("goalAmount").value)), saved = Math.max(0, num($("goalSaved").value)), deadline = isDateKey($("goalDeadline").value) ? $("goalDeadline").value : null;
   if (!name || !amount) { showToast("Укажи название и сумму цели"); return; }
-  state.extra.goals.push({ id: uid("goal"), name, amount, saved }); save(); cloudSaveExtra();
-  closeModal("goalModal"); renderFinance(); showToast("Цель добавлена 🎯");
+  state.extra.goals.push({ id: uid("goal"), name, amount, saved, emoji: goalEmoji, deadline, deposits: saved > 0 ? [{ id: uid("dep"), amount: saved, date: todayKey(), note: "стартовый взнос" }] : [] }); save(); cloudSaveExtra();
+  closeModal("goalModal"); renderFinance(); showToast("Копилка создана 🎯");
 }
 async function topUpGoal(id) {
   const g = state.extra.goals.find(x => x.id === id); if (!g) return;
-  const v = await promptNumber({ title: "Пополнить цель", text: `«${g.name}»: отложено ${money(g.saved)} из ${money(g.amount)}.`, label: "Сколько добавить, ₽", value: 1000, okText: "Пополнить" });
+  const v = await promptNumber({ title: `${g.emoji || "🎯"} Пополнить «${g.name}»`, text: `Отложено ${money(g.saved)} из ${money(g.amount)}.`, label: "Сколько добавить, ₽", value: 1000, okText: "Пополнить" });
   if (v === null || v <= 0) return;
-  g.saved = Math.max(0, num(g.saved)) + v; save(); cloudSaveExtra(); renderFinance();
+  g.saved = Math.max(0, num(g.saved)) + v; g.deposits = g.deposits || []; g.deposits.push({ id: uid("dep"), amount: v, date: todayKey(), note: "" });
+  save(); cloudSaveExtra(); renderFinance(); showToast(`+${money(v)} в копилку`);
+}
+async function quickGoalDeposit() {
+  const goals = state.extra.goals || [];
+  if (!goals.length) { openGoalModal(); return; }
+  const open = goals.filter(g => num(g.saved) < num(g.amount));
+  topUpGoal((open[0] || goals[0]).id);
+}
+function showGoalHistory(id) {
+  const g = state.extra.goals.find(x => x.id === id); if (!g) return;
+  const deps = (g.deposits || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const text = deps.length ? deps.slice(0, 8).map(d => `${dateText(fromKey(d.date), { day: "numeric", month: "short" })} — ${money(d.amount)}${d.note ? " · " + d.note : ""}`).join("\n") : "Взносов пока нет.";
+  confirmAction({ title: `${g.emoji || "🎯"} ${g.name}`, text, okText: "Пополнить", cancelText: "Закрыть", danger: false }).then(ok => { if (ok) topUpGoal(id); });
 }
 async function deleteGoal(id) {
   const g = state.extra.goals.find(x => x.id === id); if (!g) return;
-  if (!await confirmAction({ title: "Удалить цель?", text: `«${g.name}» будет удалена без возможности восстановления.` })) return;
+  if (!await confirmAction({ title: "Удалить копилку?", text: `«${g.name}» будет удалена без возможности восстановления.` })) return;
   state.extra.goals = state.extra.goals.filter(x => x.id !== id); save(); cloudSaveExtra(); renderFinance();
 }
 function checkGoalCelebration() {
@@ -886,25 +1326,10 @@ function confetti() {
     box.appendChild(el); setTimeout(() => el.remove(), 2600);
   }
 }
-function openExpenseModal() { $("expenseAmount").value = ""; $("expenseDate").value = todayKey(); $("expenseNote").value = ""; openModal("expenseModal"); setTimeout(() => $("expenseAmount").focus(), 80); }
-async function saveExpense() {
-  const amount = Math.max(0, num($("expenseAmount").value)), category = $("expenseCategory").value, date = isDateKey($("expenseDate").value) ? $("expenseDate").value : todayKey(), note = $("expenseNote").value.trim();
-  if (!amount) { showToast("Укажи сумму расхода"); return; }
-  state.extra.expenses.push({ id: uid("exp"), amount, category, date, note }); save(); cloudSaveExtra();
-  closeModal("expenseModal"); renderFinance(); showToast("Расход добавлен");
-}
-async function deleteExpense(id) {
-  state.extra.expenses = state.extra.expenses.filter(x => x.id !== id); save(); cloudSaveExtra(); renderFinance(); showToast("Расход удалён");
-}
-function renderExpenses() {
-  const list = $("expenseList"), bars = $("expenseBars"); if (!list || !bars) return;
-  const es = currentMonthExpenses(new Date()).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  if (!es.length) { bars.innerHTML = ""; list.innerHTML = '<div class="empty">Расходов за этот месяц пока нет.</div>'; return; }
-  const cats = {}; es.forEach(x => cats[x.category] = (cats[x.category] || 0) + num(x.amount));
-  const max = Math.max(...Object.values(cats), 1);
-  bars.innerHTML = Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="expense-bar-row"><div class="expense-bar-head"><span>${escapeHtml(c)}</span><b class="num">${money(v)}</b></div><div class="track"><i style="width:${Math.round(v / max * 100)}%"></i></div></div>`).join("");
-  list.innerHTML = es.slice(0, 15).map(x => `<div class="expense-row"><div><b>${escapeHtml(x.category)}</b><small>${dateText(fromKey(x.date), { day: "numeric", month: "short" })}${x.note ? " · " + escapeHtml(x.note) : ""}</small></div><strong class="num">−${money(x.amount)}</strong><button type="button" class="expense-delete" data-exp-del="${escapeHtml(x.id)}" aria-label="Удалить расход">${icon("i-x")}</button></div>`).join("");
-  list.querySelectorAll("[data-exp-del]").forEach(b => b.onclick = () => deleteExpense(b.dataset.expDel));
+function openPaydayModal() { const p = state.extra.payday || {}; $("paydayAdvance").value = p.advanceDay || ""; $("paydaySalary").value = p.salaryDay || ""; openModal("paydayModal"); }
+async function savePayday() {
+  state.extra.payday = { advanceDay: clamp(Math.round(num($("paydayAdvance").value, 0)), 0, 31), salaryDay: clamp(Math.round(num($("paydaySalary").value, 0)), 0, 31) };
+  save(); cloudSaveExtra(); closeModal("paydayModal"); renderFinance(); showToast("Даты выплат сохранены");
 }
 function openTemplateModal() { $("templateName").value = ""; $("templateCases").value = ""; $("templateHours").value = "11"; $("templateBonus").value = "0"; $("templateHoliday").checked = false; openModal("templateModal"); setTimeout(() => $("templateName").focus(), 80); }
 async function saveTemplate() {
@@ -939,10 +1364,11 @@ function useTemplateToday(id) { const k = todayKey(); state.selectedDate = k; op
 
 /* ---------- Профиль, Telegram, уведомления ---------- */
 function updateProfileUI() {
-  const n = currentProfile?.name?.trim() || currentUser?.user_metadata?.name || (currentUser ? currentUser.email : "") || "Мой расчёт";
+  const n = currentProfile?.name?.trim() || currentUser?.user_metadata?.full_name || currentUser?.user_metadata?.name || (currentUser ? currentUser.email : "") || "Мой расчёт";
   $("profileName").textContent = n; $("profileAvatar").textContent = (n[0] || "₽").toUpperCase();
-  $("profileMeta").textContent = currentUser ? `${currentUser.email || ""} · синхронизация включена` : db ? "Войди в аккаунт, чтобы синхронизировать данные" : "Локальный режим: данные хранятся на этом устройстве";
-  $("logoutBtn").classList.toggle("hidden", !currentUser);
+  const provider = currentUser?.app_metadata?.provider; const via = provider === "apple" ? "Apple" : provider === "google" ? "Google" : "";
+  $("profileMeta").textContent = currentUser ? `${currentUser.email || ""}${via ? " · вход через " + via : ""} · синхронизация включена` : db ? "Войди в аккаунт, чтобы синхронизировать данные" : "Локальный режим: данные хранятся на этом устройстве";
+  $("logoutBtn").classList.toggle("hidden", !currentUser); $("deleteAccountBtn").classList.toggle("hidden", !currentUser);
 }
 async function loadTelegramStatus() {
   if (!db || !currentUser) return null;
@@ -1060,8 +1486,22 @@ function bindEvents() {
   $("goLogin").onclick = () => setAuthMode("login"); $("goSignup").onclick = () => setAuthMode("signup"); $("backAuth").onclick = backAuth; $("authAction").onclick = authAction;
   ["authEmail", "authPassword", "authPassword2", "authName"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") authAction(); }));
 
-  $("addExpenseBtn").onclick = openExpenseModal; $("addExpenseTop").onclick = openExpenseModal; $("expenseSave").onclick = saveExpense;
+  $("addTxTop").onclick = () => openExpenseModal("expense"); $("expenseSave").onclick = saveExpense;
+  document.querySelectorAll("[data-tx-type]").forEach(b => b.onclick = () => openExpenseModal(b.dataset.txType));
+  document.querySelectorAll("#txTypeSeg button").forEach(b => b.onclick = () => setTxType(b.dataset.type));
+  document.querySelectorAll("#txFilter button").forEach(b => b.onclick = () => { txFilter = b.dataset.filter; txLimit = 12; document.querySelectorAll("#txFilter button").forEach(x => { const on = x === b; x.classList.toggle("active", on); x.setAttribute("aria-selected", on); }); renderTransactions(); });
+  $("txMoreBtn").onclick = () => { txLimit += 20; renderTransactions(); };
+  $("qaGoalDeposit").onclick = quickGoalDeposit;
+  $("addAccountBtn").onclick = () => openAccountModal(); $("accountSave").onclick = saveAccount; $("accountDelete").onclick = deleteAccount;
+  $("limitsBtn").onclick = openLimitsModal; $("limitsSave").onclick = saveLimits; $("addCategoryBtn").onclick = addCategory;
+  $("newCategoryName").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addCategory(); } });
+  $("addRecurringBtn").onclick = () => openRecurringModal(); $("recurringSave").onclick = saveRecurring; $("recurringDelete").onclick = deleteRecurring;
+  $("addDebtBtn").onclick = () => openDebtModal(); $("debtSave").onclick = saveDebt; $("debtDelete").onclick = deleteDebt;
+  document.querySelectorAll("#debtDirSeg button").forEach(b => b.onclick = () => setDebtDir(b.dataset.dir));
+  $("paydaySetupBtn").onclick = openPaydayModal; $("paydaySave").onclick = savePayday;
   $("addGoalBtn").onclick = openGoalModal; $("goalSave").onclick = saveGoal;
+  $("oauthApple").onclick = () => oauthSignIn("apple"); $("oauthGoogle").onclick = () => oauthSignIn("google");
+  $("deleteAccountBtn").onclick = deleteOwnAccount;
   $("addTemplateBtn").onclick = openTemplateModal; $("templateSave").onclick = saveTemplate;
 
   $("telegramBotBtn").onclick = openTelegramModal; $("telegramGenerateBtn").onclick = generateTelegramCode;
@@ -1091,7 +1531,9 @@ window.MyPay = {
   save, renderAll, updateHome, renderCalendar, renderStats, renderInsights, renderFinance,
   saveHomeShift, openShiftModal, saveModal, deleteShift, undoLastDelete, clearMonth, selectCalendarDate, shiftMonth, goToCurrentMonth,
   openSettings, saveSettings, cycleTheme, applyTheme, showScreen, showToast, confirmAction, promptNumber,
-  saveExpense, deleteExpense, saveGoal, topUpGoal, deleteGoal, saveTemplate, applyTemplateToModal,
+  saveExpense, deleteExpense, deleteTransaction, saveGoal, topUpGoal, deleteGoal, saveTemplate, applyTemplateToModal,
+  oauthSignIn, deleteOwnAccount, openExpenseModal, setTxType, saveAccount, openAccountModal, deleteAccount, accountBalance, totalBalance, saveLimits, openLimitsModal, addCategory,
+  saveRecurring, openRecurringModal, payRecurring, recurringNext, saveDebt, openDebtModal, addDebtPayment, buildInsights, paydayInfo, savePayday, goalForecast,
   loadQueue, queueCloudOp, flushCloudQueue, setAuthMode, backAuth,
   get currentUser() { return currentUser; }, get homeDirty() { return homeDirty; }, get cloudAvailable() { return !!db; }
 };

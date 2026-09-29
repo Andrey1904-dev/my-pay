@@ -52,7 +52,7 @@ export function money(n: number): string {
     minimumFractionDigits: Number.isInteger(v) ? 0 : 2,
     maximumFractionDigits: 2,
   }).format(v);
-  return `${f} ₽`;
+  return `${f}\u00a0₽`; // неразрывный пробел: «₽» не уезжает на новую строку
 }
 
 export function integer(n: number): string {
@@ -67,6 +67,22 @@ export function plural(n: number, one: string, few: string, many: string): strin
   if (b === 1) return one;
   return many;
 }
+
+/** Короткая сумма для тесных мест: 4 486,84 ₽ → «4,5к ₽». */
+export function moneyShort(n: number): string {
+  const v = num(n);
+  if (Math.abs(v) >= 1000) return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(v / 1000)}к\u00a0₽`;
+  return money(v);
+}
+
+/** Текстовый прогресс-бар: ▰▰▰▱▱▱▱▱▱▱ */
+export function bar(fraction: number, width = 10): string {
+  const f = Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
+  const filled = Math.round(f * width);
+  return "▰".repeat(filled) + "▱".repeat(width - filled);
+}
+
+export const APP_URL = "https://andrey1904-dev.github.io/my-pay/";
 
 // ---------- модель зарплаты ----------
 
@@ -232,8 +248,10 @@ export function summarizeMonth(rows: ShiftRow[], todayKey: string, s: Settings):
 // ---------- разбор ввода ----------
 
 export type ParsedInput =
-  | { kind: "add"; cases: number }
-  | { kind: "set"; cases: number }
+  | { kind: "add"; cases: number; date: string | null }
+  | { kind: "set"; cases: number; date: string | null }
+  | { kind: "expense"; amount: number; note: string }
+  | { kind: "income"; amount: number; note: string }
   | { kind: "command"; name: string; arg: string }
   | { kind: "unknown" };
 
@@ -241,14 +259,40 @@ const BUTTON_COMMANDS: Record<string, string> = {
   "сегодня": "today",
   "месяц": "month",
   "прогноз": "forecast",
+  "календарь": "calendar",
+  "расходы": "spent",
+  "расход": "spent",
+  "финансы": "spent",
   "отменить": "undo",
   "помощь": "help",
   "меню": "menu",
+  "еще": "settings",
+  "настройки": "settings",
   "последняя": "last",
   "праздник": "holiday",
 };
 
-export function parseInput(textRaw: string): ParsedInput {
+const EXPENSE_WORDS = /^(расход|расходы|трата|потратил[а-я]*|купил[а-я]*|минус|заплатил[а-я]*|оплатил[а-я]*)$/;
+const INCOME_WORDS = /^(доход|получил[а-я]*|пришло|пришли|зарплата|зп|аванс|премия|плюс)$/;
+const NOTE_STOP = /^(на|за|в|по|у|с|со|для|и|руб|рублей|р|₽)$/;
+
+/** Дата из слова: «вчера», «позавчера», «27.09», «27.09.2026». */
+function parseDateToken(token: string, today: string): string | null {
+  if (token === "вчера") return addDays(today, -1);
+  if (token === "позавчера") return addDays(today, -2);
+  const m = token.match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$/);
+  if (!m) return null;
+  const d = parseInt(m[1], 10), mo = parseInt(m[2], 10);
+  let y = m[3] ? parseInt(m[3], 10) : parseInt(today.slice(0, 4), 10);
+  if (m[3] && m[3].length === 2) y += 2000;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const key = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const check = new Date(Date.UTC(y, mo - 1, d));
+  if (check.getUTCDate() !== d) return null;
+  return key;
+}
+
+export function parseInput(textRaw: string, today: string = dateKeyInTz(new Date())): ParsedInput {
   const text = String(textRaw || "").trim();
   if (!text) return { kind: "unknown" };
   if (text.startsWith("/")) {
@@ -257,22 +301,184 @@ export function parseInput(textRaw: string): ParsedInput {
     return { kind: "command", name: m[1].toLowerCase(), arg: m[2].trim() };
   }
   const lower = text.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
-  if (BUTTON_COMMANDS[lower]) return { kind: "command", name: BUTTON_COMMANDS[lower], arg: "" };
+  // Кнопки клавиатуры могут начинаться с эмодзи: «📦 Сегодня».
+  const button = lower.replace(/^[^a-zа-я0-9+\-\/]+/u, "").trim();
+  if (BUTTON_COMMANDS[button]) return { kind: "command", name: BUTTON_COMMANDS[button], arg: "" };
+
   // \b в JS не понимает кириллицу, поэтому чистим по токенам: «чехлы 350», «упаковал 1200 чехлов», «350 плюс 500».
   const NOISE = /^(чехл[а-я]*|шт[а-я]*|упаковал[а-я]*|сделал[а-я]*|итого|сегодня|за)$/;
-  const cleaned = lower
+  const tokens = lower
     .replace(/(\d)\s*(чехл[а-я]*|шт[а-я]*)/g, "$1 ")
     .replace(/\s*плюс\s*/g, " + ")
+    .replace(/(\d)\s*\+\s*(\d)/g, "$1+$2")
+    .replace(/^\+\s+/, "+")
     .split(" ")
-    .filter((w) => w && !NOISE.test(w))
-    .join(" ")
-    .trim();
+    .filter((w) => w && !NOISE.test(w));
+
+  // Дата смены: «вчера 900», «27.09 900», «900 за вчера».
+  let date: string | null = null;
+  const rest: string[] = [];
+  for (const t of tokens) {
+    const parsedDate: string | null = date === null ? parseDateToken(t, today) : null;
+    if (parsedDate) date = parsedDate;
+    else rest.push(t);
+  }
+
+  const cleaned = rest.join(" ").trim();
   const add = cleaned.startsWith("+");
   const body = add ? cleaned.slice(1).trim() : cleaned;
-  if (!/^\d+(?:\s*\+\s*\d+)*$/.test(body)) return { kind: "unknown" };
-  const cases = body.split("+").reduce((a, p) => a + parseInt(p.trim(), 10), 0);
-  if (!Number.isFinite(cases) || cases <= 0 || cases > MAX_CASES) return { kind: "unknown" };
-  return add ? { kind: "add", cases } : { kind: "set", cases };
+  if (/^\d+(?:\s*\+\s*\d+)*$/.test(body)) {
+    const cases = body.split("+").reduce((a, p) => a + parseInt(p.trim(), 10), 0);
+    if (!Number.isFinite(cases) || cases <= 0 || cases > MAX_CASES) return { kind: "unknown" };
+    return add ? { kind: "add", cases, date } : { kind: "set", cases, date };
+  }
+  if (date) return { kind: "unknown" };
+
+  // Расход или доход: «350 обед», «-350 такси», «потратил 1200 на продукты», «доход 5000 премия».
+  const words = cleaned.split(" ").filter(Boolean);
+  let mode: "expense" | "income" | null = null;
+  let explicit = false; // слово-маркер («расход», «доход») — тогда заметка не обязательна
+  let amount: number | null = null;
+  const note: string[] = [];
+  for (const w of words) {
+    const m = w.match(/^([+\-−]?)(\d+(?:[.,]\d{1,2})?)$/);
+    if (m && amount === null) {
+      amount = parseFloat(m[2].replace(",", "."));
+      if (m[1] === "-" || m[1] === "−") mode = mode ?? "expense";
+      if (m[1] === "+") mode = mode ?? "income";
+      continue;
+    }
+    if (EXPENSE_WORDS.test(w)) { mode = mode ?? "expense"; explicit = true; continue; }
+    if (INCOME_WORDS.test(w)) { mode = mode ?? "income"; explicit = true; if (/^(зарплата|зп|аванс|премия)$/.test(w)) note.push(w); continue; }
+    if (NOTE_STOP.test(w)) continue;
+    if (/^[+\-−]?\d/.test(w)) return { kind: "unknown" }; // второе число — непонятно, что имелось в виду
+    note.push(w);
+  }
+  if (amount === null || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) return { kind: "unknown" };
+  if (!note.length && !explicit) return { kind: "unknown" }; // «-100» без пояснения — скорее опечатка, чем расход
+  const noteText = note.join(" ");
+  return { kind: mode ?? "expense", amount: Math.round(amount * 100) / 100, note: noteText.charAt(0).toUpperCase() + noteText.slice(1) };
+}
+
+// ---------- финансы (общий JSON с сайтом: user_app_data.payload) ----------
+
+export interface TxRow {
+  id: string;
+  type: "expense" | "income" | "transfer";
+  amount: number;
+  category: string;
+  accountId: string | null;
+  toAccountId: string | null;
+  date: string;
+  note: string;
+  source?: string;
+}
+export interface CategoryRow { id: string; name: string; emoji: string; limit: number }
+export interface AccountRow { id: string; name: string; type: string; balance: number }
+export interface ExtraPayload {
+  transactions?: TxRow[];
+  categories?: CategoryRow[];
+  accounts?: AccountRow[];
+  [key: string]: unknown;
+}
+
+export const DEFAULT_CATEGORIES: CategoryRow[] = [
+  { id: "food", name: "Еда", emoji: "🍔", limit: 0 }, { id: "transport", name: "Транспорт", emoji: "🚌", limit: 0 }, { id: "home", name: "Жильё", emoji: "🏠", limit: 0 },
+  { id: "shopping", name: "Покупки", emoji: "🛍️", limit: 0 }, { id: "health", name: "Здоровье", emoji: "💊", limit: 0 }, { id: "fun", name: "Развлечения", emoji: "🎮", limit: 0 },
+  { id: "connect", name: "Связь", emoji: "📱", limit: 0 }, { id: "family", name: "Семья", emoji: "👨‍👩‍👧", limit: 0 }, { id: "other", name: "Другое", emoji: "📦", limit: 0 },
+];
+
+const CATEGORY_HINTS: [RegExp, string][] = [
+  [/электричк|такси|автобус|метро|трамва|троллейбус|маршрутк|бензин|заправк|проезд|парковк|каршер|поезд|самокат|транспорт/, "Транспорт"],
+  [/аренд|квартир|жкх|коммунал|ипотек|ремонт|свет|электрич|газ|вода|квартплат|жиль/, "Жильё"],
+  [/аптек|лекарств|врач|стоматолог|зуб|больниц|клиник|таблетк|витамин|анализ|здоров/, "Здоровье"],
+  [/кино|игр|бар|пиво|концерт|подписк|стим|steam|netflix|боулинг|клуб|развлеч|кальян|бильярд|театр/, "Развлечения"],
+  [/связь|телефон|интернет|мтс|билайн|мегафон|теле2|tele2|сим|тариф|мобил/, "Связь"],
+  [/сем[ья]|дет[иея]|ребен|ребён|жен[аеу]|муж|мам[аеу]|пап[аеу]|школ|садик|детск/, "Семья"],
+  [/обед|еда|завтрак|ужин|кофе|кафе|столов|перекус|продукт|шаурм|пицц|бургер|доставк|ресторан|чай|хлеб|молок|пятероч|магнит|лент[аеу]|ашан|вкусвилл|перекрест|суши|шашлык|фастфуд|макдон|кфс|kfc|вода|сок|булоч|выпечк/, "Еда"],
+  [/одежд|обув|магазин|покупк|озон|ozon|wildberries|вайлдберр|wb|подар|техник|мебел|косметик|маркетплейс|заказ/, "Покупки"],
+];
+
+/** Категория по тексту заметки: сначала точное имя категории, потом словарь подсказок. */
+export function guessCategory(note: string, categories: CategoryRow[] = DEFAULT_CATEGORIES): CategoryRow {
+  const lower = String(note || "").toLowerCase().replace(/ё/g, "е").trim();
+  const byName = categories.find((c) => c.name.toLowerCase().replace(/ё/g, "е") === lower);
+  if (byName) return byName;
+  for (const [re, name] of CATEGORY_HINTS) {
+    if (re.test(lower)) {
+      const hit = categories.find((c) => c.name === name) || DEFAULT_CATEGORIES.find((c) => c.name === name);
+      if (hit) return hit;
+    }
+  }
+  return categories.find((c) => c.name === "Другое") || categories[categories.length - 1] || DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1];
+}
+
+export function payloadCategories(payload: ExtraPayload | null | undefined): CategoryRow[] {
+  const list = Array.isArray(payload?.categories) ? payload!.categories!.filter((c) => c && typeof c.name === "string" && c.name) : [];
+  return list.length ? list.map((c) => ({ id: String(c.id ?? c.name), name: c.name, emoji: c.emoji || "🏷️", limit: num(c.limit) })) : DEFAULT_CATEGORIES.map((c) => ({ ...c }));
+}
+
+export function payloadTransactions(payload: ExtraPayload | null | undefined): TxRow[] {
+  return Array.isArray(payload?.transactions) ? payload!.transactions!.filter((t) => t && typeof t === "object" && t.id) : [];
+}
+
+export function payloadAccounts(payload: ExtraPayload | null | undefined): AccountRow[] {
+  return Array.isArray(payload?.accounts) ? payload!.accounts!.filter((a) => a && a.id) : [];
+}
+
+/** Счёт для операции из бота: по имени в заметке, иначе наличные, иначе первый. */
+export function pickAccount(accounts: AccountRow[], note: string): { account: AccountRow | null; note: string } {
+  if (!accounts.length) return { account: null, note };
+  const words = note.split(" ");
+  const last = (words[words.length - 1] || "").toLowerCase().replace(/ё/g, "е");
+  const named = last ? accounts.find((a) => a.name.toLowerCase().replace(/ё/g, "е").startsWith(last) && last.length >= 3) : undefined;
+  if (named) return { account: named, note: words.slice(0, -1).join(" ") };
+  return { account: accounts.find((a) => a.type === "cash") || accounts[0], note };
+}
+
+export function monthTransactions(payload: ExtraPayload | null | undefined, monthPrefix: string, type: TxRow["type"]): TxRow[] {
+  return payloadTransactions(payload).filter((t) => t.type === type && typeof t.date === "string" && t.date.startsWith(monthPrefix));
+}
+
+export function sumAmount(rows: { amount: unknown }[]): number {
+  return round2(rows.reduce((a, r) => a + Math.max(0, num(r.amount)), 0));
+}
+
+export function newTxId(now: Date): string {
+  return `tg_${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// ---------- календарь ----------
+
+const WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+/** Моноширинная сетка месяца: ▪ смена внесена, · рабочий день по графику, ▸ сегодня. Ячейка — 4 символа. */
+export function calendarGrid(monthKey: string, saved: Set<string>, settings: Settings, today: string): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const firstDow = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7; // Пн = 0
+  const cells: string[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push("    ");
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${monthKey}-${String(d).padStart(2, "0")}`;
+    const dd = String(d).padStart(2, " ");
+    const mark = saved.has(key) ? "▪" : isWorkDay(key, settings) ? "·" : " ";
+    cells.push(`${key === today ? "▸" : " "}${dd}${mark}`);
+  }
+  while (cells.length % 7) cells.push("    ");
+  const lines = [WEEKDAYS_RU.map((w) => ` ${w} `).join("")];
+  for (let i = 0; i < cells.length; i += 7) lines.push(cells.slice(i, i + 7).join("").replace(/\s+$/, ""));
+  return lines.join("\n");
+}
+
+export function monthKeyOf(key: string): string {
+  return key.slice(0, 7);
+}
+
+export function shiftMonthKey(monthKey: string, delta: number): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 export function escapeHtml(s: unknown): string {
@@ -408,8 +614,20 @@ export class Telegram {
     });
   }
 
-  editMessageText(chatId: number, messageId: number, text: string) {
-    return this.call("editMessageText", { chat_id: chatId, message_id: messageId, text, parse_mode: "HTML" });
+  editMessageText(chatId: number, messageId: number, text: string, replyMarkup?: unknown) {
+    return this.call("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+  }
+
+  /** Список команд в меню Telegram (кнопка «/» слева от поля ввода). */
+  setMyCommands(commands: { command: string; description: string }[]) {
+    return this.call("setMyCommands", { commands });
   }
 
   answerCallbackQuery(id: string, text?: string) {
@@ -420,10 +638,22 @@ export class Telegram {
 export const MAIN_KEYBOARD = {
   keyboard: [
     [{ text: "+100" }, { text: "+500" }, { text: "+1000" }],
-    [{ text: "Сегодня" }, { text: "Месяц" }, { text: "Прогноз" }],
-    [{ text: "Отменить" }, { text: "Помощь" }],
+    [{ text: "📦 Сегодня" }, { text: "📊 Месяц" }, { text: "🔮 Прогноз" }],
+    [{ text: "📅 Календарь" }, { text: "💸 Расходы" }, { text: "⚙️ Ещё" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
-  input_field_placeholder: "Сколько чехлов? Например: 350 или +500",
+  input_field_placeholder: "350 — чехлы · +500 — добавить · 350 обед — расход",
 };
+
+export const BOT_COMMANDS = [
+  { command: "today", description: "📦 Смена за сегодня" },
+  { command: "month", description: "📊 Итоги месяца" },
+  { command: "forecast", description: "🔮 Прогноз до конца месяца" },
+  { command: "calendar", description: "📅 Календарь смен" },
+  { command: "spent", description: "💸 Расходы за месяц" },
+  { command: "undo", description: "↩️ Отменить последнее добавление" },
+  { command: "holiday", description: "🎉 Праздничная ставка на сегодня" },
+  { command: "settings", description: "⚙️ Настройки и напоминания" },
+  { command: "help", description: "❓ Как пользоваться" },
+];

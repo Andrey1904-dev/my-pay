@@ -20,3 +20,14 @@ supabase/.branches/
 *.log
 *.tmp
 *.bak
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/.build/
+*.xcuserstate
+*.ipa
+*.dSYM.zip
+
+# Локальные инструменты агента (скриншоты, headless-браузер)
+.cache/

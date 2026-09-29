@@ -1,6 +1,6 @@
 {
   "name": "case-place-salary",
-  "version": "16.0.0",
+  "version": "18.0.0",
   "private": true,
   "description": "CASE.PLACE SALARY — учёт смен 2/2, упаковки чехлов и заработка. Статический PWA + Supabase + Telegram-бот.",
   "type": "module",

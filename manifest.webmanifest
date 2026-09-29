@@ -4,7 +4,7 @@
   "description": "Учёт смен, зарплаты, расходов, целей и личной финансовой аналитики",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4f5f7",
+  "background_color": "#eeeeea",
   "theme_color": "#ff5a1f",
   "lang": "ru",
   "id": "./",
