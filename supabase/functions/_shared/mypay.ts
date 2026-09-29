@@ -18,8 +18,8 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   base_pay: 2415,
-  holiday_pay: 4050,
-  case_price: 8.05,
+  holiday_pay: 4600,
+  case_price: 7,
   piece_percent: 25,
   schedule_start: null,
   monthly_goal: 60000,
@@ -93,14 +93,25 @@ export function normalizeSettings(raw: Partial<Record<keyof Settings, unknown>> 
     return Number.isFinite(v) && v >= min ? v : (DEFAULT_SETTINGS[k] as number);
   };
   const schedule = typeof s.schedule_start === "string" && isDateKey(s.schedule_start) ? s.schedule_start : null;
+  const corrected = num(s.base_pay) === 2415 && num(s.case_price) === 8.05 && num(s.piece_percent) === 25;
   return {
     base_pay: pick("base_pay", 0),
-    holiday_pay: pick("holiday_pay", 0),
-    case_price: pick("case_price", 0),
+    holiday_pay: corrected && num(s.holiday_pay) === 4050 ? 4600 : pick("holiday_pay", 0),
+    case_price: corrected ? 7 : pick("case_price", 0),
     piece_percent: pick("piece_percent", 0),
     schedule_start: schedule,
     monthly_goal: pick("monthly_goal", 0),
   };
+}
+
+/** Narrow correction of the old standard tariff; preserve bonuses and custom rates. */
+export function correctLegacyShift(s: ShiftRow): ShiftRow {
+  const oldBase = s.is_holiday ? 4050 : 2415;
+  if (s.cases < 0 || num(s.base_pay) !== oldBase || Math.abs(num(s.piece_pay) - s.cases * 2.0125) > .0051) return s;
+  const bonus = num(s.total_pay) - num(s.base_pay) - num(s.piece_pay);
+  if (bonus < -.011) return s;
+  const base = s.is_holiday ? 4600 : 2415, piece = piecePay(s.cases, DEFAULT_SETTINGS);
+  return { ...s, base_pay: base, piece_pay: piece, total_pay: round2(base + piece + Math.max(0, round2(bonus))) };
 }
 
 export function piecePay(cases: number, s: Settings): number {

@@ -61,7 +61,7 @@ import UniformTypeIdentifiers
                         }
                         .buttonStyle(.plain).padding(.horizontal, 10)
                     }
-                    Text("CASE.PLACE SALARY · V \(AppConfig.appVersion) · iOS").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.muted).padding(.top, 4)
+                    Text("CASE.PLACE SALARY · V\(AppConfig.appVersion) · iOS").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.muted).padding(.top, 4)
                 }
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }

@@ -35,6 +35,7 @@ import {
   motivation,
   newTxId,
   normalizeSettings,
+  correctLegacyShift,
   parseInput,
   payloadAccounts,
   payloadCategories,
@@ -785,7 +786,7 @@ class BotContext {
   async calendarCard(link: LinkRow, settings: Settings, monthKey: string): Promise<Card> {
     const today = this.todayKey();
     const { from, to } = monthRange(`${monthKey}-01`);
-    const rows = await this.db.select<ShiftRow>("shifts", `user_id=eq.${link.user_id}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`);
+    const rows = await this.db.select<ShiftRow>("shifts", `user_id=eq.${link.user_id}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`).then(rows => rows.map(correctLegacyShift));
     const saved = new Set(rows.map((r) => r.work_date));
     const total = rows.reduce((a, r) => a + Number(r.total_pay || 0), 0);
     const cases = rows.reduce((a, r) => a + Number(r.cases || 0), 0);
@@ -898,12 +899,12 @@ class BotContext {
   }
 
   loadShift(userId: string, key: string): Promise<ShiftRow | null> {
-    return this.db.one<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=eq.${key}&select=*`);
+    return this.db.one<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=eq.${key}&select=*`).then(s => s ? correctLegacyShift(s) : null);
   }
 
   loadMonth(userId: string, key: string): Promise<ShiftRow[]> {
     const { from, to } = monthRange(key);
-    return this.db.select<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`);
+    return this.db.select<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`).then(rows => rows.map(correctLegacyShift));
   }
 
   saveShift(shift: ShiftRow) {

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {
   parseInput, isWorkDay, summarizeMonth, dateKeyInTz, minutesInTz, money, plural, motivation,
   shiftTimeText, totalPay, buildShift, normalizeSettings, DEFAULT_SETTINGS, addDays, daysBetween,
-  bar, guessCategory, calendarGrid, shiftMonthKey, pickAccount,
+  correctLegacyShift, piecePay, bar, guessCategory, calendarGrid, shiftMonthKey, pickAccount,
 } from "../supabase/functions/_shared/mypay.ts";
 import { createBotHandler, HELP_TEXT } from "../supabase/functions/telegram-mypay/bot.ts";
 import { createRemindersHandler, pickReminder, pickReminders, digestText } from "../supabase/functions/telegram-reminders/reminders.ts";
@@ -307,11 +307,29 @@ describe("ввод чехлов", () => {
     bot = makeBot(backend);
   });
 
-  test("дефолтные настройки: 1000 чехлов = (1900 + 200 + 1750) × 1,15 = 4427,50", () => {
+  test("дефолтные настройки: 1000 чехлов = (1900 + 200) × 1,15 + 1750 = 4165", () => {
     const s = normalizeSettings({});
     assert.equal(totalPay(0, false, s), 2415);
-    assert.equal(totalPay(1000, false, s), 4427.5);
+    assert.equal(totalPay(1000, false, s), 4165);
+    assert.equal(piecePay(1000, s), 1750);
+    assert.equal(totalPay(1000, true, s), 6350);
+    const migrated = normalizeSettings({ base_pay: 2415, holiday_pay: 4050, case_price: 8.05, piece_percent: 25 });
+    assert.equal(totalPay(1000, true, migrated), 6350);
+    const old = { user_id: USER, work_date: TODAY, cases: 1000, is_holiday: true, base_pay: 4050, piece_pay: 2012.5, total_pay: 6362.5 };
+    const corrected = correctLegacyShift(old);
+    assert.equal(corrected.total_pay, 6650);
+    assert.deepEqual(correctLegacyShift(corrected), corrected);
   });
+  test("старый стандартный тариф: бот записывает 4165 и показывает исправленные сохранённые смены", async () => {
+    Object.assign(backend.db.settings[0], { base_pay: 2415, holiday_pay: 4050, case_price: 8.05, piece_percent: 25 });
+    await send(bot, "1000");
+    assert.equal(backend.db.shifts[0].piece_pay, 1750);
+    assert.equal(backend.db.shifts[0].total_pay, 4165);
+    Object.assign(backend.db.shifts[0], { is_holiday: true, base_pay: 4050, piece_pay: 2012.5, total_pay: 6362.5 });
+    await send(bot, "/today");
+    assert.match(backend.lastText().replace(/\u00a0/g, " "), /6 650/);
+  });
+
   test("число в пустой день создаёт смену и запись для отмены", async () => {
     await send(bot, "350");
     const shift = backend.db.shifts[0];

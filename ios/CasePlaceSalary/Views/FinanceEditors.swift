@@ -372,10 +372,10 @@ import SwiftUI
 
     var body: some View {
         SheetScaffold(eyebrow: "Выплаты", title: "Дни аванса и зарплаты") {
-            Text("Укажи числа, когда приходят деньги — покажу обратный отсчёт и ожидаемую сумму. 0 — не показывать.").font(.system(size: 14, weight: .medium)).foregroundColor(Theme.ink2)
+            Text("Аванс — только выходы за 1–15 текущего месяца. Зарплата — выходы за 16-е–конец прошлого месяца, обеды, районный и сделка за весь прошлый месяц. Сумма — по внесённым сменам. 0 — не показывать.").font(.system(size: 14, weight: .medium)).foregroundColor(Theme.ink2)
             HStack(spacing: 10) {
-                MoneyField(label: "Аванс — число", text: $advance, placeholder: "25", suffix: "")
-                MoneyField(label: "Зарплата — число", text: $salary, placeholder: "10", suffix: "")
+                MoneyField(label: "Аванс — число", text: $advance, placeholder: "23", suffix: "")
+                MoneyField(label: "Зарплата — число", text: $salary, placeholder: "8", suffix: "")
             }
             Button("Сохранить") {
                 var p = Payday(); p.advanceDay = min(31, max(0, Int(Fmt.parse(advance)))); p.salaryDay = min(31, max(0, Int(Fmt.parse(salary))))

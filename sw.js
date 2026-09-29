@@ -1,7 +1,7 @@
 // Версия кеша должна совпадать с CACHE_VERSION в script.js,
 // иначе приложение удаляет собственный кеш service worker'а при каждом запуске.
-const CACHE_NAME="my-pay-v1.0";
-const APP_SHELL=["./","./index.html","./style.css","./script.js?v=1.0","./style.css?v=1.0","./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./privacy.html","./fonts/manrope-cyrillic-wght-normal.woff2","./fonts/manrope-cyrillic-ext-wght-normal.woff2","./fonts/manrope-latin-wght-normal.woff2","./fonts/manrope-latin-ext-wght-normal.woff2"];
+const CACHE_NAME="my-pay-v1.01";
+const APP_SHELL=["./","./index.html","./style.css","./script.js?v=1.01","./style.css?v=1.01","./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./privacy.html","./fonts/manrope-cyrillic-wght-normal.woff2","./fonts/manrope-cyrillic-ext-wght-normal.woff2","./fonts/manrope-latin-wght-normal.woff2","./fonts/manrope-latin-ext-wght-normal.woff2"];
 
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));

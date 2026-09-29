@@ -18,7 +18,7 @@
 
 ## 3. Версия и сборка
 
-- [ ] `MARKETING_VERSION` (например `1.0.0`) и `CURRENT_PROJECT_VERSION` (целое число, увеличивать при каждой загрузке) — в настройках таргета.
+- [ ] `MARKETING_VERSION` (текущая `1.0.1`, отображается как V1.01) и `CURRENT_PROJECT_VERSION` (целое число, увеличивать при каждой загрузке) — в настройках таргета.
 - [ ] Иконка: `Assets.xcassets/AppIcon` (1024×1024, без прозрачности) — уже сгенерирована; при желании замените на брендовую.
 - [ ] Product → **Archive** (схема `CasePlaceSalary`, устройство *Any iOS Device*), затем **Distribute App → App Store Connect → Upload**.
 - [ ] Дождитесь обработки сборки и пройдите вопрос Export Compliance — в `Info.plist` уже стоит `ITSAppUsesNonExemptEncryption = NO` (используется только HTTPS), поэтому вопрос не появится.

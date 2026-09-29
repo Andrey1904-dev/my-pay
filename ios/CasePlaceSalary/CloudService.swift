@@ -100,14 +100,13 @@ final class CloudService {
         }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            user_id = c.str(.user_id); base_pay = c.num(.base_pay, 2415); holiday_pay = c.num(.holiday_pay, 4050); case_price = c.num(.case_price, 8.05)
+            user_id = c.str(.user_id); base_pay = c.num(.base_pay, 2415); holiday_pay = c.num(.holiday_pay, 4600); case_price = c.num(.case_price, 7)
             piece_percent = c.num(.piece_percent, 25); schedule_start = String(c.str(.schedule_start).prefix(10)); monthly_goal = c.num(.monthly_goal, 60000)
         }
         var settings: Settings {
             var s = Settings()
-            // Старые тройки 2150/7/20 и 2627.84/1.69/100 — мигрируем на актуальные значения, как делает сайт.
-            let legacy = (base_pay == 2150 && case_price == 7 && piece_percent == 20) || (base_pay == 2627.84 && case_price == 1.69 && piece_percent == 100)
-            s.basePay = legacy ? 2415 : base_pay; s.holidayPay = holiday_pay; s.casePrice = legacy ? 8.05 : case_price; s.percent = legacy ? 25 : piece_percent
+            s.basePay = base_pay; s.holidayPay = holiday_pay; s.casePrice = case_price; s.percent = piece_percent
+            s.correctLegacyTariff()
             s.scheduleStart = DateUtil.isKey(schedule_start) ? schedule_start : DateUtil.todayKey; s.goal = monthly_goal
             return s
         }
@@ -151,8 +150,7 @@ final class CloudService {
         let rows: [ShiftRow] = try await client.from("shifts").select().eq("user_id", value: userID.uuidString).order("work_date").execute().value
         var out: [String: Shift] = [:]
         for r in rows where DateUtil.isKey(r.work_date) {
-            var s = model.makeShift(cases: r.cases, holiday: r.is_holiday)
-            if r.total_pay > 0 { s.total = r.total_pay } // total в облаке включает премию
+            let s = Shift(cases: r.cases, holiday: r.is_holiday, base: r.base_pay, piece: r.piece_pay, total: r.total_pay).correctedLegacyTariff()
             out[r.work_date] = s
         }
         return out
