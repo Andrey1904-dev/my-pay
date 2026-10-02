@@ -1,8 +1,9 @@
-// Keep this cache version in sync with CACHE_VERSION in script.js.
 const CACHE_NAME = "my-pay-v1.01";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./landing.css?v=1.01",
+  "./landing.js?v=1.01",
   "./app.html",
   "./style.css",
   "./script.js?v=1.01",
@@ -22,9 +23,18 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting()),
+      .then((c) =>
+        Promise.allSettled(
+          APP_SHELL.map((url) =>
+            fetch(url, { cache: "no-cache" }).then((res) =>
+              res.ok ? c.put(url, res) : undefined
+            )
+          )
+        )
+      )
+      .catch(() => {})
   );
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -33,23 +43,24 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys
-            .filter((key) => key.startsWith("my-pay-v") && key !== CACHE_NAME)
-            .map((key) => caches.delete(key)),
-        ),
+          keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+        )
       )
-      .then(() => self.clients.claim()),
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  if (url.origin !== location.origin) return;
+  if (url.origin !== self.location.origin) return;
 
   if (event.request.mode === "navigate") {
-    // Keep the dashboard's offline entry separate from the public landing page.
-    const pageKey = url.pathname.endsWith("/app.html") ? "./app.html" : "./index.html";
+    const fallback = url.pathname.endsWith("/app.html")
+      ? "./app.html"
+      : url.pathname.endsWith("/privacy.html")
+        ? "./privacy.html"
+        : "./index.html";
     event.respondWith(
       (async () => {
         try {
@@ -59,69 +70,46 @@ self.addEventListener("fetch", (event) => {
             event.waitUntil(
               caches
                 .open(CACHE_NAME)
-                .then((cache) => cache.put(pageKey, copy))
-                .catch(() => {}),
+                .then((c) => c.put(fallback, copy))
+                .catch(() => {})
             );
           }
           return response;
         } catch {
-          return (await caches.match(pageKey)) || Response.error();
+          return (
+            (await caches.match(event.request)) ||
+            (await caches.match(fallback)) ||
+            (await caches.match("./app.html")) ||
+            Response.error()
+          );
         }
-      })(),
+      })()
     );
     return;
   }
 
   event.respondWith(
     (async () => {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
       try {
-        const response = await fetch(event.request, { cache: "no-store" });
-        if (response.ok) {
+        const response = await fetch(event.request);
+        if (response.ok && response.type === "basic") {
           const copy = response.clone();
           event.waitUntil(
             caches
               .open(CACHE_NAME)
-              .then((cache) => cache.put(event.request, copy))
-              .catch(() => {}),
+              .then((c) => c.put(event.request, copy))
+              .catch(() => {})
           );
         }
         return response;
       } catch {
         return (
-          (await caches.match(event.request)) ||
-          (await caches.match("./index.html")) ||
+          (await caches.match(event.request, { ignoreSearch: true })) ||
           Response.error()
         );
       }
-    })(),
-  );
-});
-
-self.addEventListener("push", (event) => {
-  let data = { title: "CASE.PLACE SALARY", body: "У тебя новое напоминание." };
-  try {
-    if (event.data) data = { ...data, ...event.data.json() };
-  } catch {}
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: "./icon-192.png",
-      badge: "./icon-192.png",
-      data: data.data || {},
-    }),
-  );
-});
-
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  event.waitUntil(
-    clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((list) => {
-        for (const client of list) {
-          if ("focus" in client) return client.focus();
-        }
-        if (clients.openWindow) return clients.openWindow("./app.html");
-      }),
+    })()
   );
 });

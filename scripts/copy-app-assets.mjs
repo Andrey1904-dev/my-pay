@@ -1,14 +1,21 @@
-import { cp, copyFile, mkdir, writeFile } from "node:fs/promises";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const output = path.join(root, "dist");
+const dist = path.join(root, "dist");
 
-// Keep the original, fully functional PWA beside the new marketing landing page.
-// These are copied byte-for-byte so the existing vanilla app and its tests do
-// not depend on Vite's HTML or JavaScript transforms.
-const appFiles = [
+mkdirSync(dist, { recursive: true });
+
+for (const builtAsset of ["landing.js", "landing.css"]) {
+  const from = path.join(dist, builtAsset);
+  if (existsSync(from)) {
+    cpSync(from, path.join(root, builtAsset));
+  }
+}
+
+const files = [
+  "index.html",
   "app.html",
   "style.css",
   "script.js",
@@ -18,16 +25,17 @@ const appFiles = [
   "icon-192.png",
   "icon-512.png",
   "privacy.html",
+  ".nojekyll",
 ];
 
-await mkdir(output, { recursive: true });
-await Promise.all(
-  appFiles.map((file) => copyFile(path.join(root, file), path.join(output, file))),
-);
-await cp(path.join(root, "fonts"), path.join(output, "fonts"), {
-  recursive: true,
-  force: true,
-});
-await writeFile(path.join(output, ".nojekyll"), "");
+for (const file of files) {
+  const from = path.join(root, file);
+  if (existsSync(from)) {
+    cpSync(from, path.join(dist, file));
+  }
+}
 
-console.log(`Copied the PWA shell and assets to ${output}`);
+const fontsDir = path.join(root, "fonts");
+if (existsSync(fontsDir)) {
+  cpSync(fontsDir, path.join(dist, "fonts"), { recursive: true });
+}
