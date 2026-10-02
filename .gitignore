@@ -3,8 +3,10 @@
 Thumbs.db
 desktop.ini
 
-# Node (локальный прогон тестов: npm i jsdom typescript)
+# Node / generated site build
 node_modules/
+dist/
+*.tsbuildinfo
 npm-debug.log*
 
 # Supabase CLI

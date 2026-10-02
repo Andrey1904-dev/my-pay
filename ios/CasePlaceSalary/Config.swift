@@ -17,7 +17,7 @@ enum AppConfig {
     static let urlScheme = "caseplace"
     static let oauthRedirectURL = URL(string: "caseplace://auth-callback")!
 
-    static let webAppURL = URL(string: "https://andrey1904-dev.github.io/my-pay/")!
+    static let webAppURL = URL(string: "https://andrey1904-dev.github.io/my-pay/app.html")!
     static let privacyURL = URL(string: "https://andrey1904-dev.github.io/my-pay/privacy.html")!
     static let supportURL = URL(string: "https://github.com/Andrey1904-dev/my-pay/issues")!
     static let telegramSetupURL = URL(string: "https://github.com/Andrey1904-dev/my-pay/blob/main/telegram_bot_setup.md")!

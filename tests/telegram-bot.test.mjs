@@ -686,7 +686,7 @@ describe("календарь, расходы и настройки", () => {
     assert.match(text, /🍔 Еда — <b>10 200 ₽<\/b> из 12 000 ₽\n▰▰▰▰▰▰▰▰▰▱ 85%/);
     assert.match(text, /🎮 Развлечения — <b>700 ₽<\/b>/);
     assert.match(text, /Последние:\n• 28 сент\. · Еда · Обед — 350 ₽/);
-    assert.equal(backend.sent().at(-1).reply_markup.inline_keyboard[1][0].url, "https://andrey1904-dev.github.io/my-pay/");
+    assert.equal(backend.sent().at(-1).reply_markup.inline_keyboard[1][0].url, "https://andrey1904-dev.github.io/my-pay/app.html");
   });
 
   test("⚙️ Ещё — карточка настроек: напоминания и время по кругу", async () => {

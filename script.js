@@ -5,7 +5,7 @@
    ========================================================================== */
 "use strict";
 
-// Версия сайта: показывается в шапке и подвале. При выпуске менять здесь, в sw.js (CACHE_NAME и ?v=) и в index.html (?v=).
+// Версия веб-приложения: показывается в шапке и подвале. При выпуске менять здесь, в sw.js (CACHE_NAME и ?v=) и в app.html (?v=).
 const APP_VERSION = "1.01";
 // Должна совпадать с CACHE_NAME в sw.js, иначе приложение удалит собственный кеш.
 const CACHE_VERSION = "my-pay-v" + APP_VERSION;
@@ -322,7 +322,8 @@ async function oauthSignIn(provider) {
   if (!db) { showToast("Облако недоступно — вход без интернета невозможен"); return; }
   const btn = $(provider === "apple" ? "oauthApple" : "oauthGoogle"); btn.disabled = true;
   try {
-    const redirectTo = location.origin + location.pathname.replace(/[^/]*$/, "");
+    // Return OAuth users to this exact page (the dashboard now lives at app.html).
+    const redirectTo = location.origin + location.pathname;
     const { error } = await db.auth.signInWithOAuth({ provider, options: { redirectTo, scopes: provider === "apple" ? "name email" : "email profile", queryParams: provider === "google" ? { access_type: "online", prompt: "select_account" } : undefined } });
     if (error) throw error;
   } catch (e) { console.error("oauth:", e); showToast(provider === "apple" ? "Вход через Apple не удался: " + humanAuthError(e) : "Вход через Google не удался: " + humanAuthError(e), 4200); btn.disabled = false; }
