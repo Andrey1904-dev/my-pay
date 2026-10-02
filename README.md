@@ -6,7 +6,13 @@
 
 Приложение фиксирует количество упакованных чехлов, показывает доход за смену и месяц, ведёт календарь рабочих дней, статистику, финансы и цели. Работает офлайн (данные на устройстве), а при входе в аккаунт синхронизируется через Supabase. Чехлы можно вносить прямо из Telegram.
 
-Сайт: <https://andrey1904-dev.github.io/my-pay/> · iPhone: проект Xcode в папке [`ios/`](ios/README_IOS.md) · публикация: [`APP_STORE.md`](APP_STORE.md)
+Лендинг: <https://andrey1904-dev.github.io/my-pay/> · веб-приложение: <https://andrey1904-dev.github.io/my-pay/app.html> · iPhone: проект Xcode в папке [`ios/`](ios/README_IOS.md) · публикация: [`APP_STORE.md`](APP_STORE.md)
+
+## Новый лендинг из MyPayDesign
+
+Главная страница (`/`) собрана по дизайну из [`MyPayDesign`](https://github.com/Andrey1904-dev/MyPayDesign): тёмная графитовая палитра с фирменным оранжевым, анимированный hero с макетом телефона, прокручиваемые экраны, интерактивный калькулятор смены, демо Telegram-бота и блоки о финансовых функциях. Кнопки «Открыть приложение» ведут в сохранённый личный кабинет на `/app.html`.
+
+Сам кабинет остаётся отдельным функциональным PWA: вход, локальные данные, синхронизация, календарь, статистика, финансы, Telegram и офлайн-режим продолжают работать на странице `/app.html`.
 
 ## Возможности
 
@@ -40,7 +46,8 @@
 
 ## Дизайн
 
-- Палитра CASE.PLACE: графит `#14161a` / `#23262d`, фирменный оранжевый `#ff5a1f` (в тёмной теме `#ff6a33`), тёплые нейтрали `#eeeeea` / `#f5f5f2` / `#ffffff`. Токены — в начале `style.css` (`:root` и `body.dark`), зеркало для iPhone — `ios/CasePlaceSalary/Theme.swift`.
+- Лендинг (`src/index.css`) — фирменный ночной стиль из MyPayDesign: почти чёрный фон, тонкая координатная сетка, зерно, графитовые панели, оранжевые акценты и выразительная типографика. Hero, карточки и секции адаптируются к мобильному экрану; движения отключаются через `prefers-reduced-motion`.
+- Кабинет (`style.css`) сохраняет дизайн-систему «Ledger»: графит `#14161a` / `#23262d`, фирменный оранжевый `#ff5a1f` (в тёмной теме `#ff6a33`), тёплые нейтрали `#eeeeea` / `#f5f5f2` / `#ffffff`. Зеркало токенов для iPhone — `ios/CasePlaceSalary/Theme.swift`.
 - Шрифт Manrope подключён через `@font-face` с `unicode-range` (4 сабсета) и `font-display: swap`; системный стек — запасной.
 - Все пары «текст / фон» проверены на контраст ≥ 4.5:1 (WCAG AA) в обеих темах; на оранжевых заливках используется тёмный текст, на графите — белый и `#b9bec8`.
 - Минимальный размер текста — 10.5 px (только капс-метки), основной — 15 px, единая сетка отступов, радиусов (`--r-sm/md/lg/xl`) и теней.
@@ -86,7 +93,7 @@
 
 ## Технологии
 
-- HTML5, CSS3, JavaScript — без сборки, один `script.js`;
+- React + TypeScript + Vite + Tailwind CSS — landing page; отдельное функциональное приложение на HTML/CSS/JavaScript;
 - Supabase Auth, Postgres (RLS), Edge Functions (Deno / TypeScript);
 - Telegram Bot API (webhook с secret token);
 - PWA / Service Worker;
@@ -97,10 +104,14 @@
 
 ```text
 .
-├── index.html                    <- разметка, SVG-иконки, модальные окна
-├── style.css                     <- дизайн-токены, светлая/тёмная темы, компоненты
+├── index.html                    <- landing page (React/Vite, дизайн MyPayDesign)
+├── app.html                      <- функциональная оболочка PWA с модальными окнами
+├── src/                          <- React-секции лендинга, калькулятор и макеты экранов
+├── vite.config.ts, tsconfig.json <- конфигурация сборки и проверки UI
+├── scripts/copy-app-assets.mjs   <- кладёт исходное PWA в dist без трансформации
+├── style.css                     <- дизайн-токены приложения, светлая/тёмная темы
 ├── script.js                     <- логика приложения, Supabase, офлайн-очередь
-├── sw.js                         <- Service Worker (кеш оболочки my-pay-v18, включая шрифты)
+├── sw.js                         <- Service Worker (кеширует лендинг и app.html отдельно)
 ├── fonts/                        <- Manrope variable (woff2, 4 сабсета) + лицензия OFL
 ├── privacy.html                  <- политика конфиденциальности (нужна для App Store и OAuth)
 ├── manifest.webmanifest, icon.svg, icon-192.png, icon-512.png
@@ -119,23 +130,30 @@
 │   ├── telegram-reminders/       <- напоминания по расписанию
 │   └── tsconfig.json
 ├── tests/
-│   ├── app.test.mjs              <- фронтенд в jsdom (36 проверок)
-│   ├── telegram-bot.test.mjs     <- бот и напоминания (56 проверок)
+│   ├── app.test.mjs              <- функциональное приложение в jsdom
+│   ├── site.test.mjs             <- маршруты лендинга, PWA и Service Worker
+│   ├── telegram-bot.test.mjs     <- бот и напоминания
 │   └── helpers/                  <- загрузчик приложения и мок бэкенда
-├── package.json                  <- скрипты test / typecheck / check
+├── package.json                  <- скрипты dev / build / test / typecheck / check
+├── .github/workflows/pages.yml   <- сборка и публикация dist в GitHub Pages
 ├── AUDIT.md                      <- история аудитов и исправлений
 └── telegram_bot_setup.md         <- настройка бота
 ```
 
 ## Запуск сайта
 
-Проект не требует сборки — это статические файлы.
+```bash
+npm ci
+npm run dev
+```
 
-1. Загрузите файлы в репозиторий GitHub.
-2. Откройте **Settings → Pages**, выберите ветку `main` и папку `/ (root)`.
-3. После публикации откройте сайт; для установки на телефон — «Ещё → Добавить на экран телефона».
+Vite откроет лендинг на <http://localhost:5173/>; функциональное приложение — на <http://localhost:5173/app.html>. Production-сборка:
 
-Локально: `npm start` (или `python3 -m http.server 8080`) и открыть <http://localhost:8080/>.
+```bash
+npm run build
+```
+
+Готовый сайт появится в `dist/`: главная страница собрана в один файл, а PWA и его ресурсы сохранены рядом. Для GitHub Pages используйте workflow `.github/workflows/pages.yml`: в **Settings → Pages → Build and deployment → Source** выберите **GitHub Actions**. PWA запускается с `/app.html`; кабинет можно установить на телефон через «Ещё → Добавить на экран телефона».
 
 ## Настройка Supabase
 
@@ -146,7 +164,7 @@
    3. `TELEGRAM_SUPABASE.sql` — таблицы бота и RPC `create_telegram_link_code`;
    4. `SUPABASE_ACCOUNT.sql` — RPC `delete_own_account` (удаление аккаунта из сайта и iPhone).
 3. В `script.js` укажите свои `SUPABASE_URL` и publishable-ключ (`SUPABASE_PUBLISHABLE_KEY`); те же значения — в `ios/CasePlaceSalary/Config.swift`.
-4. Вход через Apple и Google: **Authentication → Providers** включите Apple и Google, в **URL Configuration → Redirect URLs** добавьте адрес сайта и `caseplace://auth-callback` (iPhone). Подробно — в `ios/README_IOS.md`.
+4. Вход через Apple и Google: **Authentication → Providers** включите Apple и Google, в **URL Configuration → Redirect URLs** добавьте `https://andrey1904-dev.github.io/my-pay/app.html` и `caseplace://auth-callback` (iPhone). Веб-авторизация возвращает пользователя на `app.html`. Подробно — в `ios/README_IOS.md`.
 5. Разверните функции бота (см. `telegram_bot_setup.md`):
    ```bash
    supabase functions deploy telegram-mypay --no-verify-jwt
@@ -158,16 +176,18 @@
 
 ## Проверки перед публикацией
 
-Нужен Node.js ≥ 22.18 (TypeScript функций исполняется без сборки).
+Нужен Node.js ≥ 22.18.
 
 ```bash
-npm install            # jsdom + typescript (только для тестов)
-npm test               # 78 проверок: фронтенд (jsdom) + бот и напоминания
-npm run typecheck      # tsc --strict для Edge Functions
-npm run check          # синтаксис script.js/sw.js + typecheck + тесты
+npm ci                  # зависимости UI, сборки и тестов
+npm run build           # production-сборка лендинга и PWA в dist/
+npm test                # проверки приложения, сайта, бота и напоминаний
+npm run typecheck       # tsc --strict для Edge Functions
+npm run typecheck:ui    # TypeScript лендинга
+npm run check           # синтаксис + обе проверки типов + тесты
 ```
 
-При обновлении версии меняйте `APP_VERSION` / `CACHE_VERSION` в `script.js`, `CACHE_NAME` в `sw.js` и параметры `?v=` в `index.html` одновременно.
+При обновлении версии приложения меняйте `APP_VERSION` / `CACHE_VERSION` в `script.js`, `CACHE_NAME` в `sw.js` и параметры `?v=` в `app.html` одновременно.
 
 iOS-приложение собирается только в Xcode на Mac (см. `ios/README_IOS.md`); проверка перед публикацией — `APP_STORE.md`.
 

@@ -1,4 +1,4 @@
-// Тесты веб-приложения в jsdom: настоящий index.html + script.js (локальный режим без Supabase).
+// Тесты функционального PWA в jsdom: настоящий app.html + script.js (локальный режим без Supabase).
 // Запуск: node --test tests/app.test.mjs
 
 import { test, describe, afterEach } from "node:test";
@@ -48,14 +48,14 @@ describe("загрузка и модель", () => {
     assert.ok(app.$("logoutBtn").classList.contains("hidden"), "кнопка выхода скрыта без аккаунта");
   });
 
-  test("версия одинакова в script.js, sw.js, index.html и package.json", async () => {
+  test("версия одинакова в script.js, sw.js, app.html и package.json", async () => {
     const fs = await import("node:fs");
     const read = f => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
     const v = read("script.js").match(/const APP_VERSION = "([\d.]+)"/)[1];
-    assert.match(read("sw.js"), new RegExp(`CACHE_NAME="my-pay-v${v.replace(".", "\\.")}"`));
-    assert.match(read("index.html"), new RegExp(`script\\.js\\?v=${v.replace(".", "\\.")}"`));
+    assert.match(read("sw.js"), new RegExp(`CACHE_NAME\\s*=\\s*"my-pay-v${v.replace(".", "\\.")}"`));
+    assert.match(read("app.html"), new RegExp(`script\\.js\\?v=${v.replace(".", "\\.")}"`));
     assert.match(read("sw.js"), new RegExp(`style\\.css\\?v=${v.replace(".", "\\.")}"`));
-    assert.match(read("index.html"), new RegExp(`id="brandVersion">V${v.replace(".", "\\.")}<`));
+    assert.match(read("app.html"), new RegExp(`id="brandVersion">V${v.replace(".", "\\.")}<`));
     assert.equal(v, "1.01");
     assert.equal(JSON.parse(read("package.json")).version, "1.0.1");
     const lock = JSON.parse(read("package-lock.json"));

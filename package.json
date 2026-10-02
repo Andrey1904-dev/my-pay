@@ -2,21 +2,42 @@
   "name": "case-place-salary",
   "version": "1.0.1",
   "private": true,
-  "description": "CASE.PLACE SALARY — учёт смен 2/2, упаковки чехлов и заработка. Статический PWA + Supabase + Telegram-бот.",
+  "description": "CASE.PLACE SALARY — смены, заработок и финансы: лендинг, функциональное PWA-приложение, Supabase и Telegram-бот.",
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 8080",
+    "start": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "build": "vite build && node scripts/copy-app-assets.mjs",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
     "test": "node --test tests/*.test.mjs",
     "test:app": "node --test tests/app.test.mjs",
     "test:bot": "node --test tests/telegram-bot.test.mjs",
     "typecheck": "tsc -p supabase/functions/tsconfig.json",
-    "check": "node --check script.js && node --check sw.js && npm run typecheck && npm test"
+    "typecheck:ui": "tsc -p tsconfig.json",
+    "check": "node --check script.js && node --check sw.js && npm run typecheck && npm run typecheck:ui && npm test"
   },
   "engines": {
     "node": ">=22.18"
   },
+  "dependencies": {
+    "clsx": "2.1.1",
+    "framer-motion": "^13.5.0",
+    "lenis": "^1.3.26",
+    "lucide-react": "^1.49.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "tailwind-merge": "3.4.0"
+  },
   "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
     "jsdom": "^25.0.1",
-    "typescript": "^5.6.3"
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "^7.3.6",
+    "vite-plugin-singlefile": "2.3.0"
   }
 }

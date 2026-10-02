@@ -82,7 +82,7 @@ export function bar(fraction: number, width = 10): string {
   return "▰".repeat(filled) + "▱".repeat(width - filled);
 }
 
-export const APP_URL = "https://andrey1904-dev.github.io/my-pay/";
+export const APP_URL = "https://andrey1904-dev.github.io/my-pay/app.html";
 
 // ---------- модель зарплаты ----------
 

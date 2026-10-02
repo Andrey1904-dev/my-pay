@@ -1,11 +1,11 @@
-// Поднимает приложение в jsdom: настоящий index.html + script.js, без Supabase SDK (локальный режим).
+// Поднимает функциональное приложение в jsdom: app.html + script.js, без Supabase SDK (локальный режим).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { JSDOM } from "jsdom";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(path.join(root, "index.html"), "utf8");
+const html = readFileSync(path.join(root, "app.html"), "utf8");
 const script = readFileSync(path.join(root, "script.js"), "utf8");
 
 /**
@@ -19,7 +19,7 @@ export function loadApp(opts = {}) {
   // Внешние скрипты (Supabase CDN, script.js) не грузим — script.js выполняем вручную после посева localStorage.
   const markup = html.replace(/<script src="[^"]+"[^>]*><\/script>\s*/g, "");
   const dom = new JSDOM(markup, {
-    url: "https://andrey1904-dev.github.io/my-pay/",
+    url: "https://andrey1904-dev.github.io/my-pay/app.html",
     runScripts: "dangerously",
     pretendToBeVisual: true,
   });
