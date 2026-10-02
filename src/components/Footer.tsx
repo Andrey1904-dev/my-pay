@@ -1,5 +1,5 @@
 import { ArrowUpRight, Apple, Code2, Send, Smartphone } from "lucide-react";
-import { Marquee, Magnetic, Reveal, APP_URL, REPO_URL, scrollToId } from "./ui";
+import { Marquee, Reveal, APP_URL, REPO_URL, scrollToId } from "./ui";
 
 export function Footer() {
   return (
@@ -35,20 +35,18 @@ export function Footer() {
 
           <Reveal delay={0.24}>
             <div className="mt-8 flex flex-col items-stretch gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center sm:gap-4">
-              <Magnetic className="w-full sm:w-auto">
-                <a
-                  href={APP_URL}
-                  className="group relative flex min-h-12 w-full items-center justify-center overflow-hidden rounded-full bg-flame px-5 py-3 text-[14px] font-extrabold text-ink transition-transform duration-300 hover:scale-[1.04] active:scale-95 sm:w-auto sm:px-8 sm:py-4.5 sm:text-[15px]"
-                >
-                  <span className="relative z-10 flex items-center gap-2.5 py-0.5">
-                    <Smartphone className="h-4.5 w-4.5" />
-                    <span className="sm:hidden">Открыть приложение</span>
-                    <span className="hidden sm:inline">Открыть веб-приложение</span>
-                    <ArrowUpRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                  </span>
-                  <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-                </a>
-              </Magnetic>
+              <a
+                href={APP_URL}
+                className="group relative flex min-h-12 w-full items-center justify-center overflow-hidden rounded-full bg-flame px-5 py-3 text-[14px] font-extrabold text-ink transition-transform duration-300 hover:scale-[1.04] active:scale-95 sm:w-auto sm:px-8 sm:py-4.5 sm:text-[15px]"
+              >
+                <span className="relative z-10 flex items-center gap-2.5 py-0.5">
+                  <Smartphone className="h-4.5 w-4.5" />
+                  <span className="sm:hidden">Открыть приложение</span>
+                  <span className="hidden sm:inline">Открыть веб-приложение</span>
+                  <ArrowUpRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </span>
+                <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+              </a>
               <a
                 href={`${REPO_URL}/blob/main/ios/README_IOS.md`}
                 target="_blank"

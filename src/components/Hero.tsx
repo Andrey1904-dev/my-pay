@@ -4,7 +4,6 @@ import {
   useMotionValue,
   useSpring,
   useTransform,
-  useScroll,
 } from "framer-motion";
 import { ArrowDown, ArrowUpRight, CalendarRange, Coins, Package } from "lucide-react";
 import { Phone } from "./Phone";
@@ -26,12 +25,7 @@ function Chip({
   delay: string;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.7, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ delay: 1.4, duration: 0.7, ease: EASE }}
-      className={`absolute z-20 ${className ?? ""}`}
-    >
+    <div className={`absolute z-20 ${className ?? ""}`}>
       <div
         className="animate-floaty glass flex items-center gap-2.5 rounded-2xl border border-white/10 px-3.5 py-2.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
         style={{ animationDelay: delay }}
@@ -48,7 +42,7 @@ function Chip({
           </span>
         </span>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -58,14 +52,6 @@ export function Hero() {
   const my = useMotionValue(0.5);
   const rX = useSpring(useTransform(my, [0, 1], [10, -10]), { stiffness: 120, damping: 18 });
   const rY = useSpring(useTransform(mx, [0, 1], [-12, 12]), { stiffness: 120, damping: 18 });
-
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const phoneY = useTransform(scrollYProgress, [0, 1], [0, 120]);
-  const textY = useTransform(scrollYProgress, [0, 1], [0, -60]);
-  const fade = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
 
   const onMove = (e: MouseEvent) => {
     const r = ref.current?.getBoundingClientRect();
@@ -85,21 +71,13 @@ export function Hero() {
       <div className="pointer-events-none absolute -top-40 right-[-10%] h-[560px] w-[560px] rounded-full bg-flame/15 blur-[140px]" />
       <div className="pointer-events-none absolute bottom-0 left-[-15%] h-[420px] w-[420px] rounded-full bg-flame/8 blur-[120px]" />
 
-      <motion.div
-        style={{ opacity: fade }}
-        className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 pb-12 sm:gap-14 sm:px-5 sm:pb-16 md:px-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-4"
-      >
+      <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 pb-12 sm:gap-14 sm:px-5 sm:pb-16 md:px-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-4">
         {/* ------- left: type ------- */}
-        <motion.div style={{ y: textY }} className="relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.7, ease: EASE }}
-            className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[9px] uppercase tracking-[0.2em] text-fog sm:gap-3 sm:text-[11px] sm:tracking-[0.35em]"
-          >
+        <div className="relative z-10">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[9px] uppercase tracking-[0.2em] text-fog sm:gap-3 sm:text-[11px] sm:tracking-[0.35em]">
             <span className="h-2 w-2 animate-pulse-dot rounded-full bg-flame" />
             Екатеринбург · смены 2/2 · упаковка чехлов
-          </motion.div>
+          </div>
 
           <h1 className="mt-6 font-extrabold uppercase leading-[0.88] tracking-tight">
             {[
@@ -110,9 +88,9 @@ export function Hero() {
               <span key={w.text} className="block overflow-hidden pb-[0.06em]">
                 <motion.span
                   className={`block text-[clamp(2.8rem,12vw,8.6rem)] sm:text-[clamp(3.4rem,11vw,8.6rem)] ${w.cls}`}
-                  initial={{ y: "112%" }}
+                  initial={{ y: 0 }}
                   animate={{ y: 0 }}
-                  transition={{ delay: 0.35 + i * 0.12, duration: 0.9, ease: EASE }}
+                  transition={{ delay: 0.05 * i, duration: 0.5, ease: EASE }}
                 >
                   {w.text}
                 </motion.span>
@@ -120,23 +98,13 @@ export function Hero() {
             ))}
           </h1>
 
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.85, duration: 0.7, ease: EASE }}
-            className="mt-6 max-w-md text-[15px] leading-relaxed text-fog"
-          >
+          <p className="mt-6 max-w-md text-[15px] leading-relaxed text-fog">
             Внёс чехлы — получил итог смены, месяц и прогресс к цели.
             Календарь 2/2, статистика, финансы и Telegram-бот. Работает офлайн,
             синхронизируется, когда появится сеть.
-          </motion.p>
+          </p>
 
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1, duration: 0.7, ease: EASE }}
-            className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-4"
-          >
+          <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             <button
               onClick={() => scrollToId("calc")}
               className="group relative flex min-h-12 w-full items-center justify-center overflow-hidden rounded-full bg-flame px-5 py-3 text-[14px] font-extrabold text-ink transition-transform duration-300 hover:scale-[1.03] active:scale-95 sm:w-auto sm:px-7 sm:py-4"
@@ -154,31 +122,23 @@ export function Hero() {
               Открыть приложение
               <ArrowUpRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </a>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.3, duration: 0.8 }}
-            className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[9px] uppercase tracking-[0.12em] text-smoke sm:mt-10 sm:justify-start sm:gap-6 sm:text-[10px] sm:tracking-[0.2em]"
-          >
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[9px] uppercase tracking-[0.12em] text-smoke sm:mt-10 sm:justify-start sm:gap-6 sm:text-[10px] sm:tracking-[0.2em]">
             <span>PWA · офлайн</span>
             <span className="hidden h-3 w-px bg-line sm:block" />
             <span>iOS · SwiftUI</span>
             <span className="hidden h-3 w-px bg-line sm:block" />
             <span>Telegram-бот</span>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
         {/* ------- right: phone ------- */}
-        <motion.div
-          style={{ y: phoneY, perspective: 1200 }}
+        <div
+          style={{ perspective: 1200 }}
           className="relative z-10 mx-auto w-[min(300px,calc(100vw-48px))] lg:mx-0 lg:justify-self-end"
         >
           <motion.div
-            initial={{ opacity: 0, y: 80, rotate: 4 }}
-            animate={{ opacity: 1, y: 0, rotate: 0 }}
-            transition={{ delay: 0.6, duration: 1.1, ease: EASE }}
             style={{ rotateX: rX, rotateY: rY, transformStyle: "preserve-3d" }}
             className="relative"
           >
@@ -208,8 +168,8 @@ export function Hero() {
             className="hidden -left-2 bottom-10 sm:block lg:-left-14"
             delay="2.1s"
           />
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
 
       {/* badge + marquee */}
       <div className="relative z-10 border-t border-white/5">

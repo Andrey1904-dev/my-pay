@@ -9,29 +9,24 @@ import {
   motion,
   useMotionValue,
   useSpring,
-  useInView,
   useScroll,
   AnimatePresence,
 } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "../utils/cn";
 
-export const APP_URL = `${import.meta.env.BASE_URL}app.html`;
+export const APP_URL = "./app.html";
 export const REPO_URL = "https://github.com/Andrey1904-dev/my-pay";
 
 /* ================= scroll helper ================= */
 export function scrollToId(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
-  const lenis = (window as unknown as { __lenis?: { scrollTo: (t: HTMLElement, o?: object) => void } }).__lenis;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const headerHeight = document.querySelector("header")?.getBoundingClientRect().height ?? 72;
   const offset = headerHeight + 8;
-  if (lenis && !reduceMotion) lenis.scrollTo(el, { offset: -offset, duration: 1.2 });
-  else {
-    const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY - offset);
-    window.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
-  }
+  const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY - offset);
+  window.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
 }
 
 /* ================= custom cursor ================= */
@@ -78,52 +73,6 @@ export function Cursor() {
   );
 }
 
-/* ================= preloader ================= */
-export function Preloader({ onDone }: { onDone: () => void }) {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    const start = performance.now();
-    const dur = 1500;
-    let raf = 0;
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / dur);
-      const eased = 1 - Math.pow(1 - p, 3);
-      setN(Math.round(eased * 100));
-      if (p < 1) raf = requestAnimationFrame(tick);
-      else setTimeout(onDone, 350);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [onDone]);
-
-  return (
-    <motion.div
-      className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-ink"
-      exit={{ y: "-100%", transition: { duration: 0.7, ease: [0.76, 0, 0.24, 1] } }}
-    >
-      <p className="font-mono text-[11px] uppercase tracking-[0.4em] text-fog">
-        CASE.PLACE SALARY
-      </p>
-      <div className="mt-4 flex items-baseline gap-2 font-mono">
-        <motion.span
-          key={n}
-          className="text-[18vw] font-bold leading-none text-cream tabular-nums md:text-[9rem]"
-        >
-          {n}
-        </motion.span>
-        <span className="text-2xl text-flame">%</span>
-      </div>
-      <div className="mt-6 h-px w-48 overflow-hidden bg-line">
-        <div
-          className="h-full bg-flame transition-[width] duration-100"
-          style={{ width: `${n}%` }}
-        />
-      </div>
-      <p className="mt-4 font-mono text-[11px] text-smoke">смена загружается…</p>
-    </motion.div>
-  );
-}
-
 /* ================= nav ================= */
 const NAV_LINKS = [
   { id: "calc", label: "Калькулятор" },
@@ -132,7 +81,7 @@ const NAV_LINKS = [
   { id: "math", label: "Математика" },
 ];
 
-export function Nav({ visible }: { visible: boolean }) {
+export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const { scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 26 });
@@ -144,10 +93,7 @@ export function Nav({ visible }: { visible: boolean }) {
   }, []);
 
   return (
-    <motion.header
-      initial={{ y: -80, opacity: 0 }}
-      animate={visible ? { y: 0, opacity: 1 } : {}}
-      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+    <header
       className={cn(
         "fixed inset-x-0 top-0 z-[120] pt-[env(safe-area-inset-top)] transition-all duration-500",
         scrolled ? "glass border-b border-white/5" : "bg-transparent"
@@ -198,7 +144,7 @@ export function Nav({ visible }: { visible: boolean }) {
         className="h-[2px] origin-left bg-gradient-to-r from-flame to-flame-soft"
         style={{ scaleX: progress }}
       />
-    </motion.header>
+    </header>
   );
 }
 
@@ -294,20 +240,18 @@ export function Reveal({
   children,
   delay = 0,
   className,
-  y = 28,
 }: {
   children: ReactNode;
   delay?: number;
   className?: string;
-  y?: number;
 }) {
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y }}
+      initial={{ opacity: 1, y: 0 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.8, delay, ease: [0.22, 1, 0.36, 1] }}
+      viewport={{ once: true, margin: "0px" }}
+      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
     </motion.div>
@@ -316,58 +260,7 @@ export function Reveal({
 
 /* ================= word-by-word reveal ================= */
 export function WordReveal({ children }: { children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
-  const words = extractWords(children);
-  let k = 0;
-  return (
-    <div ref={ref}>
-      {words.map((w, i) =>
-        typeof w === "string" ? (
-          <span key={i} className="inline-block overflow-hidden pb-[0.08em] align-bottom">
-            <motion.span
-              className="inline-block"
-              initial={{ y: "110%" }}
-              animate={inView ? { y: 0 } : {}}
-              transition={{
-                duration: 0.7,
-                delay: 0.05 * k++,
-                ease: [0.22, 1, 0.36, 1],
-              }}
-            >
-              {w}&nbsp;
-            </motion.span>
-          </span>
-        ) : (
-          <span key={i} className="inline-block overflow-hidden pb-[0.08em] align-bottom">
-            <motion.span
-              className="inline-block"
-              initial={{ y: "110%" }}
-              animate={inView ? { y: 0 } : {}}
-              transition={{
-                duration: 0.7,
-                delay: 0.05 * k++,
-                ease: [0.22, 1, 0.36, 1],
-              }}
-            >
-              {w}
-            </motion.span>
-          </span>
-        )
-      )}
-    </div>
-  );
-}
-
-function extractWords(node: ReactNode): ReactNode[] {
-  if (typeof node === "string") return node.split(/\s+/).filter(Boolean);
-  if (typeof node === "number") return [String(node)];
-  if (Array.isArray(node)) return node.flatMap(extractWords);
-  if (typeof node === "object" && node && "props" in (node as never)) {
-    const el = node as { props: { children?: ReactNode } };
-    if (el.props.children !== undefined) return [node];
-  }
-  return node ? [node] : [];
+  return <div>{children}</div>;
 }
 
 /* ================= rotating badge ================= */
@@ -420,40 +313,6 @@ export function SpotCard({
     >
       {children}
     </div>
-  );
-}
-
-/* ================= magnetic wrapper ================= */
-export function Magnetic({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const sx = useSpring(x, { stiffness: 180, damping: 16 });
-  const sy = useSpring(y, { stiffness: 180, damping: 16 });
-  return (
-    <motion.div
-      ref={ref}
-      style={{ x: sx, y: sy }}
-      onMouseMove={(e) => {
-        const r = ref.current?.getBoundingClientRect();
-        if (!r) return;
-        x.set((e.clientX - (r.left + r.width / 2)) * 0.25);
-        y.set((e.clientY - (r.top + r.height / 2)) * 0.25);
-      }}
-      onMouseLeave={() => {
-        x.set(0);
-        y.set(0);
-      }}
-      className={cn("inline-block", className)}
-    >
-      {children}
-    </motion.div>
   );
 }
 

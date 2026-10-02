@@ -3,23 +3,66 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="CASE.PLACE SALARY — смена считается сама. Учёт чехлов, смен 2/2, заработок, финансы и цели. Веб, iPhone и Telegram — одни данные." />
     <meta name="theme-color" content="#0b0c0e" />
     <meta name="color-scheme" content="dark" />
-    <meta name="apple-mobile-web-app-title" content="CASE.PLACE SALARY" />
+    <meta
+      name="description"
+      content="CASE.PLACE SALARY — личный кабинет сотрудника: смены 2/2, упакованные чехлы, заработок, финансы и Telegram-бот."
+    />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
-    <title>CASE.PLACE SALARY — смена считается сама</title>
+    <title>CASE.PLACE SALARY — Смены, чехлы и деньги</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Unbounded:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="./landing.css?v=1.01" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="root">
+      <div class="noise relative min-h-screen bg-ink text-cream">
+        <header class="fixed inset-x-0 top-0 z-[120] border-b border-white/5 bg-ink/80 backdrop-blur-md">
+          <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-5 md:px-8">
+            <a href="#top" class="flex items-center gap-3">
+              <span class="grid h-8 w-8 place-items-center rounded-lg bg-flame font-mono text-sm font-bold text-ink">₽</span>
+              <span class="text-left leading-none">
+                <span class="block text-[13px] font-extrabold tracking-wide">CASE.PLACE</span>
+                <span class="block font-mono text-[10px] uppercase tracking-[0.3em] text-fog">salary</span>
+              </span>
+            </a>
+            <a href="./app.html" class="flex min-h-11 items-center gap-2 rounded-full bg-cream px-4 py-2 text-[12px] font-bold text-ink">
+              Открыть приложение
+            </a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-7xl px-4 pb-16 pt-28 sm:px-5 md:px-8 md:pt-32">
+          <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-fog">Екатеринбург · смены 2/2 · упаковка чехлов</p>
+          <h1 class="mt-6 text-[clamp(2.8rem,10vw,7.5rem)] font-extrabold uppercase leading-[0.9] tracking-tight">
+            <span class="block text-cream">Смена</span>
+            <span class="block text-outline">считается</span>
+            <span class="block text-flame">сама</span>
+          </h1>
+          <p class="mt-6 max-w-md text-[15px] leading-relaxed text-fog">
+            Внёс чехлы — получил итог смены, месяц и прогресс к цели. Календарь 2/2, статистика, финансы и Telegram-бот.
+          </p>
+          <div class="mt-8 flex flex-wrap gap-4">
+            <a href="./app.html" class="inline-flex min-h-12 items-center justify-center rounded-full bg-flame px-7 py-4 text-[14px] font-extrabold text-ink">
+              Открыть приложение
+            </a>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script type="module" src="./landing.js?v=1.01"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js").then((r) => r.update()).catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

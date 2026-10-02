@@ -2,18 +2,33 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
-import { viteSingleFile } from "vite-plugin-singlefile";
+import { defineConfig, type Plugin } from "vite";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const previewHosts = ["localhost", ".localhost", ".e2b.app"];
 
-export default defineConfig({
-  // Relative asset URLs keep the build working on both a domain root and
-  // GitHub Pages' /my-pay/ project path.
+function devLandingTransform(): Plugin {
+  return {
+    name: "dev-landing-transform",
+    apply: "serve",
+    transformIndexHtml: {
+      order: "pre",
+      handler(html) {
+        return html
+          .replace(/<link\s+rel="stylesheet"\s+href="\.\/landing\.css[^"]*"\s*\/?>\s*/g, "")
+          .replace(
+            /<script\s+type="module"\s+src="\.\/landing\.js[^"]*"><\/script>/,
+            '<script type="module" src="/src/main.tsx"></script>'
+          );
+      },
+    },
+  };
+}
+
+export default defineConfig(({ command }) => ({
   base: "./",
-  plugins: [react(), tailwindcss(), viteSingleFile()],
+  publicDir: false,
+  plugins: [devLandingTransform(), react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
@@ -21,20 +36,26 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
-    allowedHosts: previewHosts,
+    allowedHosts: true,
   },
   preview: {
     host: "0.0.0.0",
-    allowedHosts: previewHosts,
+    allowedHosts: true,
   },
   build: {
     outDir: "dist",
-    rollupOptions: {
-      // app.html is a separate, existing static PWA entry. It is copied as-is
-      // after the landing page is bundled so its classic script stays intact.
-      input: {
-        main: path.resolve(__dirname, "index.html"),
-      },
-    },
+    emptyOutDir: true,
+    rollupOptions:
+      command === "build"
+        ? {
+            input: path.resolve(__dirname, "src/main.tsx"),
+            output: {
+              entryFileNames: "landing.js",
+              chunkFileNames: "landing-[name].js",
+              assetFileNames: (assetInfo) =>
+                assetInfo.name?.endsWith(".css") ? "landing.css" : "assets/[name][extname]",
+            },
+          }
+        : undefined,
   },
-});
+}));

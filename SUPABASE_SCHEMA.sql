@@ -40,7 +40,7 @@ create table if not exists public.shifts (
   is_holiday boolean not null default false,
   base_pay numeric not null default 2415,
   piece_pay numeric not null default 0,
-  total_pay numeric not null default 2627.84,
+  total_pay numeric not null default 2415,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(user_id, work_date)
