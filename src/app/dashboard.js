@@ -27,19 +27,24 @@ export function syncHomeInputsFromCloud() {
 
 export function updateHome() {
   const { cases, holiday } = homeInputs();
-  const p = piece(cases), b = base(holiday);
-  const bonus = num(state.extra.shiftMeta?.[todayKey()]?.bonus);
-  $("shiftTotal").textContent = money(b + p + bonus);
+  const savedShift = state.shifts[todayKey()];
+  const historical = !state.homeDirty && savedShift && savedShift.cases === cases && !!savedShift.holiday === holiday;
+  const p = historical ? num(savedShift.piece) : piece(cases), b = historical ? num(savedShift.base) : base(holiday);
+  const bonus = historical ? Math.max(0, num(savedShift.total) - b - p) : num(state.extra.shiftMeta?.[todayKey()]?.bonus);
+  $("shiftTotal").textContent = money(historical ? savedShift.total : b + p + bonus);
+  $("casesInput").style.width = Math.max(1, String(cases).length) + "ch";
+  $("casesInput").style.fontSize = String(cases).length > 5 ? "22px" : "";
   $("homeBonus").textContent = money(bonus);
   $("homeBonusRow").classList.toggle("hidden", !bonus);
   $("homeBase").textContent = money(b);
+  $("homeBaseLabel").textContent = holiday ? "Фикс × 2 + обед" : "Фикс + обед";
   $("homePiece").textContent = money(p);
   $("holidayChip").classList.toggle("hidden", !holiday);
   $("perCase").textContent = money(num(state.settings.casePrice) * num(state.settings.percent) / 100);
   $("perThousand").textContent = money(piece(1000));
   $("holidayRateLabel").textContent = money(state.settings.holidayPay);
   const now = workNow();
-  $("todayLabel").textContent = dateText(now, { weekday: "long", day: "numeric", month: "long" });
+  $("todayLabel").textContent = "Сегодня, " + dateText(now, { day: "numeric", month: "long" });
   const badge = $("todayBadge"), work = isWork(now);
   badge.textContent = work ? "Работа" : "Выходной"; badge.classList.toggle("is-work", work);
   const saved = state.shifts[todayKey()];
@@ -52,6 +57,8 @@ export function updateHomeDashboard() {
   const es = monthEntries(workNow()), sum = monthSum(es), cases = es.reduce((a, v) => a + num(v.cases), 0);
   $("homeMonthTotal").textContent = money(sum);
   $("homeMonthShifts").textContent = integer(es.length);
+  $("homeMonthShiftsUnit").textContent = plural(es.length, "смена", "смены", "смен");
+  $("homeMonthName").textContent = dateText(workNow(), { month: "long" });
   $("homeMonthCases").textContent = integer(cases);
   $("homeAvgShift").textContent = money(es.length ? sum / es.length : 0);
 }
@@ -82,16 +89,15 @@ export function updateNextShiftCard() {
   }
 }
 
-export async function saveHomeShift() {
-  // Главная всегда сохраняет сегодняшний день (а не дату, выбранную в календаре).
+export async function saveHomeShift({ silent = false } = {}) {
   const { cases, holiday } = homeInputs();
-  const k = todayKey(), previous = state.shifts[k];
+  $("casesInput").value = String(cases);
+  const k = todayKey();
   const meta = state.extra.shiftMeta?.[k];
   const v = makeShift(cases, holiday, meta?.bonus || 0);
+  // Commit locally before any network await. Queue coalesces edits by owner/date.
   state.shifts[k] = v; save();
-  if (accountId() && !await cloudSaveShift(k, v)) {
-    if (previous) state.shifts[k] = previous; else delete state.shifts[k];
-    save(); return;
-  }
-  state.homeDirty = false; renderAll(); showToast("Смена сохранена ✓");
+  state.homeDirty = false; renderAll();
+  if (!silent) showToast("Смена сохранена ✓");
+  if (accountId()) await cloudSaveShift(k, v);
 }

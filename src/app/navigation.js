@@ -15,7 +15,10 @@ import { openTemplateModal, saveTemplate } from './templates.js';
 import { generateTelegramCode, openTelegramModal } from './profile.js';
 import { enableNotifications } from './notifications.js';
 
-export function showScreen(id) {
+const screens = ["homeScreen", "calendarScreen", "statsScreen", "moreScreen"];
+export function showScreen(id, { history = true } = {}) {
+  if (!screens.includes(id)) id = "homeScreen";
+  if (history && location.hash !== "#" + id) window.history.pushState(null, "", "#" + id);
   document.querySelectorAll(".nav-item").forEach(x => { const active = x.dataset.screen === id; x.classList.toggle("active", active); if (active) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
   document.querySelectorAll(".screen").forEach(x => x.classList.toggle("active", x.id === id));
   if (id === "calendarScreen") renderCalendar();
@@ -25,19 +28,23 @@ export function showScreen(id) {
 
 export function markHomeDirty() { state.homeDirty = true; updateHome(); }
 
-export function bumpCases(delta) { $("casesInput").value = String(Math.max(0, homeInputs().cases + delta)); markHomeDirty(); }
+export function bumpCases(delta) { $("casesInput").value = String(Math.max(0, homeInputs().cases + delta)); markHomeDirty(); saveHomeShift({ silent: true }); }
 
 export function bindEvents() {
+  const restoreScreen = () => showScreen(location.hash.slice(1), { history: false });
+  window.addEventListener("popstate", restoreScreen);
+  restoreScreen();
   document.querySelectorAll(".nav-item").forEach(b => b.onclick = () => showScreen(b.dataset.screen));
   document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m && m.id !== "confirmModal" && m.id !== "promptModal") closeModal(m.id); }));
   document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal:not(.hidden)").forEach(m => { if (m.id === "confirmModal") $("confirmCancel").click(); else if (m.id === "promptModal") $("promptCancel").click(); else closeModal(m.id); }); });
   document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => closeModal(b.dataset.close));
 
   $("casesInput").addEventListener("input", markHomeDirty);
-  $("holidayInput").addEventListener("change", markHomeDirty);
+  $("holidayInput").addEventListener("change", () => { markHomeDirty(); saveHomeShift({ silent: true }); });
+  $("casesInput").addEventListener("change", () => saveHomeShift({ silent: true }));
   document.querySelectorAll(".step-btn").forEach(b => b.addEventListener("click", () => bumpCases(num(b.dataset.step))));
   document.querySelectorAll(".quick-row button").forEach(b => b.addEventListener("click", () => bumpCases(num(b.dataset.add))));
-  $("saveShiftBtn").onclick = saveHomeShift;
+  $("saveShiftBtn").onclick = () => saveHomeShift();
   $("settingsBtn").onclick = openSettings; $("openSettingsFromMore").onclick = openSettings; $("settingsSave").onclick = saveSettings;
 
   $("prevMonth").onclick = () => shiftMonth(-1); $("nextMonth").onclick = () => shiftMonth(1); $("monthTitle").onclick = goToCurrentMonth;

@@ -10,7 +10,7 @@ export function applyTheme() {
   document.body.classList.toggle("dark", dark);
   const status = $("themeStatus"); if (status) status.textContent = t === "system" ? "Как в системе" : t === "dark" ? "Тёмная" : "Светлая";
   const themeIcon = $("themeBtn")?.querySelector("use"); if (themeIcon) themeIcon.setAttribute("href", dark ? "#i-sun" : "#i-moon");
-  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute("content", dark ? "#0a0c0f" : "#eeeeea"));
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute("content", dark ? "#101214" : "#f3f2ef"));
 }
 
 export function cycleTheme() {

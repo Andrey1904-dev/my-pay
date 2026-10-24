@@ -8,7 +8,7 @@ export const DEFAULTS = { basePay: fixedPart(), holidayPay: fixedPart(true), cas
 export const EXTRA_DEFAULTS = {
   payday: { advanceDay: 23, salaryDay: 8 },
   templates: [{ id: "default", name: "Обычная", cases: 0, hours: 11, bonus: 0, holiday: false }],
-  shiftMeta: {}, theme: "system", undo: null
+  shiftMeta: {}, theme: "dark", undo: null
 };
 
 export const WORK_START_MIN = 8 * 60;
