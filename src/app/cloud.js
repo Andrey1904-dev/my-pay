@@ -1,3 +1,4 @@
+import { renderGreeting } from './greeting.js';
 // Авторизация, синхронизация и постоянная очередь операций.
 import { $, isDateKey, num, todayKey, uid } from './utils.js';
 import { anyModalOpen, confirmAction, promptNumber, showToast } from './dialogs.js';
@@ -24,6 +25,8 @@ try {
     console.warn("Supabase SDK не загрузился — работаем в локальном режиме.");
   }
 } catch (e) { console.warn("Supabase init failed:", e); }
+
+export let greetingPending = !!db;
 
 export let currentUser = null, currentProfile = null, authMode = "login";
 
@@ -112,7 +115,7 @@ export async function loadAuthProviders() {
 
 export async function initCloudAuth() {
   if (db) loadAuthProviders();
-  if (!db) { showAuth(false); showCloudNotice(); updateProfileUI(); return; }
+  if (!db) { greetingPending = false; renderGreeting(); showAuth(false); showCloudNotice(); updateProfileUI(); return; }
   try {
     const { data: { session } } = await db.auth.getSession();
     cleanOAuthUrl();
@@ -122,6 +125,7 @@ export async function initCloudAuth() {
       else if (!s && currentUser) { currentUser = null; currentProfile = null; hideCloudNotice(); showAuth(true); backAuth(); }
     });
   } catch (e) { console.error("initCloudAuth:", e); showAuth(false); showCloudNotice(); }
+  finally { greetingPending = false; renderGreeting(); }
 }
 
 export async function oauthSignIn(provider) {
@@ -192,6 +196,7 @@ export let afterLoginInFlight = null;
 
 export async function afterLogin() {
   if (afterLoginInFlight) return afterLoginInFlight;
+  greetingPending = true; renderGreeting();
   afterLoginInFlight = (async () => {
     const owner = localStorage.getItem("myPayDataOwner");
     if (owner && owner !== currentUser.id) {
@@ -212,7 +217,7 @@ export async function afterLogin() {
     showAuth(false); hideCloudNotice(); renderAll(); startCloudRefresh(); loadTelegramStatus();
     return true;
   })();
-  try { return await afterLoginInFlight; } finally { afterLoginInFlight = null; }
+  try { return await afterLoginInFlight; } finally { afterLoginInFlight = null; greetingPending = false; renderGreeting(); }
 }
 
 export let cloudRefreshTimer = null, cloudListenersBound = false;

@@ -6,7 +6,7 @@ const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8'
 test('main URL contains the application; old app URL preserves auth query and hash', () => {
   const html = read('index.html');
   assert.match(html, /id="casesInput"/);
-  assert.match(html, /src="script.js\?v=1.10"/);
+  assert.match(html, /src="script.js\?v=1.11"/);
   assert.doesNotMatch(html, /landing\.(js|css)|id="root"/);
   assert.match(read('app.html'), /location.replace\('\.\/' \+ location.search \+ location.hash\)/);
   const manifest = JSON.parse(read('manifest.webmanifest'));

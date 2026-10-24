@@ -1,3 +1,4 @@
+import { bindGreetingClock, renderGreeting, greetingWorkDay, consecutiveWorkdays, greetingMessage, ordinalFeminine } from './greeting.js';
 import { workNow } from './utils.js';
 import { oauthSignIn, deleteOwnAccount, loadQueue, queueCloudOp, flushCloudQueue, setAuthMode, backAuth } from './cloud.js';
 import { saveTemplate, applyTemplateToModal } from './templates.js';
@@ -32,13 +33,14 @@ export function init() {
   applyTheme(); bindEvents();
   syncHomeInputsFromCloud(); renderAll(); refreshNotificationUI();
   if ("Notification" in window && Notification.permission === "granted") scheduleShiftReminder();
-  initCloudAuth();
+  initCloudAuth(); bindGreetingClock();
 }
 
 init();
 
 window.MyPay = {
   version: APP_VERSION, state, DEFAULTS,
+  renderGreeting, greetingWorkDay, consecutiveWorkdays, greetingMessage, ordinalFeminine,
   workNow, money, moneyShort, integer, plural, dateKey, fromKey, isDateKey, escapeHtml,
   piece, base, total, makeShift, isWork, monthEntries, monthForecast, analyticsForMonth,
   normalizeSettings, normalizeExtra, correctLegacyShift, parseBackup, restoreBackup, buildBackup, buildCsv,

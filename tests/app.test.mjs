@@ -39,9 +39,9 @@ describe("загрузка и модель", () => {
   test("приложение стартует без ошибок и публикует API", () => {
     const app = open();
     assert.deepEqual(app.errors, []);
-    assert.equal(app.MyPay.version, "1.10");
-    assert.equal(app.text("appVersion"), "V1.10");
-    assert.equal(app.text("brandVersion"), "V1.10", "версия в шапке рядом с названием");
+    assert.equal(app.MyPay.version, "1.11");
+    assert.equal(app.text("appVersion"), "V1.11");
+    assert.equal(app.text("brandVersion"), "V1.11", "версия в шапке рядом с названием");
     assert.match(app.text("brandVersion").trim(), /^V\d+(\.\d+)+$/);
     assert.equal(app.MyPay.cloudAvailable, false, "без SDK — локальный режим");
     assert.match(app.text("cloudNotice"), /локальном режиме/);
@@ -56,11 +56,11 @@ describe("загрузка и модель", () => {
     assert.match(read("index.html"), new RegExp(`script\\.js\\?v=${v.replace(".", "\\.")}"`));
     assert.match(read("sw.js"), new RegExp(`style\\.css\\?v=${v.replace(".", "\\.")}"`));
     assert.match(read("index.html"), new RegExp(`id="brandVersion">V${v.replace(".", "\\.")}<`));
-    assert.equal(v, "1.10");
-    assert.equal(JSON.parse(read("package.json")).version, "1.1.0");
+    assert.equal(v, "1.11");
+    assert.equal(JSON.parse(read("package.json")).version, "1.1.1");
     const lock = JSON.parse(read("package-lock.json"));
-    assert.equal(lock.version, "1.1.0");
-    assert.equal(lock.packages[""].version, "1.1.0");
+    assert.equal(lock.version, "1.1.1");
+    assert.equal(lock.packages[""].version, "1.1.1");
 
   });
 

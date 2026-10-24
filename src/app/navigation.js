@@ -1,6 +1,7 @@
+import { renderGreeting } from './greeting.js';
 import { showAuth } from './cloud.js';
 // Навигация и обработчики интерфейса.
-import { deleteModal, goToCurrentMonth, openShiftModal, renderCalendar, saveModal, shiftMonth, undoLastDelete, updateModal } from './calendar.js';
+import { deleteModal, goToCurrentMonth, openShiftModal, renderCalendar, saveCalendarWorkday, saveModal, shiftMonth, undoLastDelete, updateModal } from './calendar.js';
 import { clearMonth, renderInsights, renderStats } from './stats.js';
 import { state } from './state.js';
 import { homeInputs, saveHomeShift, updateHome, updateNextShiftCard } from './dashboard.js';
@@ -49,6 +50,7 @@ export function bindEvents() {
 
   $("prevMonth").onclick = () => shiftMonth(-1); $("nextMonth").onclick = () => shiftMonth(1); $("monthTitle").onclick = goToCurrentMonth;
   $("statsPrev").onclick = () => shiftMonth(-1); $("statsNext").onclick = () => shiftMonth(1);
+  $("calendarWorkday").onchange = saveCalendarWorkday;
   $("editSelectedBtn").onclick = () => openShiftModal(state.selectedDate);
   ["modalCases", "modalHours", "modalBonus"].forEach(id => $(id).addEventListener("input", updateModal));
   $("modalHoliday").addEventListener("change", updateModal);
@@ -83,5 +85,5 @@ export function bindEvents() {
   $("enableNotificationsBtn").onclick = enableNotifications; $("enableNotificationsMenu").onclick = enableNotifications;
 
   window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if ((state.extra.theme || "system") === "system") applyTheme(); });
-  setInterval(() => { updateNextShiftCard(); if (!state.homeDirty) updateHome(); }, 60000);
+  setInterval(() => { if (!state.homeDirty) updateHome(); else { updateNextShiftCard(); renderGreeting(); } }, 60000);
 }

@@ -1,9 +1,10 @@
+import { greetingWorkDay } from './greeting.js';
 import { accountId } from './cloud.js';
 import { workNow } from './utils.js';
 // Календарь, редактирование, удаление и восстановление смен.
 import { save, state } from './state.js';
 import { $, dateKey, dateText, fromKey, integer, money, num, plural, todayKey } from './utils.js';
-import { isWork, makeShift, total } from './pay.js';
+import { makeShift, total } from './pay.js';
 import { renderInsights, renderStats } from './stats.js';
 import { renderModalTemplates } from './templates.js';
 import { closeModal, confirmAction, openModal, showToast } from './dialogs.js';
@@ -20,12 +21,12 @@ export function renderCalendar() {
   for (let n = 1; n <= days; n++) {
     const x = new Date(d.getFullYear(), d.getMonth(), n), k = dateKey(x), s = state.shifts[k], b = document.createElement("button");
     b.type = "button"; b.className = "day"; b.setAttribute("role", "gridcell");
-    if (isWork(x)) b.classList.add("work");
+    if (greetingWorkDay(x)) b.classList.add("work");
     if (s) { b.classList.add("saved"); if (s.holiday) b.classList.add("holiday"); }
     if (k === today) b.classList.add("today");
     if (k === state.selectedDate) { b.classList.add("selected"); b.setAttribute("aria-selected", "true"); }
     b.textContent = n;
-    b.setAttribute("aria-label", `${dateText(x, { day: "numeric", month: "long" })}${s ? ", смена " + money(s.total) : isWork(x) ? ", рабочий день" : ", выходной"}`);
+    b.setAttribute("aria-label", `${dateText(x, { day: "numeric", month: "long" })}${s ? ", смена " + money(s.total) : greetingWorkDay(x) ? ", рабочий день" : ", выходной"}`);
     if (s) { const i = document.createElement("i"); i.className = "tiny"; b.appendChild(i); }
     b.onclick = () => { if (state.selectedDate === k) openShiftModal(k); else selectCalendarDate(k); };
     frag.appendChild(b);
@@ -39,7 +40,8 @@ export function renderSelectedCard() {
   $("selectedDate").textContent = dateText(d, { weekday: "long", day: "numeric", month: "long" });
   const parts = [];
   if (s) { parts.push(s.holiday ? "Праздничная смена" : "Смена внесена"); parts.push(`${integer(s.cases)} ${plural(s.cases, "чехол", "чехла", "чехлов")}`); if (meta?.note) parts.push(meta.note); }
-  else parts.push(isWork(d) ? "Рабочий день по графику" : "Выходной по графику");
+  else parts.push(greetingWorkDay(d) ? "Рабочий день" : "Выходной");
+  $("calendarWorkday").value = state.extra.workdayOverrides[k] === true ? "work" : state.extra.workdayOverrides[k] === false ? "off" : "auto";
   $("selectedStatus").textContent = parts.join(" · ");
   $("selectedMoney").textContent = s ? money(s.total) : "—";
   $("editSelectedBtn").querySelector("span").textContent = s ? "Изменить смену" : "Внести смену";
@@ -129,4 +131,11 @@ export function refreshUndoUI() {
   const u = state.extra.undo, b = $("undoDeleteBtn"); if (!b) return;
   b.classList.toggle("hidden", !u?.shift);
   if (u?.shift) $("undoDeleteMeta").textContent = `${dateText(fromKey(u.date), { day: "numeric", month: "long" })} · ${money(u.shift.total)}`;
+}
+
+export function saveCalendarWorkday() {
+  const value = $("calendarWorkday").value;
+  if (value === 'auto') delete state.extra.workdayOverrides[state.selectedDate];
+  else state.extra.workdayOverrides[state.selectedDate] = value === 'work';
+  save(); renderAll(); cloudSaveExtra();
 }
