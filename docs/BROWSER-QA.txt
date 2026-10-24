@@ -1,0 +1,17 @@
+chromium loaded []
+chromium burst 2000 5 915 ₽
+chromium reload 1000
+chromium back statsScreen
+chromium legacy http://localhost:4173/?legacy=1#calendarScreen calendarScreen
+chromium offline 1000
+chromium errors []
+chromium mock authenticated offline/reconnect sync: 2000 cases, one row, queue empty
+chromium edit, delete/undo, JSON/CSV download, JSON import preserving history: passed
+webkit loaded []
+webkit burst 2000 5 915 ₽
+webkit reload 1000
+webkit back statsScreen
+webkit legacy http://localhost:4173/?legacy=1#calendarScreen calendarScreen
+webkit errors []
+webkit mock authenticated offline/reconnect sync: 2000 cases, one row, queue empty
+webkit edit, delete/undo, JSON/CSV download, JSON import preserving history: passed

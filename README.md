@@ -111,3 +111,15 @@ SQL, storage keys и серверные функции не изменялись
 Сборка создаёт очищенный `dist/` и корневой `script.js` для совместимости с legacy Pages.
 Локально `npm run dev` использует Vite без SW; `npm run build && npm run preview` — production с SW.
 Отчёты по этапам и ограничения: [docs/REDESIGN-STAGES.md](docs/REDESIGN-STAGES.md).
+
+Браузерное QA (опционально, Playwright не добавлен в зависимости приложения):
+
+```bash
+npm run build && npm run preview
+# В другом терминале, с доступным playwright и установленными chromium/webkit:
+node scripts/browser-qa.cjs
+# Или PLAYWRIGHT_MODULE=/absolute/path/to/playwright node scripts/browser-qa.cjs
+```
+
+Скрипт блокирует обращения к настоящему Supabase/CDN, использует синтетический backend,
+сохраняет скриншоты в `screenshots/`. [Результат прогона](docs/BROWSER-QA.txt).

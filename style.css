@@ -1,5 +1,5 @@
 /* ==========================================================================
-   CASE.PLACE SALARY — design system v18 «Ledger»
+   CASE.PLACE SALARY — design system v1.10 «Моя смена»
    Палитра прежняя: графит, фирменный оранжевый, тёплые светлые нейтрали.
    Принципы: поверхности всегда отделены от фона (граница + тень), текст ≥ 12 px,
    все пары «текст / фон» проверены скриптом на контраст ≥ 4.5:1 (WCAG AA).
@@ -535,7 +535,7 @@ a.menu-item { text-decoration: none; }
   .nav-item.active { flex: 2.4 1 0; }
 }
 @media (min-width: 700px) {
-  /* Десктоп: «телефонная» колонка на более тёмном фоне, чтобы рамка и карточки читались */
+  /* Исходная адаптивная сетка; финальная геометрия оболочки определена ниже. */
   body { padding: 32px 0 44px; background: #e2e2dd radial-gradient(900px 520px at 100% -10%, rgba(255, 90, 31, .14), transparent 70%) no-repeat; }
   body.dark { background: #05060a radial-gradient(900px 520px at 100% -10%, rgba(255, 106, 51, .14), transparent 70%) no-repeat; }
   .app { border-radius: 34px; background: var(--bg); border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg); min-height: 0; padding-bottom: calc(var(--nav-h) + 56px); overflow: hidden; }
