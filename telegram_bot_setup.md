@@ -63,6 +63,56 @@ tests/telegram-bot.test.mjs                  проверки на моках
    Проверка: `https://api.telegram.org/botТОКЕН/getWebhookInfo` — поле `last_error_message` должно быть пустым.
 7. В приложении: **Ещё → Telegram-бот → Получить код** (нужен вход в аккаунт). Команда `/start КОД` копируется в буфер — отправь её боту. Код действует ограниченное время и одноразовый.
 
+## Обновление действующего production
+
+24 октября 2026 обновлён проект `dyixwxxpjmyycgigcbtx`: повторно применена Telegram-схема,
+исправлены права RPC выдачи кода и семь значений по умолчанию в `settings`/`shifts`.
+Сохранённые смены, тарифы пользователей и существующие секреты не менялись.
+Обе Edge Functions обновлены из исходников веб-версии V1.02:
+`telegram-mypay` — версия **15**, `telegram-reminders` — версия **3**; обе `ACTIVE`.
+
+Для повторного применения из корня репозитория:
+
+```bash
+supabase login
+supabase projects list
+
+# Один SQL-update в транзакции: Telegram-схема/RPC и только defaults оплаты.
+supabase db query --linked --project-ref dyixwxxpjmyycgigcbtx \
+  --file supabase/updates/20261024_refresh_telegram_and_pay_defaults.sql
+
+# Явно называем обе функции: остальные функции проекта не затрагиваются.
+supabase functions deploy telegram-mypay telegram-reminders \
+  --project-ref dyixwxxpjmyycgigcbtx --use-api --no-verify-jwt
+
+supabase functions list --project-ref dyixwxxpjmyycgigcbtx
+```
+
+Проверенный CLI: Supabase 2.118.0. Команда `db query --linked --project-ref` использует
+авторизованный Management API; Docker и пароль БД для этого обновления не потребовались.
+SQL-update применяется напрямую, без `db push` и без записи в историю Supabase migrations.
+Не запускайте полный `SUPABASE_SCHEMA.sql` ради одних defaults: в нём есть отдельные
+миграции исторических тарифов. Для этого обновления используется только файл из `supabase/updates/`.
+
+`--no-verify-jwt` сохраняет существующий режим функций: бот проверяет
+`X-Telegram-Bot-Api-Secret-Token`, напоминания — `Authorization: Bearer <service role key>`.
+Токен бота и webhook secret остаются в Supabase Secrets. Не вставляйте их в GitHub или инструкции.
+
+Контроль после обновления:
+
+- В списке функций обе имеют статус `ACTIVE` и увеличенные версии.
+- `GET /functions/v1/telegram-mypay` возвращает `200` и имя сервиса.
+- POST вебхука с неправильным секретом и запуск напоминаний без ключа возвращают `401`.
+- У RPC `create_telegram_link_code()` включён `SECURITY DEFINER`, execute разрешён
+  `authenticated` и запрещён `anon`; код имеет 12 шестнадцатеричных символов.
+- Defaults: обычная ставка `2415`, праздничная `4600`, цена чехла `7`, процент `25`,
+  опорная дата по Екатеринбургу; `shifts.base_pay` и `total_pay` по умолчанию `2415`.
+
+В production дополнительно проверено выполнение RPC от роли `authenticated` внутри
+транзакции с `ROLLBACK`: тестовый код не остался в базе, старый код аккаунта сохранён.
+Эти проверки не отправляют Telegram-сообщений. Доставка пользователю и фактическое
+выполнение cron — отдельные проверки, они не следуют автоматически из успешного деплоя.
+
 ## Напоминания по расписанию
 
 Что рассылается (по времени Екатеринбурга): в 19:00 — «сколько чехлов сегодня?» с кнопками +500/+1000/+1500, если день рабочий по графику, а смена не внесена; в `reminder_hour` (по умолчанию 21:00, меняется кнопкой в `/settings`) — «завтра рабочая смена» с прогрессом месяца; в `reminder_hour` последнего дня месяца — итоги месяца.

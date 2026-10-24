@@ -78,7 +78,10 @@ npm audit          # зависимости, включая инструмент
 
 SQL выполнять по порядку: `SUPABASE_SCHEMA.sql`, `SUPABASE_ULTRA.sql`,
 `TELEGRAM_SUPABASE.sql`, `SUPABASE_ACCOUNT.sql`.
-Для существующего проекта повторный `TELEGRAM_SUPABASE.sql` исправляет права RPC выдачи кода привязки.
+Production обновлён 24.10.2026: Telegram-схема/RPC, defaults оплаты и обе Edge Functions.
+Для существующего проекта используйте атомарный SQL-update
+`supabase/updates/20261024_refresh_telegram_and_pay_defaults.sql`; он не пересчитывает сохранённые смены.
+Команды повторного деплоя и контрольные проверки приведены в инструкции бота.
 Сервисный ключ и токен Telegram должны оставаться в Supabase Secrets; publishable key клиента публичный.
 
 [Настройка бота](telegram_bot_setup.md). OAuth-кнопки показываются только для реально включённых провайдеров.
