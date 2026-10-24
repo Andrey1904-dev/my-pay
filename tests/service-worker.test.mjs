@@ -12,7 +12,7 @@ function worker({ cacheKeys = [], fetchImpl = async () => { throw new Error('off
   return { handlers, deleted, puts };
 }
 test('activation removes only this app’s obsolete cache', async () => {
-  const w = worker({ cacheKeys: ['my-pay-v1.01', 'my-pay-v1.02', 'another-app-v1'] });
+  const w = worker({ cacheKeys: ['my-pay-v1.01', 'my-pay-v1.10', 'another-app-v1'] });
   let done; w.handlers.activate({ waitUntil(p) { done = p; } }); await done;
   assert.deepEqual(w.deleted, ['my-pay-v1.01']);
 });

@@ -249,7 +249,7 @@
     payday: { advanceDay: 23, salaryDay: 8 },
     templates: [{ id: "default", name: "\u041E\u0431\u044B\u0447\u043D\u0430\u044F", cases: 0, hours: 11, bonus: 0, holiday: false }],
     shiftMeta: {},
-    theme: "system",
+    theme: "dark",
     undo: null
   };
   var WORK_START_MIN = 8 * 60;
@@ -820,19 +820,24 @@
   }
   function updateHome() {
     const { cases, holiday } = homeInputs();
-    const p = piece(cases), b = base(holiday);
-    const bonus = num(state.extra.shiftMeta?.[todayKey()]?.bonus);
-    $("shiftTotal").textContent = money(b + p + bonus);
+    const savedShift = state.shifts[todayKey()];
+    const historical = !state.homeDirty && savedShift && savedShift.cases === cases && !!savedShift.holiday === holiday;
+    const p = historical ? num(savedShift.piece) : piece(cases), b = historical ? num(savedShift.base) : base(holiday);
+    const bonus = historical ? Math.max(0, num(savedShift.total) - b - p) : num(state.extra.shiftMeta?.[todayKey()]?.bonus);
+    $("shiftTotal").textContent = money(historical ? savedShift.total : b + p + bonus);
+    $("casesInput").style.width = Math.max(1, String(cases).length) + "ch";
+    $("casesInput").style.fontSize = String(cases).length > 5 ? "22px" : "";
     $("homeBonus").textContent = money(bonus);
     $("homeBonusRow").classList.toggle("hidden", !bonus);
     $("homeBase").textContent = money(b);
+    $("homeBaseLabel").textContent = holiday ? "\u0424\u0438\u043A\u0441 \xD7 2 + \u043E\u0431\u0435\u0434" : "\u0424\u0438\u043A\u0441 + \u043E\u0431\u0435\u0434";
     $("homePiece").textContent = money(p);
     $("holidayChip").classList.toggle("hidden", !holiday);
     $("perCase").textContent = money(num(state.settings.casePrice) * num(state.settings.percent) / 100);
     $("perThousand").textContent = money(piece(1e3));
     $("holidayRateLabel").textContent = money(state.settings.holidayPay);
     const now = workNow();
-    $("todayLabel").textContent = dateText(now, { weekday: "long", day: "numeric", month: "long" });
+    $("todayLabel").textContent = "\u0421\u0435\u0433\u043E\u0434\u043D\u044F, " + dateText(now, { day: "numeric", month: "long" });
     const badge = $("todayBadge"), work = isWork(now);
     badge.textContent = work ? "\u0420\u0430\u0431\u043E\u0442\u0430" : "\u0412\u044B\u0445\u043E\u0434\u043D\u043E\u0439";
     badge.classList.toggle("is-work", work);
@@ -845,6 +850,8 @@
     const es = monthEntries(workNow()), sum = monthSum(es), cases = es.reduce((a, v) => a + num(v.cases), 0);
     $("homeMonthTotal").textContent = money(sum);
     $("homeMonthShifts").textContent = integer(es.length);
+    $("homeMonthShiftsUnit").textContent = plural(es.length, "\u0441\u043C\u0435\u043D\u0430", "\u0441\u043C\u0435\u043D\u044B", "\u0441\u043C\u0435\u043D");
+    $("homeMonthName").textContent = dateText(workNow(), { month: "long" });
     $("homeMonthCases").textContent = integer(cases);
     $("homeAvgShift").textContent = money(es.length ? sum / es.length : 0);
   }
@@ -881,22 +888,17 @@
       d.setDate(d.getDate() + 1);
     }
   }
-  async function saveHomeShift() {
+  async function saveHomeShift({ silent = false } = {}) {
     const { cases, holiday } = homeInputs();
-    const k = todayKey(), previous = state.shifts[k];
+    const k = todayKey();
     const meta = state.extra.shiftMeta?.[k];
     const v = makeShift(cases, holiday, meta?.bonus || 0);
     state.shifts[k] = v;
     save();
-    if (accountId() && !await cloudSaveShift(k, v)) {
-      if (previous) state.shifts[k] = previous;
-      else delete state.shifts[k];
-      save();
-      return;
-    }
     state.homeDirty = false;
     renderAll();
-    showToast("\u0421\u043C\u0435\u043D\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0430 \u2713");
+    if (!silent) showToast("\u0421\u043C\u0435\u043D\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0430 \u2713");
+    if (accountId()) await cloudSaveShift(k, v);
   }
 
   // src/app/theme.js
@@ -908,7 +910,7 @@
     if (status) status.textContent = t === "system" ? "\u041A\u0430\u043A \u0432 \u0441\u0438\u0441\u0442\u0435\u043C\u0435" : t === "dark" ? "\u0422\u0451\u043C\u043D\u0430\u044F" : "\u0421\u0432\u0435\u0442\u043B\u0430\u044F";
     const themeIcon = $("themeBtn")?.querySelector("use");
     if (themeIcon) themeIcon.setAttribute("href", dark ? "#i-sun" : "#i-moon");
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", dark ? "#0a0c0f" : "#eeeeea"));
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", dark ? "#101214" : "#f3f2ef"));
   }
   function cycleTheme() {
     const order = ["system", "light", "dark"], i = order.indexOf(state.extra.theme || "system");
@@ -1059,7 +1061,7 @@
       if (session?.user) {
         currentUser = session.user;
         await afterLogin();
-      } else showAuth(true);
+      } else showAuth(false);
       db.auth.onAuthStateChange((_event, s) => {
         if (s?.user && s.user.id !== currentUser?.id) {
           currentUser = s.user;
@@ -1465,18 +1467,8 @@
   }
 
   // src/app/config.js
-  var APP_VERSION = "1.02";
+  var APP_VERSION = "1.10";
   var CACHE_VERSION = "my-pay-v" + APP_VERSION;
-  (async () => {
-    try {
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.filter((k) => k.startsWith("my-pay-v") && k !== CACHE_VERSION).map((k) => caches.delete(k)));
-      }
-    } catch (e) {
-      console.warn("Cache cleanup:", e);
-    }
-  })();
 
   // src/app/backup.js
   function downloadFile(name, content, type) {
@@ -1618,7 +1610,10 @@
   }
 
   // src/app/navigation.js
-  function showScreen(id) {
+  var screens = ["homeScreen", "calendarScreen", "statsScreen", "moreScreen"];
+  function showScreen(id, { history: history2 = true } = {}) {
+    if (!screens.includes(id)) id = "homeScreen";
+    if (history2 && location.hash !== "#" + id) window.history.pushState(null, "", "#" + id);
     document.querySelectorAll(".nav-item").forEach((x) => {
       const active = x.dataset.screen === id;
       x.classList.toggle("active", active);
@@ -1640,8 +1635,12 @@
   function bumpCases(delta) {
     $("casesInput").value = String(Math.max(0, homeInputs().cases + delta));
     markHomeDirty();
+    saveHomeShift({ silent: true });
   }
   function bindEvents() {
+    const restoreScreen = () => showScreen(location.hash.slice(1), { history: false });
+    window.addEventListener("popstate", restoreScreen);
+    restoreScreen();
     document.querySelectorAll(".nav-item").forEach((b) => b.onclick = () => showScreen(b.dataset.screen));
     document.querySelectorAll(".modal").forEach((m) => m.addEventListener("click", (e) => {
       if (e.target === m && m.id !== "confirmModal" && m.id !== "promptModal") closeModal(m.id);
@@ -1655,10 +1654,14 @@
     });
     document.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => closeModal(b.dataset.close));
     $("casesInput").addEventListener("input", markHomeDirty);
-    $("holidayInput").addEventListener("change", markHomeDirty);
+    $("holidayInput").addEventListener("change", () => {
+      markHomeDirty();
+      saveHomeShift({ silent: true });
+    });
+    $("casesInput").addEventListener("change", () => saveHomeShift({ silent: true }));
     document.querySelectorAll(".step-btn").forEach((b) => b.addEventListener("click", () => bumpCases(num(b.dataset.step))));
     document.querySelectorAll(".quick-row button").forEach((b) => b.addEventListener("click", () => bumpCases(num(b.dataset.add))));
-    $("saveShiftBtn").onclick = saveHomeShift;
+    $("saveShiftBtn").onclick = () => saveHomeShift();
     $("settingsBtn").onclick = openSettings;
     $("openSettingsFromMore").onclick = openSettings;
     $("settingsSave").onclick = saveSettings;

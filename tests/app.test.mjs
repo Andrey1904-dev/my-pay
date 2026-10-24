@@ -39,9 +39,9 @@ describe("загрузка и модель", () => {
   test("приложение стартует без ошибок и публикует API", () => {
     const app = open();
     assert.deepEqual(app.errors, []);
-    assert.equal(app.MyPay.version, "1.02");
-    assert.equal(app.text("appVersion"), "V1.02");
-    assert.equal(app.text("brandVersion"), "V1.02", "версия в шапке рядом с названием");
+    assert.equal(app.MyPay.version, "1.10");
+    assert.equal(app.text("appVersion"), "V1.10");
+    assert.equal(app.text("brandVersion"), "V1.10", "версия в шапке рядом с названием");
     assert.match(app.text("brandVersion").trim(), /^V\d+(\.\d+)+$/);
     assert.equal(app.MyPay.cloudAvailable, false, "без SDK — локальный режим");
     assert.match(app.text("cloudNotice"), /локальном режиме/);
@@ -53,14 +53,14 @@ describe("загрузка и модель", () => {
     const read = f => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
     const v = read("src/app/config.js").match(/const APP_VERSION = "([\d.]+)"/)[1];
     assert.match(read("sw.js"), new RegExp(`CACHE_NAME\\s*=\\s*"my-pay-v${v.replace(".", "\\.")}"`));
-    assert.match(read("app.html"), new RegExp(`script\\.js\\?v=${v.replace(".", "\\.")}"`));
+    assert.match(read("index.html"), new RegExp(`script\\.js\\?v=${v.replace(".", "\\.")}"`));
     assert.match(read("sw.js"), new RegExp(`style\\.css\\?v=${v.replace(".", "\\.")}"`));
-    assert.match(read("app.html"), new RegExp(`id="brandVersion">V${v.replace(".", "\\.")}<`));
-    assert.equal(v, "1.02");
-    assert.equal(JSON.parse(read("package.json")).version, "1.0.2");
+    assert.match(read("index.html"), new RegExp(`id="brandVersion">V${v.replace(".", "\\.")}<`));
+    assert.equal(v, "1.10");
+    assert.equal(JSON.parse(read("package.json")).version, "1.1.0");
     const lock = JSON.parse(read("package-lock.json"));
-    assert.equal(lock.version, "1.0.2");
-    assert.equal(lock.packages[""].version, "1.0.2");
+    assert.equal(lock.version, "1.1.0");
+    assert.equal(lock.packages[""].version, "1.1.0");
 
   });
 
@@ -155,7 +155,7 @@ describe("главный экран", () => {
   test("ввод чехлов пересчитывает итог и сохраняет смену за сегодня", async () => {
     const app = open({ settings: { scheduleStart: TODAY } });
     app.input("casesInput", "350");
-    assert.equal(app.MyPay.homeDirty, true);
+    assert.equal(app.MyPay.homeDirty, false, "change commits the draft locally");
     assert.match(app.text("shiftTotal"), /3 027,50/);
     app.click("saveShiftBtn");
     await tick();
@@ -426,16 +426,16 @@ describe("настройки, тема, резервные копии", () => {
   });
 
   test("тема: system → light → dark, класс body и theme-color", () => {
-    const app = open({ dark: true });
+    const app = open({ dark: true, extra: { theme: "system" } });
     assert.equal(app.MyPay.state.extra.theme, "system");
     assert.ok(app.document.body.classList.contains("dark"), "система тёмная → тёмная");
     app.MyPay.cycleTheme();
     assert.equal(app.MyPay.state.extra.theme, "light");
     assert.ok(!app.document.body.classList.contains("dark"));
-    assert.equal(app.document.querySelector('meta[name="theme-color"]').getAttribute("content"), "#eeeeea");
+    assert.equal(app.document.querySelector('meta[name="theme-color"]').getAttribute("content"), "#f3f2ef");
     app.MyPay.cycleTheme();
     assert.equal(app.MyPay.state.extra.theme, "dark");
-    assert.equal(app.document.querySelector('meta[name="theme-color"]').getAttribute("content"), "#0a0c0f");
+    assert.equal(app.document.querySelector('meta[name="theme-color"]').getAttribute("content"), "#101214");
     assert.equal(JSON.parse(app.window.localStorage.getItem("myPayExtra")).theme, "dark");
   });
 

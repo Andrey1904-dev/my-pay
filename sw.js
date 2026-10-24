@@ -1,13 +1,11 @@
-const CACHE_NAME = "my-pay-v1.02";
+const CACHE_NAME = "my-pay-v1.10";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./landing.css?v=1.02",
-  "./landing.js?v=1.02",
   "./app.html",
   "./style.css",
-  "./script.js?v=1.02",
-  "./style.css?v=1.02",
+  "./script.js?v=1.10",
+  "./style.css?v=1.10",
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-192.png",
@@ -24,17 +22,16 @@ self.addEventListener("install", (event) => {
     caches
       .open(CACHE_NAME)
       .then((c) =>
-        Promise.allSettled(
+        Promise.all(
           APP_SHELL.map((url) =>
             fetch(url, { cache: "no-cache" }).then((res) =>
-              res.ok ? c.put(url, res) : undefined
+              res.ok ? c.put(url, res) : Promise.reject(new Error(`Shell unavailable: ${url}`))
             )
           )
         )
       )
-      .catch(() => {})
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {

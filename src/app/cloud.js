@@ -116,7 +116,7 @@ export async function initCloudAuth() {
   try {
     const { data: { session } } = await db.auth.getSession();
     cleanOAuthUrl();
-    if (session?.user) { currentUser = session.user; await afterLogin(); } else showAuth(true);
+    if (session?.user) { currentUser = session.user; await afterLogin(); } else showAuth(false);
     db.auth.onAuthStateChange((_event, s) => {
       if (s?.user && s.user.id !== currentUser?.id) { currentUser = s.user; setTimeout(() => afterLogin(), 0); }
       else if (!s && currentUser) { currentUser = null; currentProfile = null; hideCloudNotice(); showAuth(true); backAuth(); }
@@ -128,7 +128,7 @@ export async function oauthSignIn(provider) {
   if (!db) { showToast("Облако недоступно — вход без интернета невозможен"); return; }
   const btn = $(provider === "apple" ? "oauthApple" : "oauthGoogle"); btn.disabled = true;
   try {
-    // Return OAuth users to this exact page (the dashboard now lives at app.html).
+    // Return OAuth users to this exact page (the dashboard lives at the main URL).
     const redirectTo = location.origin + location.pathname;
     const { error } = await db.auth.signInWithOAuth({ provider, options: { redirectTo, scopes: provider === "apple" ? "name email" : "email profile", queryParams: provider === "google" ? { access_type: "online", prompt: "select_account" } : undefined } });
     if (error) throw error;

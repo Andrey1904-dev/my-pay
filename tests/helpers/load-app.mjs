@@ -5,7 +5,7 @@ import path from "node:path";
 import { JSDOM } from "jsdom";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(path.join(root, "app.html"), "utf8");
+const html = readFileSync(path.join(root, "index.html"), "utf8");
 const script = readFileSync(path.join(root, "script.js"), "utf8");
 
 /**

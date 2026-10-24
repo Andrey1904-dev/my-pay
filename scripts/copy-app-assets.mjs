@@ -1,18 +1,12 @@
-import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
 
+rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
-
-for (const builtAsset of ["landing.js", "landing.css"]) {
-  const from = path.join(dist, builtAsset);
-  if (existsSync(from)) {
-    cpSync(from, path.join(root, builtAsset));
-  }
-}
 
 const files = [
   "index.html",
