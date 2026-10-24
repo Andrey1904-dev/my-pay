@@ -16,8 +16,8 @@ describe("landing page & production build", () => {
     const appHtml = read("app.html");
 
     assert.match(indexHtml, /<div id="root">\s*<div/s, "root #root must not be an empty black container");
-    assert.match(indexHtml, /href="\.\/landing\.css\?v=1\.01"/);
-    assert.match(indexHtml, /src="\.\/landing\.js\?v=1\.01"/);
+    assert.match(indexHtml, /href="\.\/landing\.css\?v=1\.02"/);
+    assert.match(indexHtml, /src="\.\/landing\.js\?v=1\.02"/);
     assert.match(indexHtml, /href="\.\/app\.html"/);
     assert.doesNotMatch(indexHtml, /src="\/src\/main\.tsx"/, "root index.html must not depend on uncompiled /src/main.tsx");
     assert.ok(existsSync(path.join(root, "landing.js")), "compiled landing.js must exist in root for GitHub Pages");
@@ -25,7 +25,7 @@ describe("landing page & production build", () => {
     assert.ok(existsSync(path.join(root, ".nojekyll")), ".nojekyll must exist in root");
 
     assert.match(appHtml, /id="casesInput"/);
-    assert.match(appHtml, /script\.js\?v=1\.01/);
+    assert.match(appHtml, /script\.js\?v=1\.02/);
   });
 
   test("landing bundle mounts cleanly without black preloader overlay or scroll lock", async () => {
@@ -120,8 +120,8 @@ describe("landing page & production build", () => {
     const manifest = JSON.parse(read("manifest.webmanifest"));
 
     assert.match(sw, /"\.\/index\.html"/);
-    assert.match(sw, /"\.\/landing\.css\?v=1\.01"/);
-    assert.match(sw, /"\.\/landing\.js\?v=1\.01"/);
+    assert.match(sw, /"\.\/landing\.css\?v=1\.02"/);
+    assert.match(sw, /"\.\/landing\.js\?v=1\.02"/);
     assert.match(sw, /"\.\/app\.html"/);
     assert.equal(manifest.start_url, "./app.html");
   });

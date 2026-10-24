@@ -1,7 +1,7 @@
 -- CASE.PLACE SALARY ULTRA — дополнительное облачное хранилище.
 -- Основные таблицы settings / shifts / profiles этот файл НЕ меняет.
--- Запусти целиком в Supabase -> SQL Editor, чтобы расходы, цели,
--- шаблоны и дополнительные данные смен синхронизировались между устройствами.
+-- Запусти целиком в Supabase -> SQL Editor для синхронизации шаблонов,
+-- дополнительных данных смен, дат выплат и темы между устройствами.
 
 create table if not exists public.user_app_data (
   user_id uuid primary key references auth.users(id) on delete cascade,

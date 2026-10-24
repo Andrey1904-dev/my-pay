@@ -1,13 +1,13 @@
-const CACHE_NAME = "my-pay-v1.01";
+const CACHE_NAME = "my-pay-v1.02";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./landing.css?v=1.01",
-  "./landing.js?v=1.01",
+  "./landing.css?v=1.02",
+  "./landing.js?v=1.02",
   "./app.html",
   "./style.css",
-  "./script.js?v=1.01",
-  "./style.css?v=1.01",
+  "./script.js?v=1.02",
+  "./style.css?v=1.02",
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-192.png",
@@ -43,7 +43,7 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+          keys.filter((k) => k.startsWith("my-pay-v") && k !== CACHE_NAME).map((k) => caches.delete(k))
         )
       )
       .then(() => self.clients.claim())

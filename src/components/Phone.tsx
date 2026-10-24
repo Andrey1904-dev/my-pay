@@ -17,9 +17,9 @@ import {
 import { cn } from "../utils/cn";
 import { PER_CASE, fixedPart, rub } from "../lib/pay";
 
-export type Screen = "shift" | "calendar" | "stats" | "finance";
+export type Screen = "shift" | "calendar" | "stats";
 
-const SCREENS: Screen[] = ["shift", "calendar", "stats", "finance"];
+const SCREENS: Screen[] = ["shift", "calendar", "stats"];
 
 export function nextScreen(s: Screen): Screen {
   return SCREENS[(SCREENS.indexOf(s) + 1) % SCREENS.length];
@@ -78,7 +78,6 @@ export function Phone({
               {screen === "shift" && <ShiftScreen />}
               {screen === "calendar" && <CalendarScreen />}
               {screen === "stats" && <StatsScreen />}
-              {screen === "finance" && <FinanceScreen />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -188,20 +187,12 @@ function ShiftScreen() {
 
       <Card className="mt-auto">
         <div className="flex items-center justify-between text-[10px]">
-          <span className="font-semibold text-fog">Цель месяца</span>
-          <span className="font-mono font-bold text-flame">68%</span>
-        </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/40">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: "68%" }}
-            transition={{ duration: 1, delay: 0.3, ease: "easeOut" }}
-            className="h-full rounded-full bg-gradient-to-r from-flame to-flame-soft"
-          />
+          <span className="font-semibold text-fog">Этот месяц</span>
+          <span className="font-mono font-bold text-flame">10 смен</span>
         </div>
         <div className="mt-2 flex justify-between font-mono text-[9px] text-smoke">
           <span>41 180 ₽</span>
-          <span>цель 60 000 ₽</span>
+          <span>заработок за месяц</span>
         </div>
       </Card>
     </div>
@@ -367,101 +358,8 @@ function StatsScreen() {
           <CalendarDays className="h-4 w-4 text-flame" />
         </span>
         <p className="text-[10px] leading-snug text-fog">
-          До цели месяца <b className="text-cream">18 520 ₽</b> — примерно{" "}
-          <b className="text-flame">4 смены</b>
+          Прогноз месяца: <b className="text-cream">66 945 ₽</b> по внесённым сменам
         </p>
-      </Card>
-    </div>
-  );
-}
-
-/* ================= FINANCE ================= */
-function FinanceScreen() {
-  return (
-    <div className="flex h-full flex-col gap-2.5">
-      <Head kicker="Деньги под контролем" title="Финансы" />
-
-      <Card className="relative overflow-hidden bg-gradient-to-br from-[#23262d] to-[#14161a]">
-        <div className="absolute -left-6 -top-6 h-24 w-24 rounded-full bg-flame/10 blur-2xl" />
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-fog">
-          Свободно в этом месяце
-        </p>
-        <p className="mt-1 font-mono text-[30px] font-bold leading-none text-cream">
-          12 480 ₽
-        </p>
-        <div className="mt-2 flex items-center gap-2 font-mono text-[9px] text-smoke">
-          <span className="rounded-md bg-black/25 px-1.5 py-0.5 text-flame">
-            ≈ 413 ₽ / день
-          </span>
-          <span className="rounded-md bg-black/25 px-1.5 py-0.5">остаётся 31%</span>
-        </div>
-      </Card>
-
-      <div>
-        <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-smoke">
-          Счета
-        </p>
-        <div className="flex gap-1.5">
-          {[
-            { n: "Карта", v: "24 300" },
-            { n: "Наличные", v: "3 200" },
-            { n: "Вклад", v: "80 000" },
-          ].map((a) => (
-            <div
-              key={a.n}
-              className="flex-1 rounded-xl border border-white/5 bg-[#171a1f] p-2"
-            >
-              <p className="text-[8px] text-smoke">{a.n}</p>
-              <p className="mt-0.5 font-mono text-[11px] font-bold text-cream">
-                {a.v} ₽
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <Card>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-fog">
-          Лимиты категорий
-        </p>
-        {[
-          { n: "Еда", p: 72, v: "7 200 / 10 000 ₽" },
-          { n: "Транспорт", p: 34, v: "1 360 / 4 000 ₽" },
-          { n: "Развлечения", p: 55, v: "2 750 / 5 000 ₽" },
-        ].map((c, i) => (
-          <div key={c.n} className="mt-2">
-            <div className="flex justify-between text-[9px]">
-              <span className="font-semibold text-cream/90">{c.n}</span>
-              <span className="font-mono text-smoke">{c.v}</span>
-            </div>
-            <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/40">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${c.p}%` }}
-                transition={{ delay: 0.25 + i * 0.12, duration: 0.6 }}
-                className={cn(
-                  "h-full rounded-full",
-                  c.p > 70 ? "bg-flame" : "bg-flame/60"
-                )}
-              />
-            </div>
-          </div>
-        ))}
-      </Card>
-
-      <Card className="mt-auto border-flame/20">
-        <div className="flex items-start gap-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-flame/15">
-            <Sparkles className="h-3.5 w-3.5 text-flame" />
-          </span>
-          <div>
-            <p className="text-[10px] font-bold text-cream">Советник</p>
-            <p className="mt-0.5 text-[9px] leading-snug text-fog">
-              Лимит «Еда» почти выбран. Можно отложить{" "}
-              <b className="text-flame">5 000 ₽</b> на копилку «iPhone».
-            </p>
-          </div>
-        </div>
       </Card>
     </div>
   );

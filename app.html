@@ -15,7 +15,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>CASE.PLACE SALARY</title>
-  <link rel="stylesheet" href="style.css?v=1.01">
+  <link rel="stylesheet" href="style.css?v=1.02">
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" focusable="false">
@@ -70,7 +70,7 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">₽</div>
       <div class="brand-text">
-        <div class="brand-title">CASE.PLACE <span>SALARY</span> <span class="brand-version" id="brandVersion">V1.01</span></div>
+        <div class="brand-title">CASE.PLACE <span>SALARY</span> <span class="brand-version" id="brandVersion">V1.02</span></div>
         <div class="brand-subtitle">Смены · чехлы · заработок</div>
       </div>
     </div>
@@ -97,6 +97,7 @@
         <div class="hero-breakdown">
           <div><span>Ставка</span><b class="num" id="homeBase">2 415 ₽</b></div>
           <div><span>Сделка</span><b class="num" id="homePiece">0 ₽</b></div>
+          <div id="homeBonusRow" class="hidden"><span>Премия</span><b class="num" id="homeBonus">0 ₽</b></div>
         </div>
       </article>
 
@@ -141,9 +142,9 @@
       <article class="card snapshot">
         <div class="snapshot-head">
           <div><span class="eyebrow">Заработано</span><strong class="num" id="homeMonthTotal">0 ₽</strong></div>
-          <span class="chip chip-accent num" id="homeGoalPercent">0%</span>
+
         </div>
-        <div class="track"><i id="homeGoalBar"></i></div>
+
         <div class="snapshot-stats">
           <div><b class="num" id="homeMonthShifts">0</b><span>смен</span></div>
           <div><b class="num" id="homeMonthCases">0</b><span>чехлов</span></div>
@@ -220,19 +221,18 @@
         <article class="card stat"><span>Чехлов за смену</span><strong class="num" id="avgCases">0</strong></article>
         <article class="card stat"><span>Сделка</span><strong class="num" id="monthPiece">0 ₽</strong></article>
         <article class="card stat"><span>Ставка</span><strong class="num" id="monthBase">0 ₽</strong></article>
+        <article class="card stat"><span>Прогноз месяца</span><strong class="num" id="monthForecast">После первой смены</strong></article>
       </div>
 
-      <article class="card insight" id="smartGoalCard">
-        <div class="insight-icon" aria-hidden="true"><svg><use href="#i-target"/></svg></div>
-        <div class="insight-copy"><span class="eyebrow">Цель месяца</span><b id="smartGoalTitle">—</b><small id="smartGoalMeta">—</small></div>
-      </article>
 
-      <article class="card progress-card">
-        <div class="row-between"><b>До цели месяца</b><strong class="num" id="goalPercent">0%</strong></div>
-        <div class="track"><i id="goalBar"></i></div>
-        <div class="row-between muted"><span class="num" id="goalCurrent">0 ₽</span><span id="goalText">Цель 60 000 ₽</span></div>
-      </article>
 
+
+
+      <div class="payday-strip" id="paydayStrip" hidden="">
+        <span class="payday-icon"><svg><use href="#i-card"></use></svg></span>
+        <div class="payday-copy"><b id="paydayTitle">До аванса 6 дней</b><small id="paydayMeta">ожидаемо ≈ 30 000 ₽</small></div>
+        <button class="btn btn-ghost btn-sm" id="paydaySetupBtn" type="button">Даты</button>
+      </div>
       <article class="card chart-card">
         <div class="row-between chart-head"><div><span class="eyebrow">Динамика</span><b>Заработок по сменам</b></div><span class="chip chip-accent" id="bestShiftBadge">—</span></div>
         <div class="bar-chart" id="earningsChart" role="img" aria-label="График заработка по сменам"></div>
@@ -252,89 +252,7 @@
     </section>
 
     <!-- ================= ФИНАНСЫ ================= -->
-    <section class="screen" id="financeScreen" aria-label="Финансы">
-      <div class="page-head">
-        <div><div class="eyebrow">Деньги под контролем</div><h1>Финансы</h1></div>
-        <button class="icon-btn icon-btn-accent" id="addTxTop" aria-label="Добавить операцию"><svg><use href="#i-plus"/></svg></button>
-      </div>
 
-      <article class="hero-card finance-hero">
-        <div>
-          <span class="hero-kicker">Свободно в этом месяце</span>
-          <div class="hero-value num" id="freeBalance">0 ₽</div>
-          <small id="dailyBudget">—</small>
-        </div>
-        <div class="ring" id="savingsRing" style="--p:0">
-          <b class="num" id="savingsRate">0%</b><span>остаётся</span>
-        </div>
-      </article>
-
-      <div class="payday-strip" id="paydayStrip" hidden>
-        <span class="payday-icon"><svg><use href="#i-card"/></svg></span>
-        <div class="payday-copy"><b id="paydayTitle">До аванса 6 дней</b><small id="paydayMeta">ожидаемо ≈ 30 000 ₽</small></div>
-        <button class="btn btn-ghost btn-sm" id="paydaySetupBtn" type="button">Даты</button>
-      </div>
-
-      <div class="quick-actions">
-        <button type="button" class="qa" data-tx-type="expense"><span class="qa-icon qa-expense"><svg><use href="#i-minus"/></svg></span>Расход</button>
-        <button type="button" class="qa" data-tx-type="income"><span class="qa-icon qa-income"><svg><use href="#i-plus"/></svg></span>Доход</button>
-        <button type="button" class="qa" data-tx-type="transfer"><span class="qa-icon qa-transfer"><svg><use href="#i-transfer"/></svg></span>Перевод</button>
-        <button type="button" class="qa" id="qaGoalDeposit"><span class="qa-icon qa-goal"><svg><use href="#i-target"/></svg></span>В копилку</button>
-      </div>
-
-      <div class="section-title"><div><span class="eyebrow">Счета</span><h3>Где лежат деньги</h3></div><button class="btn btn-soft btn-sm" id="addAccountBtn"><svg><use href="#i-plus"/></svg>Счёт</button></div>
-      <div class="accounts-row" id="accountsRow"></div>
-
-      <div class="grid-2">
-        <article class="card stat"><span>Заработано</span><strong class="num" id="financeIncome">0 ₽</strong></article>
-        <article class="card stat"><span>Расходы</span><strong class="num" id="financeExpenses">0 ₽</strong></article>
-        <article class="card stat"><span>Получено на счета</span><strong class="num" id="financeReceived">0 ₽</strong></article>
-        <article class="card stat"><span>Остаток к концу месяца</span><strong class="num" id="financeForecast">0 ₽</strong></article>
-      </div>
-
-      <article class="card insights-card" id="insightsCard">
-        <div class="row-between section-row"><div><span class="eyebrow">Советник</span><h3>Что стоит знать</h3></div><span class="chip chip-accent"><svg><use href="#i-spark"/></svg>авто</span></div>
-        <div id="insightsList" class="insights-list"></div>
-      </article>
-
-      <article class="card">
-        <div class="row-between section-row"><div><span class="eyebrow">Лимиты</span><h3>Расходы по категориям</h3></div><button class="btn btn-soft btn-sm" id="limitsBtn"><svg><use href="#i-target"/></svg>Лимиты</button></div>
-        <div id="limitsList" class="limits-list"></div>
-      </article>
-
-      <article class="card">
-        <div class="row-between section-row"><div><span class="eyebrow">Регулярные платежи</span><h3>Что скоро списывать</h3></div><button class="btn btn-soft btn-sm" id="addRecurringBtn"><svg><use href="#i-plus"/></svg>Платёж</button></div>
-        <div id="recurringList" class="recurring-list"></div>
-      </article>
-
-      <article class="card">
-        <div class="row-between section-row"><div><span class="eyebrow">Долги</span><h3>Кто кому должен</h3></div><button class="btn btn-soft btn-sm" id="addDebtBtn"><svg><use href="#i-plus"/></svg>Долг</button></div>
-        <div class="debt-totals" id="debtTotals"></div>
-        <div id="debtsList" class="debt-list"></div>
-      </article>
-
-      <article class="card">
-        <div class="row-between section-row"><div><span class="eyebrow">Копилки</span><h3>На что копим</h3></div><button class="btn btn-soft btn-sm" id="addGoalBtn"><svg><use href="#i-plus"/></svg>Цель</button></div>
-        <div id="goalsList" class="goal-list"></div>
-      </article>
-
-      <article class="card">
-        <div class="row-between section-row"><div><span class="eyebrow">Операции</span><h3>История</h3></div>
-          <div class="seg seg-sm" id="txFilter" role="tablist">
-            <button type="button" class="active" data-filter="all" role="tab" aria-selected="true">Все</button>
-            <button type="button" data-filter="expense" role="tab" aria-selected="false">Расходы</button>
-            <button type="button" data-filter="income" role="tab" aria-selected="false">Доходы</button>
-          </div>
-        </div>
-        <div id="expenseList" class="expense-list"></div>
-        <button type="button" class="btn btn-ghost btn-block hidden" id="txMoreBtn">Показать ещё</button>
-      </article>
-
-      <article class="card">
-        <div class="row-between section-row"><div><span class="eyebrow">Быстрый ввод</span><h3>Шаблоны смен</h3></div><button class="btn btn-soft btn-sm" id="addTemplateBtn"><svg><use href="#i-plus"/></svg>Шаблон</button></div>
-        <div id="templatesList" class="chips"></div>
-      </article>
-    </section>
 
     <!-- ================= ЕЩЁ ================= -->
     <section class="screen" id="moreScreen" aria-label="Ещё">
@@ -349,9 +267,14 @@
         <div class="profile-copy"><b id="profileName">Мой расчёт</b><small id="profileMeta">Смены и настройки синхронизируются с аккаунтом</small></div>
       </article>
 
+      <article class="card">
+        <div class="row-between section-row"><div><span class="eyebrow">Быстрый ввод</span><h3>Шаблоны смен</h3></div><button class="btn btn-soft btn-sm" id="addTemplateBtn"><svg><use href="#i-plus"></use></svg>Шаблон</button></div>
+        <div id="templatesList" class="chips"></div>
+      </article>
+      <button class="btn btn-soft btn-lg" id="loginBtn" type="button">Войти в аккаунт</button>
       <div class="section-label">Расчёт</div>
       <div class="menu">
-        <button class="menu-item" id="openSettingsFromMore"><span class="menu-icon"><svg><use href="#i-sliders"/></svg></span><span class="menu-copy"><b>Настройки расчёта</b><small>Ставка, цена чехла, график 2/2, цель</small></span><svg class="menu-chev"><use href="#i-chev-r"/></svg></button>
+        <button class="menu-item" id="openSettingsFromMore"><span class="menu-icon"><svg><use href="#i-sliders"/></svg></span><span class="menu-copy"><b>Настройки расчёта</b><small>Ставка, цена чехла, график 2/2</small></span><svg class="menu-chev"><use href="#i-chev-r"/></svg></button>
         <button class="menu-item" id="telegramBotBtn"><span class="menu-icon"><svg><use href="#i-send"/></svg></span><span class="menu-copy"><b>Telegram-бот</b><small id="telegramMenuStatus">Ввод чехлов прямо из чата</small></span><svg class="menu-chev"><use href="#i-chev-r"/></svg></button>
         <button class="menu-item" id="enableNotificationsMenu"><span class="menu-icon"><svg><use href="#i-bell"/></svg></span><span class="menu-copy"><b>Уведомления</b><small id="notificationMenuStatus">Напоминания о сменах</small></span><svg class="menu-chev"><use href="#i-chev-r"/></svg></button>
         <button class="menu-item hidden" id="undoDeleteBtn"><span class="menu-icon"><svg><use href="#i-undo"/></svg></span><span class="menu-copy"><b>Вернуть удалённую смену</b><small id="undoDeleteMeta">Последнее удаление</small></span><svg class="menu-chev"><use href="#i-chev-r"/></svg></button>
@@ -382,7 +305,7 @@
         <svg><use href="#i-bell"/></svg>
         <div><b>Напоминания о сменах</b><p id="notificationTipText">Разреши уведомления, чтобы приложение напоминало о ближайшей смене.</p><button class="btn-text" id="enableNotificationsBtn">Включить уведомления</button></div>
       </article>
-      <div class="app-footer"><span id="appVersion">V1.01</span> · CASE.PLACE SALARY</div>
+      <div class="app-footer"><span id="appVersion">V1.02</span> · CASE.PLACE SALARY</div>
     </section>
   </main>
 
@@ -390,7 +313,7 @@
     <button class="nav-item active" data-screen="homeScreen" aria-current="page"><svg><use href="#i-home"/></svg><small>Смена</small></button>
     <button class="nav-item" data-screen="calendarScreen"><svg><use href="#i-calendar"/></svg><small>Календарь</small></button>
     <button class="nav-item" data-screen="statsScreen"><svg><use href="#i-chart"/></svg><small>Статистика</small></button>
-    <button class="nav-item" data-screen="financeScreen"><svg><use href="#i-wallet"/></svg><small>Финансы</small></button>
+
     <button class="nav-item" data-screen="moreScreen"><svg><use href="#i-more"/></svg><small>Ещё</small></button>
   </nav>
 </div>
@@ -429,7 +352,7 @@
       <label class="field">Твоя доля от сделки, %<input id="settingPercent" type="number" inputmode="numeric" min="0" max="100" step="1"></label>
     </div>
     <label class="field">Первый рабочий день графика 2/2<input id="settingStart" type="date"><small>Любой день, с которого начинаются два рабочих дня подряд.</small></label>
-    <label class="field">Цель на месяц, ₽<input id="settingGoal" type="number" inputmode="numeric" min="0" step="1000"></label>
+
     <div class="grid-2">
       <label class="field">Аванс — число месяца<input id="settingAdvanceDay" type="number" inputmode="numeric" min="1" max="31" step="1"></label>
       <label class="field">Зарплата — число месяца<input id="settingSalaryDay" type="number" inputmode="numeric" min="1" max="31" step="1"></label>
@@ -442,119 +365,30 @@
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-head"><div><span class="eyebrow">Интеграция</span><h2 id="telegramTitle">Telegram-бот</h2></div><button class="icon-btn" data-close="telegramModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <p class="sheet-text">Записывай чехлы и расходы прямо в чате: карточка смены с кнопками +100/+500/+1000, календарь, прогноз, лимиты по категориям и напоминания. Бот работает с тем же аккаунтом.</p>
+    <p class="sheet-text">Записывай чехлы прямо в чате: карточка смены с кнопками +100/+500/+1000, календарь, прогноз и напоминания. Бот работает с тем же аккаунтом.</p>
     <div class="notice notice-ok hidden" id="telegramStatus"><svg><use href="#i-check"/></svg><span></span></div>
     <div class="preview code-preview"><span>Код привязки</span><strong class="num" id="telegramCode">—</strong></div>
     <ol class="steps">
       <li>Нажми «Получить код» — он действует 10 минут.</li>
       <li>Открой бота в Telegram и отправь <code>/start КОД</code>.</li>
-      <li>Дальше просто пиши: <code>350</code> — чехлы, <code>+500</code> — добавить, <code>350 обед</code> — расход.</li>
+      <li>Дальше просто пиши: <code>350</code> — чехлы, <code>+500</code> — добавить.</li>
     </ol>
     <button class="btn btn-primary btn-lg" id="telegramGenerateBtn"><span>Получить код</span></button>
     <button class="btn btn-ghost" id="telegramHelpBtn"><span>Как настроить бота</span></button>
   </div>
 </div>
 
-<div class="modal hidden" id="expenseModal" role="dialog" aria-modal="true" aria-labelledby="expenseTitle">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow">Операция</span><h2 id="expenseTitle">Новая операция</h2></div><button class="icon-btn" data-close="expenseModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <div class="seg" id="txTypeSeg" role="tablist">
-      <button type="button" class="active" data-type="expense" role="tab" aria-selected="true">Расход</button>
-      <button type="button" data-type="income" role="tab" aria-selected="false">Доход</button>
-      <button type="button" data-type="transfer" role="tab" aria-selected="false">Перевод</button>
-    </div>
-    <label class="field">Сумма, ₽<input id="expenseAmount" class="num" type="number" min="0" step="10" inputmode="decimal" placeholder="0"></label>
-    <div class="grid-2">
-      <label class="field" id="txCategoryWrap">Категория<select id="expenseCategory"></select></label>
-      <label class="field">Дата<input id="expenseDate" type="date"></label>
-    </div>
-    <div class="grid-2">
-      <label class="field" id="txAccountWrap">Счёт<select id="txAccount"></select></label>
-      <label class="field hidden" id="txToAccountWrap">На счёт<select id="txToAccount"></select></label>
-    </div>
-    <label class="field">Комментарий<input id="expenseNote" type="text" maxlength="100" placeholder="Например: обед, проезд, аванс"></label>
-    <button class="btn btn-primary btn-lg" id="expenseSave"><span>Добавить расход</span></button>
-  </div>
-</div>
 
-<div class="modal hidden" id="accountModal" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow">Счёт</span><h2 id="accountTitle">Новый счёт</h2></div><button class="icon-btn" data-close="accountModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <label class="field">Название<input id="accountName" type="text" maxlength="40" placeholder="Например: Карта Сбер"></label>
-    <div class="grid-2">
-      <label class="field">Тип<select id="accountType"><option value="card">Карта</option><option value="cash">Наличные</option><option value="savings">Накопительный</option><option value="credit">Кредитка</option></select></label>
-      <label class="field">Баланс сейчас, ₽<input id="accountBalance" class="num" type="number" step="100" inputmode="decimal" placeholder="0"></label>
-    </div>
-    <small class="sheet-text">Дальше баланс считается сам: доходы, расходы и переводы меняют его автоматически.</small>
-    <button class="btn btn-primary btn-lg" id="accountSave"><span>Сохранить счёт</span></button>
-    <button class="btn btn-ghost btn-lg danger hidden" id="accountDelete"><span>Удалить счёт</span></button>
-  </div>
-</div>
 
-<div class="modal hidden" id="limitsModal" role="dialog" aria-modal="true" aria-labelledby="limitsTitle">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow">Лимиты</span><h2 id="limitsTitle">Категории и лимиты</h2></div><button class="icon-btn" data-close="limitsModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <p class="sheet-text">Лимит — сколько максимум хочешь тратить по категории за месяц. Пусто — без лимита.</p>
-    <div id="limitsEditor" class="limits-editor"></div>
-    <div class="row-between limits-add"><input id="newCategoryName" type="text" maxlength="30" placeholder="Новая категория"><button class="btn btn-soft" id="addCategoryBtn" type="button"><svg><use href="#i-plus"/></svg>Добавить</button></div>
-    <button class="btn btn-primary btn-lg" id="limitsSave"><span>Сохранить лимиты</span></button>
-  </div>
-</div>
 
-<div class="modal hidden" id="recurringModal" role="dialog" aria-modal="true" aria-labelledby="recurringTitle">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow">Регулярный платёж</span><h2 id="recurringTitle">Новый платёж</h2></div><button class="icon-btn" data-close="recurringModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <label class="field">Название<input id="recName" type="text" maxlength="40" placeholder="Аренда, кредит, подписка"></label>
-    <div class="grid-2">
-      <label class="field">Сумма, ₽<input id="recAmount" class="num" type="number" min="0" step="100" inputmode="decimal"></label>
-      <label class="field">День месяца<input id="recDay" class="num" type="number" min="1" max="31" step="1" inputmode="numeric" value="1"></label>
-    </div>
-    <div class="grid-2">
-      <label class="field">Категория<select id="recCategory"></select></label>
-      <label class="field">Счёт<select id="recAccount"></select></label>
-    </div>
-    <button class="btn btn-primary btn-lg" id="recurringSave"><span>Сохранить</span></button>
-    <button class="btn btn-ghost btn-lg danger hidden" id="recurringDelete"><span>Удалить платёж</span></button>
-  </div>
-</div>
 
-<div class="modal hidden" id="debtModal" role="dialog" aria-modal="true" aria-labelledby="debtTitle">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow">Долг</span><h2 id="debtTitle">Новый долг</h2></div><button class="icon-btn" data-close="debtModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <div class="seg" id="debtDirSeg" role="tablist">
-      <button type="button" class="active" data-dir="i_owe" role="tab" aria-selected="true">Я должен</button>
-      <button type="button" data-dir="owed" role="tab" aria-selected="false">Мне должны</button>
-    </div>
-    <label class="field">Кому / кто<input id="debtPerson" type="text" maxlength="40" placeholder="Имя"></label>
-    <div class="grid-2">
-      <label class="field">Сумма, ₽<input id="debtAmount" class="num" type="number" min="0" step="100" inputmode="decimal"></label>
-      <label class="field">Вернуть до<input id="debtDue" type="date"></label>
-    </div>
-    <label class="field">Комментарий<input id="debtNote" type="text" maxlength="100" placeholder="Необязательно"></label>
-    <button class="btn btn-primary btn-lg" id="debtSave"><span>Сохранить</span></button>
-    <button class="btn btn-ghost btn-lg danger hidden" id="debtDelete"><span>Удалить долг</span></button>
-  </div>
-</div>
 
-<div class="modal hidden" id="goalModal" role="dialog" aria-modal="true" aria-labelledby="goalTitle">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow">Копилка</span><h2 id="goalTitle">Новая цель</h2></div><button class="icon-btn" data-close="goalModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
-    <div class="emoji-row" id="goalEmojiRow" role="radiogroup" aria-label="Иконка цели"></div>
-    <label class="field">Название<input id="goalName" type="text" maxlength="50" placeholder="Например: новый телефон"></label>
-    <div class="grid-2">
-      <label class="field">Нужно накопить, ₽<input id="goalAmount" class="num" type="number" min="1" step="1000" inputmode="decimal"></label>
-      <label class="field">Уже отложено, ₽<input id="goalSaved" class="num" type="number" min="0" step="1000" inputmode="decimal" value="0"></label>
-    </div>
-    <label class="field">Хочу успеть к<input id="goalDeadline" type="date"><small>Необязательно. Подскажу, сколько откладывать в месяц.</small></label>
-    <button class="btn btn-primary btn-lg" id="goalSave"><span>Создать цель</span></button>
-  </div>
-</div>
+
+
+
+
+
+
 
 <div class="modal hidden" id="paydayModal" role="dialog" aria-modal="true" aria-labelledby="paydayModalTitle">
   <div class="sheet">
@@ -609,7 +443,7 @@
   </div>
 </div>
 
-<div class="confetti-layer" id="confettiLayer" aria-hidden="true"></div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- ================= АВТОРИЗАЦИЯ ================= -->
@@ -620,11 +454,12 @@
       <span class="eyebrow">Личный кабинет</span>
       <h2>CASE.PLACE <span>SALARY</span></h2>
       <p>Смены, заработок и календарь сохраняются в облаке и доступны с любого устройства.</p>
-      <button class="btn btn-dark btn-lg btn-oauth" id="oauthApple" type="button"><svg><use href="#i-apple"/></svg><span>Продолжить с Apple</span></button>
-      <button class="btn btn-soft btn-lg btn-oauth" id="oauthGoogle" type="button"><svg><use href="#i-google"/></svg><span>Продолжить с Google</span></button>
-      <div class="auth-divider"><span>или по email</span></div>
+      <button class="btn btn-dark btn-lg btn-oauth hidden" id="oauthApple" type="button"><svg><use href="#i-apple"/></svg><span>Продолжить с Apple</span></button>
+      <button class="btn btn-soft btn-lg btn-oauth hidden" id="oauthGoogle" type="button"><svg><use href="#i-google"/></svg><span>Продолжить с Google</span></button>
+      <div class="auth-divider"><span>Вход по email</span></div>
       <button class="btn btn-primary btn-lg" id="goLogin"><span>Войти</span></button>
       <button class="btn btn-ghost btn-lg" id="goSignup"><span>Создать аккаунт</span></button>
+      <button class="btn btn-ghost btn-lg" id="continueLocal" type="button">Продолжить без аккаунта</button>
       <div class="auth-foot"><svg><use href="#i-lock"/></svg>Данные видны только тебе</div>
     </div>
     <div id="authForm" class="hidden">
@@ -648,7 +483,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2" crossorigin="anonymous"></script>
-<script src="script.js?v=1.01"></script>
+<script src="script.js?v=1.02"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));

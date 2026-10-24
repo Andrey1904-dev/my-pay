@@ -46,6 +46,9 @@ export function loadApp(opts = {}) {
   if (opts.shifts) window.localStorage.setItem("myPayShifts", JSON.stringify(opts.shifts));
   if (opts.extra) window.localStorage.setItem("myPayExtra", JSON.stringify(opts.extra));
 
+  if (opts.storage) for (const [k, v] of Object.entries(opts.storage)) window.localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
+  if (opts.supabase) window.supabase = { createClient: () => opts.supabase };
+  if (opts.online === false) Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
   window.eval(script);
   if (!window.MyPay) throw new Error("script.js не создал window.MyPay: " + errors.map(String).join("; "));
 

@@ -99,8 +99,8 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-md text-[15px] leading-relaxed text-fog">
-            Внёс чехлы — получил итог смены, месяц и прогресс к цели.
-            Календарь 2/2, статистика, финансы и Telegram-бот. Работает офлайн,
+            Внёс чехлы — получил итог смены, месяц и прогноз заработка.
+            Календарь 2/2, статистика и Telegram-бот. Работает офлайн,
             синхронизируется, когда появится сеть.
           </p>
 
@@ -126,8 +126,6 @@ export function Hero() {
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[9px] uppercase tracking-[0.12em] text-smoke sm:mt-10 sm:justify-start sm:gap-6 sm:text-[10px] sm:tracking-[0.2em]">
             <span>PWA · офлайн</span>
-            <span className="hidden h-3 w-px bg-line sm:block" />
-            <span>iOS · SwiftUI</span>
             <span className="hidden h-3 w-px bg-line sm:block" />
             <span>Telegram-бот</span>
           </div>

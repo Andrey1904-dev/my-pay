@@ -1,7 +1,7 @@
 {
   "name": "CASE.PLACE SALARY — Ultra",
   "short_name": "CASE.PLACE SALARY",
-  "description": "Учёт смен, зарплаты, расходов, целей и личной финансовой аналитики",
+  "description": "Учёт смен, чехлов и заработка: календарь, статистика и Telegram-бот",
   "start_url": "./app.html",
   "display": "standalone",
   "background_color": "#eeeeea",

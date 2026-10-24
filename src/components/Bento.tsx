@@ -1,6 +1,6 @@
 import {
-  Apple,
   CloudUpload,
+  Smartphone,
   FileDown,
   MoonStar,
   ShieldCheck,
@@ -40,15 +40,12 @@ function AuthVisual() {
   return (
     <div className="mt-5 flex flex-wrap gap-2">
       {[
-        { icon: Apple, label: "Apple" },
-        { label: "Google" },
         { label: "Email" },
       ].map((p) => (
         <span
           key={p.label}
           className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-3 py-1.5 font-mono text-[11px] font-semibold text-cream/90"
         >
-          {p.icon && <p.icon className="h-3.5 w-3.5" />}
           {p.label}
         </span>
       ))}
@@ -71,20 +68,20 @@ const FEATURES: Feature[] = [
     icon: MoonStar,
     title: "Три темы",
     text: "Светлая, тёмная и системная — отдельные наборы токенов, а не инверсия.",
-    tag: "контраст ≥ 4.5:1",
+    tag: "светлая · тёмная · системная",
     visual: <ThemeVisual />,
   },
   {
-    icon: Apple,
-    title: "iPhone-приложение",
-    text: "SwiftUI, iOS 16+, полный паритет функций и общие данные с сайтом.",
-    tag: "Xcode · App Store",
+    icon: Smartphone,
+    title: "Приложение в браузере",
+    text: "Открывай с телефона или компьютера и устанавливай на главный экран.",
+    tag: "PWA · без магазина",
   },
   {
     icon: CloudUpload,
     title: "Синхронизация",
-    text: "Supabase Auth + Postgres + RLS. Один аккаунт — сайт, iPhone и Telegram.",
-    tag: "Apple · Google · Email",
+    text: "Supabase Auth + Postgres + RLS. Один аккаунт — сайт и Telegram.",
+    tag: "Email · пароль",
     visual: <AuthVisual />,
   },
   {
@@ -96,7 +93,7 @@ const FEATURES: Feature[] = [
   {
     icon: ShieldCheck,
     title: "Приватность",
-    text: "Row Level Security: чужие смены и деньги увидеть невозможно в принципе. Токены — только в секретах.",
+    text: "Row Level Security: пользователи работают со своими сменами. Сервисные ключи — в секретах сервера.",
     tag: "RLS · 0 трекеров",
   },
 ];

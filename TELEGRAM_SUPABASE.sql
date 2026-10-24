@@ -41,18 +41,26 @@ grant usage, select on sequence public.telegram_bot_events_id_seq to service_rol
 create or replace function public.create_telegram_link_code()
 returns text
 language plpgsql
-security invoker
-set search_path = public
+security definer
+set search_path = public, extensions, pg_temp
 as $$
-declare c text;
+declare
+  c text;
+  uid uuid := auth.uid();
 begin
-  delete from public.telegram_link_codes where user_id=auth.uid() or expires_at < now();
-  c := upper(substr(encode(gen_random_bytes(6),'hex'),1,8));
+  if uid is null then
+    raise exception 'not authenticated' using errcode = '28000';
+  end if;
+  -- The definer may bypass RLS: explicitly restrict every write to this caller.
+  perform pg_advisory_xact_lock(hashtextextended(uid::text, 0));
+  delete from public.telegram_link_codes where user_id = uid;
+  c := upper(substr(replace(gen_random_uuid()::text, '-', ''),1,12));
   insert into public.telegram_link_codes(code,user_id,expires_at)
-  values(c,auth.uid(),now()+interval '10 minutes');
+  values(c,uid,now()+interval '10 minutes');
   return c;
 end;
 $$;
+revoke all on function public.create_telegram_link_code() from public, anon;
 grant execute on function public.create_telegram_link_code() to authenticated;
 
 create table if not exists public.telegram_preferences (
