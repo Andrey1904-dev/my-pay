@@ -91,6 +91,7 @@ export function updateNextShiftCard() {
 
 export async function saveHomeShift({ silent = false } = {}) {
   const { cases, holiday } = homeInputs();
+  $("casesInput").value = String(cases);
   const k = todayKey();
   const meta = state.extra.shiftMeta?.[k];
   const v = makeShift(cases, holiday, meta?.bonus || 0);

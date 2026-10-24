@@ -16,6 +16,9 @@ test('rapid count edits persist immediately, stay nonnegative and survive reload
     assert.equal(app.MyPay.state.shifts[key].cases,0);
     app.click(app.document.querySelector('[data-add="500"]'));
     assert.equal(app.MyPay.state.shifts[key].cases,500);
+    app.input("casesInput", -10);
+    assert.equal(app.$("casesInput").value,"0");
+    assert.equal(app.MyPay.state.shifts[key].cases,0);
     await tick();assert.deepEqual(app.errors,[]);
   } finally {app.close();}
 });
