@@ -1,3 +1,4 @@
+import { PAY, fixedPart } from "./pay.ts";
 // Общая логика CASE.PLACE SALARY для Edge Functions (Deno) и тестов (Node 22 со стрипом типов).
 // Здесь нет ничего платформенного: только модель зарплаты, график 2/2, форматирование,
 // тонкий клиент PostgREST и клиент Telegram Bot API с внедряемым fetch.
@@ -13,16 +14,14 @@ export interface Settings {
   case_price: number;
   piece_percent: number;
   schedule_start: string | null;
-  monthly_goal: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  base_pay: 2415,
-  holiday_pay: 4600,
-  case_price: 7,
-  piece_percent: 25,
+  base_pay: fixedPart(),
+  holiday_pay: fixedPart(true),
+  case_price: PAY.caseRate,
+  piece_percent: PAY.casePercent,
   schedule_start: null,
-  monthly_goal: 60000,
 };
 
 export interface ShiftRow {
@@ -68,13 +67,6 @@ export function plural(n: number, one: string, few: string, many: string): strin
   return many;
 }
 
-/** Короткая сумма для тесных мест: 4 486,84 ₽ → «4,5к ₽». */
-export function moneyShort(n: number): string {
-  const v = num(n);
-  if (Math.abs(v) >= 1000) return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(v / 1000)}к\u00a0₽`;
-  return money(v);
-}
-
 /** Текстовый прогресс-бар: ▰▰▰▱▱▱▱▱▱▱ */
 export function bar(fraction: number, width = 10): string {
   const f = Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
@@ -100,7 +92,6 @@ export function normalizeSettings(raw: Partial<Record<keyof Settings, unknown>> 
     case_price: corrected ? 7 : pick("case_price", 0),
     piece_percent: pick("piece_percent", 0),
     schedule_start: schedule,
-    monthly_goal: pick("monthly_goal", 0),
   };
 }
 
@@ -142,7 +133,9 @@ export function buildShift(userId: string, workDate: string, cases: number, isHo
 // ---------- даты в часовом поясе цеха ----------
 
 export function isDateKey(v: unknown): v is string {
-  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const date = new Date(`${v}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === v;
 }
 
 /** YYYY-MM-DD для момента `now` в зоне TZ. */
@@ -234,7 +227,6 @@ export interface MonthSummary {
   best: ShiftRow | null;
   forecast: number | null;
   remainingWorkDays: number;
-  goalPercent: number;
 }
 
 export function summarizeMonth(rows: ShiftRow[], todayKey: string, s: Settings): MonthSummary {
@@ -252,8 +244,7 @@ export function summarizeMonth(rows: ShiftRow[], todayKey: string, s: Settings):
   }
   if (!saved.has(todayKey) && isWorkDay(todayKey, s)) remainingWorkDays++;
   const forecast = shifts ? round2(total + remainingWorkDays * avg) : null;
-  const goalPercent = s.monthly_goal > 0 ? Math.round(total / s.monthly_goal * 100) : 0;
-  return { shifts, cases, total, avg, best, forecast, remainingWorkDays, goalPercent };
+  return { shifts, cases, total, avg, best, forecast, remainingWorkDays };
 }
 
 // ---------- разбор ввода ----------
@@ -261,8 +252,6 @@ export function summarizeMonth(rows: ShiftRow[], todayKey: string, s: Settings):
 export type ParsedInput =
   | { kind: "add"; cases: number; date: string | null }
   | { kind: "set"; cases: number; date: string | null }
-  | { kind: "expense"; amount: number; note: string }
-  | { kind: "income"; amount: number; note: string }
   | { kind: "command"; name: string; arg: string }
   | { kind: "unknown" };
 
@@ -271,9 +260,6 @@ const BUTTON_COMMANDS: Record<string, string> = {
   "месяц": "month",
   "прогноз": "forecast",
   "календарь": "calendar",
-  "расходы": "spent",
-  "расход": "spent",
-  "финансы": "spent",
   "отменить": "undo",
   "помощь": "help",
   "меню": "menu",
@@ -282,10 +268,6 @@ const BUTTON_COMMANDS: Record<string, string> = {
   "последняя": "last",
   "праздник": "holiday",
 };
-
-const EXPENSE_WORDS = /^(расход|расходы|трата|потратил[а-я]*|купил[а-я]*|минус|заплатил[а-я]*|оплатил[а-я]*)$/;
-const INCOME_WORDS = /^(доход|получил[а-я]*|пришло|пришли|зарплата|зп|аванс|премия|плюс)$/;
-const NOTE_STOP = /^(на|за|в|по|у|с|со|для|и|руб|рублей|р|₽)$/;
 
 /** Дата из слова: «вчера», «позавчера», «27.09», «27.09.2026». */
 function parseDateToken(token: string, today: string): string | null {
@@ -345,118 +327,7 @@ export function parseInput(textRaw: string, today: string = dateKeyInTz(new Date
   }
   if (date) return { kind: "unknown" };
 
-  // Расход или доход: «350 обед», «-350 такси», «потратил 1200 на продукты», «доход 5000 премия».
-  const words = cleaned.split(" ").filter(Boolean);
-  let mode: "expense" | "income" | null = null;
-  let explicit = false; // слово-маркер («расход», «доход») — тогда заметка не обязательна
-  let amount: number | null = null;
-  const note: string[] = [];
-  for (const w of words) {
-    const m = w.match(/^([+\-−]?)(\d+(?:[.,]\d{1,2})?)$/);
-    if (m && amount === null) {
-      amount = parseFloat(m[2].replace(",", "."));
-      if (m[1] === "-" || m[1] === "−") mode = mode ?? "expense";
-      if (m[1] === "+") mode = mode ?? "income";
-      continue;
-    }
-    if (EXPENSE_WORDS.test(w)) { mode = mode ?? "expense"; explicit = true; continue; }
-    if (INCOME_WORDS.test(w)) { mode = mode ?? "income"; explicit = true; if (/^(зарплата|зп|аванс|премия)$/.test(w)) note.push(w); continue; }
-    if (NOTE_STOP.test(w)) continue;
-    if (/^[+\-−]?\d/.test(w)) return { kind: "unknown" }; // второе число — непонятно, что имелось в виду
-    note.push(w);
-  }
-  if (amount === null || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) return { kind: "unknown" };
-  if (!note.length && !explicit) return { kind: "unknown" }; // «-100» без пояснения — скорее опечатка, чем расход
-  const noteText = note.join(" ");
-  return { kind: mode ?? "expense", amount: Math.round(amount * 100) / 100, note: noteText.charAt(0).toUpperCase() + noteText.slice(1) };
-}
-
-// ---------- финансы (общий JSON с сайтом: user_app_data.payload) ----------
-
-export interface TxRow {
-  id: string;
-  type: "expense" | "income" | "transfer";
-  amount: number;
-  category: string;
-  accountId: string | null;
-  toAccountId: string | null;
-  date: string;
-  note: string;
-  source?: string;
-}
-export interface CategoryRow { id: string; name: string; emoji: string; limit: number }
-export interface AccountRow { id: string; name: string; type: string; balance: number }
-export interface ExtraPayload {
-  transactions?: TxRow[];
-  categories?: CategoryRow[];
-  accounts?: AccountRow[];
-  [key: string]: unknown;
-}
-
-export const DEFAULT_CATEGORIES: CategoryRow[] = [
-  { id: "food", name: "Еда", emoji: "🍔", limit: 0 }, { id: "transport", name: "Транспорт", emoji: "🚌", limit: 0 }, { id: "home", name: "Жильё", emoji: "🏠", limit: 0 },
-  { id: "shopping", name: "Покупки", emoji: "🛍️", limit: 0 }, { id: "health", name: "Здоровье", emoji: "💊", limit: 0 }, { id: "fun", name: "Развлечения", emoji: "🎮", limit: 0 },
-  { id: "connect", name: "Связь", emoji: "📱", limit: 0 }, { id: "family", name: "Семья", emoji: "👨‍👩‍👧", limit: 0 }, { id: "other", name: "Другое", emoji: "📦", limit: 0 },
-];
-
-const CATEGORY_HINTS: [RegExp, string][] = [
-  [/электричк|такси|автобус|метро|трамва|троллейбус|маршрутк|бензин|заправк|проезд|парковк|каршер|поезд|самокат|транспорт/, "Транспорт"],
-  [/аренд|квартир|жкх|коммунал|ипотек|ремонт|свет|электрич|газ|вода|квартплат|жиль/, "Жильё"],
-  [/аптек|лекарств|врач|стоматолог|зуб|больниц|клиник|таблетк|витамин|анализ|здоров/, "Здоровье"],
-  [/кино|игр|бар|пиво|концерт|подписк|стим|steam|netflix|боулинг|клуб|развлеч|кальян|бильярд|театр/, "Развлечения"],
-  [/связь|телефон|интернет|мтс|билайн|мегафон|теле2|tele2|сим|тариф|мобил/, "Связь"],
-  [/сем[ья]|дет[иея]|ребен|ребён|жен[аеу]|муж|мам[аеу]|пап[аеу]|школ|садик|детск/, "Семья"],
-  [/обед|еда|завтрак|ужин|кофе|кафе|столов|перекус|продукт|шаурм|пицц|бургер|доставк|ресторан|чай|хлеб|молок|пятероч|магнит|лент[аеу]|ашан|вкусвилл|перекрест|суши|шашлык|фастфуд|макдон|кфс|kfc|вода|сок|булоч|выпечк/, "Еда"],
-  [/одежд|обув|магазин|покупк|озон|ozon|wildberries|вайлдберр|wb|подар|техник|мебел|косметик|маркетплейс|заказ/, "Покупки"],
-];
-
-/** Категория по тексту заметки: сначала точное имя категории, потом словарь подсказок. */
-export function guessCategory(note: string, categories: CategoryRow[] = DEFAULT_CATEGORIES): CategoryRow {
-  const lower = String(note || "").toLowerCase().replace(/ё/g, "е").trim();
-  const byName = categories.find((c) => c.name.toLowerCase().replace(/ё/g, "е") === lower);
-  if (byName) return byName;
-  for (const [re, name] of CATEGORY_HINTS) {
-    if (re.test(lower)) {
-      const hit = categories.find((c) => c.name === name) || DEFAULT_CATEGORIES.find((c) => c.name === name);
-      if (hit) return hit;
-    }
-  }
-  return categories.find((c) => c.name === "Другое") || categories[categories.length - 1] || DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1];
-}
-
-export function payloadCategories(payload: ExtraPayload | null | undefined): CategoryRow[] {
-  const list = Array.isArray(payload?.categories) ? payload!.categories!.filter((c) => c && typeof c.name === "string" && c.name) : [];
-  return list.length ? list.map((c) => ({ id: String(c.id ?? c.name), name: c.name, emoji: c.emoji || "🏷️", limit: num(c.limit) })) : DEFAULT_CATEGORIES.map((c) => ({ ...c }));
-}
-
-export function payloadTransactions(payload: ExtraPayload | null | undefined): TxRow[] {
-  return Array.isArray(payload?.transactions) ? payload!.transactions!.filter((t) => t && typeof t === "object" && t.id) : [];
-}
-
-export function payloadAccounts(payload: ExtraPayload | null | undefined): AccountRow[] {
-  return Array.isArray(payload?.accounts) ? payload!.accounts!.filter((a) => a && a.id) : [];
-}
-
-/** Счёт для операции из бота: по имени в заметке, иначе наличные, иначе первый. */
-export function pickAccount(accounts: AccountRow[], note: string): { account: AccountRow | null; note: string } {
-  if (!accounts.length) return { account: null, note };
-  const words = note.split(" ");
-  const last = (words[words.length - 1] || "").toLowerCase().replace(/ё/g, "е");
-  const named = last ? accounts.find((a) => a.name.toLowerCase().replace(/ё/g, "е").startsWith(last) && last.length >= 3) : undefined;
-  if (named) return { account: named, note: words.slice(0, -1).join(" ") };
-  return { account: accounts.find((a) => a.type === "cash") || accounts[0], note };
-}
-
-export function monthTransactions(payload: ExtraPayload | null | undefined, monthPrefix: string, type: TxRow["type"]): TxRow[] {
-  return payloadTransactions(payload).filter((t) => t.type === type && typeof t.date === "string" && t.date.startsWith(monthPrefix));
-}
-
-export function sumAmount(rows: { amount: unknown }[]): number {
-  return round2(rows.reduce((a, r) => a + Math.max(0, num(r.amount)), 0));
-}
-
-export function newTxId(now: Date): string {
-  return `tg_${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  return { kind: "unknown" };
 }
 
 // ---------- календарь ----------
@@ -650,11 +521,11 @@ export const MAIN_KEYBOARD = {
   keyboard: [
     [{ text: "+100" }, { text: "+500" }, { text: "+1000" }],
     [{ text: "📦 Сегодня" }, { text: "📊 Месяц" }, { text: "🔮 Прогноз" }],
-    [{ text: "📅 Календарь" }, { text: "💸 Расходы" }, { text: "⚙️ Ещё" }],
+    [{ text: "📅 Календарь" }, { text: "⚙️ Ещё" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
-  input_field_placeholder: "350 — чехлы · +500 — добавить · 350 обед — расход",
+  input_field_placeholder: "350 — чехлы · +500 — добавить",
 };
 
 export const BOT_COMMANDS = [
@@ -662,7 +533,6 @@ export const BOT_COMMANDS = [
   { command: "month", description: "📊 Итоги месяца" },
   { command: "forecast", description: "🔮 Прогноз до конца месяца" },
   { command: "calendar", description: "📅 Календарь смен" },
-  { command: "spent", description: "💸 Расходы за месяц" },
   { command: "undo", description: "↩️ Отменить последнее добавление" },
   { command: "holiday", description: "🎉 Праздничная ставка на сегодня" },
   { command: "settings", description: "⚙️ Настройки и напоминания" },

@@ -15,6 +15,8 @@ function devLandingTransform(): Plugin {
       order: "pre",
       handler(html) {
         return html
+          .replace(/<script src="script\.js[^"]*"><\/script>/, '<script type="module" src="/src/app/main.js"></script>')
+          .replace(/if \("serviceWorker" in navigator\)/g, "if (false)")
           .replace(/<link\s+rel="stylesheet"\s+href="\.\/landing\.css[^"]*"\s*\/?>\s*/g, "")
           .replace(
             /<script\s+type="module"\s+src="\.\/landing\.js[^"]*"><\/script>/,
@@ -36,11 +38,9 @@ export default defineConfig(({ command }) => ({
   },
   server: {
     host: "0.0.0.0",
-    allowedHosts: true,
   },
   preview: {
     host: "0.0.0.0",
-    allowedHosts: true,
   },
   build: {
     outDir: "dist",

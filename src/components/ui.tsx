@@ -226,11 +226,11 @@ export function SectionHead({
           <span className="text-fog">{kicker}</span>
         </div>
       </Reveal>
-      <WordReveal>
+      <div>
         <h2 className="mt-5 text-[clamp(2.2rem,5.5vw,4.6rem)] font-extrabold leading-[1.02] tracking-tight">
           {title}
         </h2>
-      </WordReveal>
+      </div>
     </div>
   );
 }
@@ -256,11 +256,6 @@ export function Reveal({
       {children}
     </motion.div>
   );
-}
-
-/* ================= word-by-word reveal ================= */
-export function WordReveal({ children }: { children: ReactNode }) {
-  return <div>{children}</div>;
 }
 
 /* ================= rotating badge ================= */

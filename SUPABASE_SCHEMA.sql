@@ -25,7 +25,7 @@ create table if not exists public.settings (
   holiday_pay numeric not null default 4600,
   case_price numeric not null default 7,
   piece_percent numeric not null default 25,
-  schedule_start date not null default current_date,
+  schedule_start date not null default (now() at time zone 'Asia/Yekaterinburg')::date,
   monthly_goal numeric not null default 60000,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -47,8 +47,7 @@ create table if not exists public.shifts (
 );
 
 -- Профиль и настройки создаются из браузера после signUp.
--- Email-подтверждение в Supabase должно быть отключено,
--- иначе signUp не вернёт session и вход не завершится.
+-- Если включено подтверждение email, приложение просит подтвердить адрес до входа.
 
 -- ---------- Row Level Security ----------
 alter table public.profiles enable row level security;
@@ -131,3 +130,11 @@ set base_pay = case when is_holiday then 4600 else 2415 end,
 where base_pay = (case when is_holiday then 4050 else 2415 end)
   and cases >= 0 and abs(piece_pay - cases * 2.0125) <= 0.0051
   and total_pay - base_pay - piece_pay >= -0.011;
+
+-- Keep defaults consistent when this schema is reapplied to an older database.
+alter table public.settings alter column base_pay set default 2415;
+alter table public.settings alter column piece_percent set default 25;
+alter table public.settings alter column schedule_start set default (now() at time zone 'Asia/Yekaterinburg')::date;
+alter table public.shifts alter column base_pay set default 2415;
+alter table public.shifts alter column total_pay set default 2415;
+-- monthly_goal remains only for backwards compatibility with existing databases.

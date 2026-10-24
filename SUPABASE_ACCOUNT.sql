@@ -1,5 +1,5 @@
 -- =====================================================================
--- CASE.PLACE SALARY — удаление аккаунта пользователем (App Store 5.1.1(v))
+-- CASE.PLACE SALARY — удаление аккаунта пользователем
 -- Выполни один раз в Supabase → SQL Editor.
 -- Функция удаляет текущего пользователя из auth.users; все таблицы приложения
 -- (profiles, settings, shifts, user_app_data, telegram_*) связаны с auth.users

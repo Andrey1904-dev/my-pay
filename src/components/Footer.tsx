@@ -1,11 +1,11 @@
-import { ArrowUpRight, Apple, Code2, Send, Smartphone } from "lucide-react";
+import { ArrowUpRight, Code2, Send, Smartphone } from "lucide-react";
 import { Marquee, Reveal, APP_URL, REPO_URL, scrollToId } from "./ui";
 
 export function Footer() {
   return (
     <footer className="relative overflow-hidden pt-10">
       <Marquee
-        items={["Поставь на контроль", "Смена", "Деньги", "Цель", "Смена", "Деньги", "Цель"]}
+        items={["Поставь на контроль", "Смена", "Деньги", "Календарь", "Смена", "Деньги", "Календарь"]}
         outline
         className="border-y border-white/5 py-4 opacity-70 sm:py-6"
         duration={26}
@@ -46,15 +46,6 @@ export function Footer() {
                   <ArrowUpRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </span>
                 <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-              </a>
-              <a
-                href={`${REPO_URL}/blob/main/ios/README_IOS.md`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-full border border-line px-5 py-3 text-[14px] font-bold text-cream transition-colors duration-300 hover:border-flame/60 hover:text-flame sm:w-auto sm:px-7 sm:py-4"
-              >
-                <Apple className="h-4.5 w-4.5" />
-                На iPhone
               </a>
               <a
                 href={REPO_URL}

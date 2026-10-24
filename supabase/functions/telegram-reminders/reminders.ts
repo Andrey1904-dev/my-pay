@@ -11,7 +11,6 @@ import {
   Telegram,
   WORK_END_MIN,
   addDays,
-  bar,
   dateKeyInTz,
   formatDateRu,
   integer,
@@ -56,6 +55,7 @@ export interface ReminderReport {
   today: string;
   checked: number;
   sent: number;
+  failed: number;
   messages: { chat_id: number; kind: ReminderKind; text: string }[];
 }
 
@@ -88,7 +88,7 @@ export function createRemindersHandler(deps: ReminderDeps) {
 export async function runReminders(db: Db, tg: Telegram, now: Date): Promise<ReminderReport> {
   const today = dateKeyInTz(now);
   const hour = Math.floor(minutesInTz(now) / 60);
-  const report: ReminderReport = { hour, today, checked: 0, sent: 0, messages: [] };
+  const report: ReminderReport = { hour, today, checked: 0, sent: 0, failed: 0, messages: [] };
   const endHour = Math.floor(WORK_END_MIN / 60);
 
   const prefs = await db.select<PrefRow>("telegram_preferences", "enabled=eq.true&select=user_id,chat_id,enabled,reminder_hour");
@@ -101,7 +101,8 @@ export async function runReminders(db: Db, tg: Telegram, now: Date): Promise<Rem
     const summary = summarizeMonth(rows, today, settings);
     const shiftSavedToday = rows.some((r) => r.work_date === today);
     for (const message of pickReminders(pref, settings, today, hour, shiftSavedToday, summary)) {
-      await tg.sendMessage(pref.chat_id, message.text, message.markup);
+      const sent = await tg.sendMessage(pref.chat_id, message.text, message.markup);
+      if (!sent) { report.failed++; continue; }
       await db.insert("telegram_bot_events", { user_id: pref.user_id, chat_id: pref.chat_id, direction: "out", message: message.text }).catch(() => undefined);
       report.sent++;
       report.messages.push({ chat_id: pref.chat_id, kind: message.kind, text: message.text });
@@ -136,13 +137,12 @@ export function pickReminders(
     if (isWorkDay(tomorrow, settings)) {
       const lines = [`🔔 Завтра рабочая смена: ${formatDateRu(tomorrow)}, 08:00–19:00. Хорошего отдыха!`];
       if (summary && summary.shifts > 0 && tomorrow.slice(0, 7) === today.slice(0, 7)) {
-        const goalLeft = settings.monthly_goal > 0 ? Math.max(0, settings.monthly_goal - summary.total) : 0;
-        lines.push(`📊 В этом месяце уже ${summary.shifts} ${plural(summary.shifts, "смена", "смены", "смен")} · <b>${money(summary.total)}</b>${goalLeft > 0 ? ` · до цели ${money(goalLeft)}` : settings.monthly_goal > 0 ? " · цель выполнена ✅" : ""}`);
+        lines.push(`📊 В этом месяце уже ${summary.shifts} ${plural(summary.shifts, "смена", "смены", "смен")} · <b>${money(summary.total)}</b>`);
       }
       out.push({ kind: "tomorrow", text: lines.join("\n") });
     }
     if (today === monthRange(today).to && summary && summary.shifts > 0) {
-      out.push({ kind: "month_digest", text: digestText(summary, settings, today), markup: { inline_keyboard: [[{ text: "📅 Календарь", callback_data: `cal:${today.slice(0, 7)}` }, { text: "📊 Месяц", callback_data: "v:month" }]] } });
+      out.push({ kind: "month_digest", text: digestText(summary, today), markup: { inline_keyboard: [[{ text: "📅 Календарь", callback_data: `cal:${today.slice(0, 7)}` }, { text: "📊 Месяц", callback_data: "v:month" }]] } });
     }
   }
   return out;
@@ -160,7 +160,7 @@ export function pickReminder(
   return pickReminders(pref, settings, today, hour, shiftSavedToday, summary)[0] ?? null;
 }
 
-export function digestText(s: MonthSummary, settings: Settings, today: string): string {
+export function digestText(s: MonthSummary, today: string): string {
   const lines = [
     `🏁 <b>Итоги месяца — ${monthNameRu(today)}</b>`,
     "",
@@ -168,17 +168,13 @@ export function digestText(s: MonthSummary, settings: Settings, today: string): 
     `📈 Средняя смена: ${money(s.avg)}`,
   ];
   if (s.best) lines.push(`🏆 Лучшая: ${money(s.best.total_pay)} (${formatDateRu(s.best.work_date, { day: "numeric", month: "long" })})`);
-  if (settings.monthly_goal > 0) {
-    const pct = Math.round(s.total / settings.monthly_goal * 100);
-    lines.push("", `🎯 Цель ${money(settings.monthly_goal)}: ${bar(s.total / settings.monthly_goal)} ${pct}%${s.total >= settings.monthly_goal ? " ✅" : ""}`);
-  }
   lines.push("", "Завтра начинается новый месяц — удачи! 💪");
   return lines.join("\n");
 }
 
 async function loadSettings(db: Db, userId: string): Promise<Settings> {
   const row = await db
-    .one<Partial<Settings>>("settings", `user_id=eq.${userId}&select=base_pay,holiday_pay,case_price,piece_percent,schedule_start,monthly_goal`)
+    .one<Partial<Settings>>("settings", `user_id=eq.${userId}&select=base_pay,holiday_pay,case_price,piece_percent,schedule_start`)
     .catch(() => null);
   return normalizeSettings(row ?? DEFAULT_SETTINGS);
 }
