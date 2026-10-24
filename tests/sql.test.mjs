@@ -22,6 +22,7 @@ test('PostgreSQL schemas: RLS, Telegram code RPC, and complete account deletion'
     for (const file of ['SUPABASE_SCHEMA.sql','SUPABASE_ULTRA.sql','TELEGRAM_SUPABASE.sql','SUPABASE_ACCOUNT.sql']) {
       await db.exec(read(file).replace('create extension if not exists pgcrypto;', ''));
     }
+    await db.exec(read('supabase/updates/20261024_refresh_telegram_and_pay_defaults.sql'));
     // Reapplying the published setup must remain safe.
     await db.exec(read('TELEGRAM_SUPABASE.sql'));
     await db.exec(`insert into public.settings(user_id) values ('${a}'), ('${b}');
@@ -32,6 +33,7 @@ test('PostgreSQL schemas: RLS, Telegram code RPC, and complete account deletion'
     const rows = await db.query('select user_id from public.settings');
     assert.deepEqual(rows.rows.map(r=>r.user_id), [a]);
     await assert.rejects(db.exec(`insert into public.shifts(user_id,work_date) values ('${b}','2026-10-25')`), /row-level security/);
+    assert.equal((await db.query("select column_default from information_schema.columns where table_schema='public' and table_name='settings' and column_name='base_pay'")).rows[0].column_default, '2415');
     const code = await db.query('select public.create_telegram_link_code() as code');
     assert.match(code.rows[0].code, /^[A-F0-9]{12}$/);
     await db.query('select public.create_telegram_link_code()');
