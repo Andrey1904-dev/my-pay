@@ -3,6 +3,7 @@
 // окружение, fetch и «сейчас» передаются снаружи.
 //
 import { manageFinance, payloadCategories, monthTransactions, sumAmount, type ExtraPayload } from "../_shared/telegram-finance.ts";
+import { shiftComparisonText } from "../_shared/shift-comparison.ts";
 import { selectJoke } from "../_shared/telegram-jokes.ts";
 
 import {
@@ -121,7 +122,7 @@ export function createBotHandler(deps: BotDeps) {
       return json({ ok: false, error: "bad json" }, 400);
     }
 
-    const ctx = new BotContext(new Db(url, key, deps.fetch), new Telegram(token, deps.fetch), now);
+    const ctx = new BotContext(new Db(url, key, deps.fetch), new Telegram(token, deps.fetch), now, logError);
     try {
       if (update.callback_query) await ctx.handleCallback(update);
       else if (update.message) await ctx.handleMessage(update.message, update.update_id);
@@ -140,11 +141,13 @@ class BotContext {
   db: Db;
   tg: Telegram;
   now: () => Date;
+  logError: NonNullable<BotDeps["logError"]>;
 
-  constructor(db: Db, tg: Telegram, now: () => Date) {
+  constructor(db: Db, tg: Telegram, now: () => Date, logError: NonNullable<BotDeps["logError"]>) {
     this.db = db;
     this.tg = tg;
     this.now = now;
+    this.logError = logError;
   }
 
   todayKey() {
@@ -357,7 +360,22 @@ class BotContext {
     }
     if (!result.shift) throw new Error("Missing saved shift");
     const status = result.status === "created" ? "Смена сохранена!" : result.status === "unchanged" ? "Данные уже актуальны!" : "Информация обновлена!";
-    await this.reply(link.user_id, link.chat_id, `✅ ${status}\n\n💰 Заработано: ${money(result.shift.total_pay)}\n\n😂 ${escapeHtml(selectJoke(cases))}`);
+    // A row in shifts is an actually saved shift, even with zero cases. Schedule
+    // overrides live separately. Read the historical amount verbatim: no legacy
+    // tariff correction, date window, schedule filter or current-day comparison.
+    const previous = await this.db.one<Pick<ShiftRow, "total_pay">>("shifts",
+      `user_id=eq.${link.user_id}&work_date=lt.${date}&order=work_date.desc&select=total_pay`,
+    ).catch(error => {
+      // Saving already succeeded. An optional comparison read must not turn its
+      // confirmation into a misleading save error or cause another write.
+      this.logError("telegram previous shift comparison unavailable", error);
+      return null;
+    });
+    const comparison = shiftComparisonText(result.shift.total_pay, previous?.total_pay ?? null);
+    await this.reply(link.user_id, link.chat_id, [
+      `✅ ${status}`, `💰 Заработано: ${money(result.shift.total_pay)}`,
+      ...(comparison ? [comparison] : []), `😂 ${escapeHtml(selectJoke(cases))}`,
+    ].join("\n\n"));
   }
 
   // Restore only read-only navigation. Legacy quick-add and shift mutations stay inert.

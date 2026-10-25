@@ -185,3 +185,20 @@ test('offline PWA metadata snapshot cannot erase a newer Telegram expense or rep
   assert.equal(backend.db.user_app_data[0].payload.templates.at(-1).name,'Офлайн');
   assert.equal(app.MyPay.loadQueue().length,0);
 });
+
+test('comparison uses a historical PWA snapshot and Telegram update remains visible after PWA reload', async()=>{
+  const { createBotHandler }=await import('../supabase/functions/telegram-mypay/bot.ts');
+  const { messageUpdate,telegramRequest }=await import('./helpers/fake-backend.mjs');
+  const { addDays }=await import('../supabase/functions/_shared/mypay.ts');
+  const previous=addDays(key(),-5);
+  const backend=createFakeSupabase({tables:{telegram_links:[{user_id:'user-a',chat_id:111}],settings:[{user_id:'user-a',base_pay:2415,holiday_pay:4600,case_price:7,piece_percent:25,schedule_start:key()}],shifts:[{user_id:'user-a',work_date:previous,cases:500,is_holiday:false,base_pay:3000,piece_pay:1000,total_pay:4000,updated_at:'v1'}]}});
+  const app=await open(backend);await tick(30);
+  const env={TELEGRAM_BOT_TOKEN:'123:ABC',TELEGRAM_WEBHOOK_SECRET:'s3cret',SUPABASE_URL:'https://fake.test',SUPABASE_SERVICE_ROLE_KEY:'service'};
+  const bot=createBotHandler({env:k=>env[k],fetch:backend.fetch,now:()=>new Date(`${key()}T08:00:00Z`)});
+  await bot(telegramRequest(messageUpdate('1000')));
+  assert.match(backend.lastText().replace(/\u00a0/g,' '),/На 165 ₽ больше прошлой смены/);
+  const reloaded=await open(backend,{storage:storage(app)});await tick(30);
+  assert.equal(reloaded.MyPay.state.shifts[key()].total,4165);
+  assert.equal(reloaded.MyPay.state.shifts[previous].total,4000);
+  assert.equal(backend.db.shifts.length,2);
+});
