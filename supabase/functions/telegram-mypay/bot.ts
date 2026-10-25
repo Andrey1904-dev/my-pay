@@ -359,7 +359,7 @@ class BotContext {
       return;
     }
     if (!result.shift) throw new Error("Missing saved shift");
-    const status = result.status === "created" ? "Смена сохранена!" : result.status === "unchanged" ? "Данные уже актуальны!" : "Информация обновлена!";
+    const status = result.status === "created" ? "Смена сохранена!" : "Информация обновлена!";
     // A row in shifts is an actually saved shift, even with zero cases. Schedule
     // overrides live separately. Read the historical amount verbatim: no legacy
     // tariff correction, date window, schedule filter or current-day comparison.
@@ -374,7 +374,7 @@ class BotContext {
     const comparison = shiftComparisonText(result.shift.total_pay, previous?.total_pay ?? null);
     await this.reply(link.user_id, link.chat_id, [
       `✅ ${status}`, `💰 Заработано: ${money(result.shift.total_pay)}`,
-      ...(comparison ? [comparison] : []), `😂 ${escapeHtml(selectJoke(cases))}`,
+      ...(comparison ? [comparison] : []), `«${escapeHtml(selectJoke(cases))}»`,
     ].join("\n\n"));
   }
 
