@@ -171,3 +171,17 @@ test('Telegram writes are read by PWA; PWA writes are replaced by Telegram in th
   const reloaded=await open(backend,{storage:storage(app)}); await tick(30);
   assert.equal(reloaded.MyPay.state.shifts[key()].cases,500);
 });
+
+test('offline PWA metadata snapshot cannot erase a newer Telegram expense or replay marker', async () => {
+  const backend=createFakeSupabase({tables:{user_app_data:[{user_id:'user-a',payload:{transactions:[],telegramFinanceUpdates:[]},updated_at:'v1'}]}});
+  const app=await open(backend);await tick(30);
+  backend.control.failWrites=true;
+  app.input('templateName','Офлайн');app.input('templateCases',500);await app.MyPay.saveTemplate();await tick(10);
+  Object.assign(backend.db.user_app_data[0],{payload:{transactions:[{id:'tg_update_12',type:'expense',amount:350,date:key()}],telegramFinanceUpdates:['12'],accounts:[{id:'cash',balance:100}]},updated_at:'v2'});
+  backend.control.failWrites=false;
+  await app.MyPay.flushCloudQueue();
+  assert.equal(backend.db.user_app_data[0].payload.transactions[0].amount,350);
+  assert.deepEqual(backend.db.user_app_data[0].payload.telegramFinanceUpdates,['12']);
+  assert.equal(backend.db.user_app_data[0].payload.templates.at(-1).name,'Офлайн');
+  assert.equal(app.MyPay.loadQueue().length,0);
+});

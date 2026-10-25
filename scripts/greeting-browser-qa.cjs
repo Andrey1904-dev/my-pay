@@ -19,7 +19,7 @@ const browsers=[];
    // Baseline production is read-only, isolated and never authenticated.
    await page.goto('https://andrey1904-dev.github.io/my-pay/');await page.waitForFunction(()=>!!window.MyPay);await page.evaluate(()=>document.fonts.ready);
    const baseline={hero:(await page.locator('#homeScreen .hero-card').boundingBox()).y,cases:(await page.locator('.cases-card').boundingBox()).y};
-   await page.goto('http://localhost:4173/');await page.waitForFunction(()=>MyPay.version==='1.13');await page.evaluate(()=>document.fonts.ready);
+   await page.goto('http://localhost:4173/');await page.waitForFunction(()=>MyPay.version==='1.14');await page.evaluate(()=>document.fonts.ready);
    await page.evaluate(()=>{MyPay.state.extra.displayName='Андрей';MyPay.renderAll();});
    assert.equal(await page.locator('#greetingTitle').innerText(),'Андрей ❤️');
    assert.equal(await page.locator('#greetingMessage').innerText(),'Это твоя первая смена 😭');

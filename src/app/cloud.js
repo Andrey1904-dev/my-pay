@@ -386,6 +386,30 @@ export function queueCloudOp(op) {
   if (!navigator.onLine) showToast("Офлайн: сохраню в облако при подключении");
 }
 
+// Finance is edited by explicit Telegram commands; this PWA edits other metadata.
+// Merge the newest ledger before a conditional write so a stale offline snapshot
+// cannot erase a newly recorded expense or its replay-protection marker.
+async function saveExtraSnapshot(userId, extra) {
+  const keys = ["transactions", "categories", "accounts", "telegramFinanceUpdates"];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const latest = await db.from(CLOUD_EXTRA_TABLE).select("payload,updated_at").eq("user_id", userId).maybeSingle();
+    if (latest.error) return latest;
+    const payload = { ...extra };
+    for (const key of keys) if (Object.hasOwn(latest.data?.payload || {}, key)) payload[key] = latest.data.payload[key];
+    const updated_at = new Date(Math.max(Date.now(), (Date.parse(latest.data?.updated_at || "") || 0) + 1)).toISOString();
+    const result = latest.data
+      ? await db.from(CLOUD_EXTRA_TABLE).update({ payload, updated_at }).eq("user_id", userId).eq("updated_at", latest.data.updated_at).select("*")
+      : await db.from(CLOUD_EXTRA_TABLE).insert({ user_id: userId, payload, updated_at }).select("*");
+    if (result.error?.code === "23505" || (!result.error && !result.data?.length)) continue;
+    if (!result.error && currentUser?.id === userId) {
+      for (const key of keys) if (Object.hasOwn(payload, key)) state.extra[key] = structuredCloneSafe(payload[key]);
+      save();
+    }
+    return result;
+  }
+  return { error: { message: "Данные меняются на другом устройстве. Повторим синхронизацию позже." } };
+}
+
 export let queueFlushInFlight = null;
 
 export async function flushCloudQueue() {
@@ -428,7 +452,7 @@ export async function flushCloudQueue() {
             saveQueue(loadQueue().map(x => x.userId === userId && x.date === op.date && x.id !== op.id && (x.expected ?? null) === expected ? { ...x, expected: nextVersion } : x));
           }
         } else if (op.type === "saveExtra") {
-          result = await db.from(CLOUD_EXTRA_TABLE).upsert({ user_id: userId, payload: op.extra, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+          result = await saveExtraSnapshot(userId, op.extra);
         } else if (op.type === "saveSettings") {
           result = await db.from("settings").upsert({ ...op.settings, user_id: userId }, { onConflict: "user_id" });
         } else throw new Error("Неизвестная операция очереди");

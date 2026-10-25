@@ -1,11 +1,11 @@
-const CACHE_NAME = "my-pay-v1.13";
+const CACHE_NAME = "my-pay-v1.14";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./app.html",
   "./style.css",
-  "./script.js?v=1.13",
-  "./style.css?v=1.13",
+  "./script.js?v=1.14",
+  "./style.css?v=1.14",
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-192.png",

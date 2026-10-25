@@ -4,7 +4,7 @@
 
 export function createFakeBackend({ tables = {}, telegramFail = false } = {}) {
   const db = {};
-  for (const [name, rows] of Object.entries(tables)) db[name] = rows.map((r) => ({ ...r }));
+  for (const [name, rows] of Object.entries(tables)) db[name] = rows.map((r) => ({ ...(name === "user_app_data" ? { updated_at: "2026-01-01T00:00:00.000Z" } : {}), ...r }));
   let nextId = 1000;
   const timestamp = () => new Date(1800000000000 + nextId++).toISOString();
   const telegramCalls = [];
@@ -77,6 +77,7 @@ export function createFakeBackend({ tables = {}, telegramFail = false } = {}) {
           const existing = rows.find((r) => q.onConflict.every((c) => String(r[c]) === String(item[c])));
           if (existing) { Object.assign(existing, item); result.push(existing); continue; }
         }
+        if (tableName === "user_app_data" && rows.some(r => r.user_id === item.user_id)) return respond({ code: "23505", message: "duplicate metadata" }, 409);
         if (tableName === "shifts" && rows.some(r => r.user_id === item.user_id && r.work_date === item.work_date)) return respond({ code: "23505", message: "duplicate shift" }, 409);
         if (tableName === "telegram_entries" && !(item.cases > 0)) return respond({ message: "check constraint cases > 0" }, 400);
         const row = withDefaults(tableName, item);
