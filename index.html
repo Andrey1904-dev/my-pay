@@ -15,7 +15,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>Моя смена · CASE.PLACE SALARY</title>
-  <link rel="stylesheet" href="style.css?v=1.10">
+  <link rel="stylesheet" href="style.css?v=1.11">
 </head>
 <body>
 <script>
@@ -76,7 +76,7 @@ try {
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">₽</div>
       <div class="brand-text">
-        <div class="brand-title">CASE.PLACE <span>SALARY</span> <span class="brand-version" id="brandVersion">V1.10</span></div>
+        <div class="brand-title">CASE.PLACE <span>SALARY</span> <span class="brand-version" id="brandVersion">V1.11</span></div>
         <div class="brand-subtitle">Смены · чехлы · заработок</div>
       </div>
     </div>
@@ -89,7 +89,8 @@ try {
       <div class="page-head">
         <div>
           <div class="eyebrow" id="todayLabel">Сегодня</div>
-          <h1 id="greetingTitle">Моя смена</h1>
+          <h1 id="greetingTitle">Привет ❤️</h1>
+          <p class="greeting-message" id="greetingMessage" aria-live="polite"></p>
         </div>
         <span class="status-pill" id="todayBadge">—</span>
       </div>
@@ -193,6 +194,7 @@ try {
           <span class="eyebrow">Выбранный день</span>
           <h3 id="selectedDate">—</h3>
           <small id="selectedStatus">—</small>
+          <label class="field calendar-workday">План дня<select id="calendarWorkday"><option value="auto">По графику и записям</option><option value="work">Рабочий</option><option value="off">Выходной</option></select><small>Для календаря и приветствия. Оплата не меняется.</small></label>
         </div>
         <div class="selected-money num" id="selectedMoney">—</div>
       </article>
@@ -310,7 +312,7 @@ try {
         <svg><use href="#i-bell"/></svg>
         <div><b>Напоминания о сменах</b><p id="notificationTipText">Разреши уведомления, чтобы приложение напоминало о ближайшей смене.</p><button class="btn-text" id="enableNotificationsBtn">Включить уведомления</button></div>
       </article>
-      <div class="app-footer"><span id="appVersion">V1.10</span> · CASE.PLACE SALARY</div>
+      <div class="app-footer"><span id="appVersion">V1.11</span> · CASE.PLACE SALARY</div>
     </section>
   </main>
 
@@ -346,7 +348,8 @@ try {
 <div class="modal hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow">Параметры</span><h2 id="settingsTitle">Настройки расчёта</h2></div><button class="icon-btn" data-close="settingsModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
+    <div class="sheet-head"><div><span class="eyebrow">Параметры</span><h2 id="settingsTitle">Настройки</h2></div><button class="icon-btn" data-close="settingsModal" aria-label="Закрыть"><svg><use href="#i-x"/></svg></button></div>
+    <label class="field">Как к тебе обращаться?<input id="settingDisplayName" type="text" autocomplete="given-name" maxlength="80" placeholder="Например, Андрей"><small>Можно оставить пустым — используем имя профиля или «Привет».</small></label>
     <p class="sheet-text">Если условия на работе поменяются — обнови их здесь. Уже сохранённые смены пересчитываться не будут.</p>
     <div class="grid-2">
       <label class="field">Обычная ставка, ₽<input id="settingBase" type="number" inputmode="decimal" min="0" step="0.01"></label>
@@ -488,7 +491,7 @@ try {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2" crossorigin="anonymous"></script>
-<script src="script.js?v=1.10"></script>
+<script src="script.js?v=1.11"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));

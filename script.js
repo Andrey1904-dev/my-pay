@@ -70,154 +70,6 @@
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
   }
 
-  // src/app/dialogs.js
-  function showToast(text, ms = 2400) {
-    const t = $("toast");
-    t.textContent = text;
-    t.classList.add("show");
-    clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => t.classList.remove("show"), ms);
-  }
-  function openModal(id) {
-    $(id).classList.remove("hidden");
-  }
-  function closeModal(id) {
-    $(id).classList.add("hidden");
-  }
-  function anyModalOpen() {
-    return !!document.querySelector(".modal:not(.hidden)");
-  }
-  function confirmAction({ title = "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435", text = "", okText = "\u0423\u0434\u0430\u043B\u0438\u0442\u044C", cancelText = "\u041E\u0442\u043C\u0435\u043D\u0430", danger = true } = {}) {
-    return new Promise((resolve) => {
-      $("confirmTitle").textContent = title;
-      $("confirmText").textContent = text;
-      const ok = $("confirmOk"), cancel = $("confirmCancel");
-      ok.querySelector("span").textContent = okText;
-      cancel.querySelector("span").textContent = cancelText;
-      ok.className = `btn btn-lg ${danger ? "btn-danger" : "btn-primary"}`;
-      const done = (v) => {
-        ok.onclick = cancel.onclick = null;
-        closeModal("confirmModal");
-        $("confirmModal").onclick = null;
-        resolve(v);
-      };
-      ok.onclick = () => done(true);
-      cancel.onclick = () => done(false);
-      $("confirmModal").onclick = (e) => {
-        if (e.target === $("confirmModal")) done(false);
-      };
-      openModal("confirmModal");
-      setTimeout(() => cancel.focus(), 50);
-    });
-  }
-  function promptNumber({ title = "\u0421\u0443\u043C\u043C\u0430", text = "", label = "\u0421\u0443\u043C\u043C\u0430, \u20BD", value = "", okText = "\u0413\u043E\u0442\u043E\u0432\u043E" } = {}) {
-    return new Promise((resolve) => {
-      $("promptTitle").textContent = title;
-      $("promptText").textContent = text;
-      $("promptLabel").textContent = label;
-      const input = $("promptInput"), ok = $("promptOk"), cancel = $("promptCancel");
-      input.value = value === null || value === void 0 ? "" : String(value);
-      ok.querySelector("span").textContent = okText;
-      const done = (v) => {
-        ok.onclick = cancel.onclick = input.onkeydown = null;
-        $("promptModal").onclick = null;
-        closeModal("promptModal");
-        resolve(v);
-      };
-      ok.onclick = () => {
-        const v = Number(String(input.value).replace(",", "."));
-        done(Number.isFinite(v) ? v : null);
-      };
-      cancel.onclick = () => done(null);
-      input.onkeydown = (e) => {
-        if (e.key === "Enter") ok.click();
-      };
-      $("promptModal").onclick = (e) => {
-        if (e.target === $("promptModal")) done(null);
-      };
-      openModal("promptModal");
-      setTimeout(() => {
-        input.focus();
-        input.select();
-      }, 50);
-    });
-  }
-
-  // src/app/profile.js
-  function updateProfileUI() {
-    const n = currentProfile?.name?.trim() || currentUser?.user_metadata?.full_name || currentUser?.user_metadata?.name || (currentUser ? currentUser.email : "") || "\u041C\u043E\u0439 \u0440\u0430\u0441\u0447\u0451\u0442";
-    $("profileName").textContent = n;
-    $("profileAvatar").textContent = (n[0] || "\u20BD").toUpperCase();
-    const provider = currentUser?.app_metadata?.provider;
-    const via = provider === "apple" ? "Apple" : provider === "google" ? "Google" : "";
-    $("profileMeta").textContent = currentUser ? `${currentUser.email || ""}${via ? " \xB7 \u0432\u0445\u043E\u0434 \u0447\u0435\u0440\u0435\u0437 " + via : ""} \xB7 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0430` : db ? "\u0412\u043E\u0439\u0434\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442, \u0447\u0442\u043E\u0431\u044B \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435" : "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C: \u0434\u0430\u043D\u043D\u044B\u0435 \u0445\u0440\u0430\u043D\u044F\u0442\u0441\u044F \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435";
-    $("loginBtn").classList.toggle("hidden", !!currentUser);
-    $("logoutBtn").classList.toggle("hidden", !currentUser);
-    $("deleteAccountBtn").classList.toggle("hidden", !currentUser);
-  }
-  async function loadTelegramStatus() {
-    if (!db || !currentUser) return null;
-    try {
-      const { data, error } = await db.from("telegram_links").select("username,first_name,linked_at").eq("user_id", currentUser.id).maybeSingle();
-      if (error || !data) {
-        $("telegramMenuStatus").textContent = "\u0412\u0432\u043E\u0434 \u0447\u0435\u0445\u043B\u043E\u0432 \u043F\u0440\u044F\u043C\u043E \u0438\u0437 \u0447\u0430\u0442\u0430";
-        return null;
-      }
-      const who = data.username ? "@" + data.username : data.first_name || "\u0430\u043A\u043A\u0430\u0443\u043D\u0442";
-      $("telegramMenuStatus").textContent = `\u041F\u0440\u0438\u0432\u044F\u0437\u0430\u043D: ${who}`;
-      return data;
-    } catch {
-      return null;
-    }
-  }
-  async function openTelegramModal() {
-    if (!currentUser) {
-      showToast("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0432\u043E\u0439\u0434\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442");
-      return;
-    }
-    $("telegramCode").textContent = "\u2014";
-    $("telegramStatus").classList.add("hidden");
-    openModal("telegramModal");
-    const link = await loadTelegramStatus();
-    if (link) {
-      const who = link.username ? "@" + link.username : link.first_name || "\u0430\u043A\u043A\u0430\u0443\u043D\u0442 Telegram";
-      $("telegramStatus").querySelector("span").textContent = `\u0411\u043E\u0442 \u0443\u0436\u0435 \u043F\u0440\u0438\u0432\u044F\u0437\u0430\u043D: ${who}. \u041D\u043E\u0432\u044B\u0439 \u043A\u043E\u0434 \u043D\u0443\u0436\u0435\u043D \u0442\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u0441\u043C\u0435\u043D\u044B \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430 Telegram.`;
-      $("telegramStatus").classList.remove("hidden");
-    }
-  }
-  async function generateTelegramCode() {
-    if (!db) {
-      showToast("\u041E\u0431\u043B\u0430\u043A\u043E \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u2014 \u043A\u043E\u0434 \u043F\u0440\u0438\u0432\u044F\u0437\u043A\u0438 \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043D\u0435\u043B\u044C\u0437\u044F");
-      return;
-    }
-    if (!currentUser) {
-      showToast("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0432\u043E\u0439\u0434\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442");
-      return;
-    }
-    const btn = $("telegramGenerateBtn"), label = btn.querySelector("span");
-    btn.disabled = true;
-    label.textContent = "\u0413\u0435\u043D\u0435\u0440\u0438\u0440\u0443\u044E\u2026";
-    try {
-      const { data, error } = await db.rpc("create_telegram_link_code");
-      if (error) throw error;
-      $("telegramCode").textContent = data || "\u2014";
-      if (data && navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(`/start ${data}`);
-          showToast("\u041A\u043E\u0434 \u0433\u043E\u0442\u043E\u0432 \xB7 \u043A\u043E\u043C\u0430\u043D\u0434\u0430 /start \u0441\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u0430");
-        } catch {
-          showToast("\u041A\u043E\u0434 \u0433\u043E\u0442\u043E\u0432 \u2713");
-        }
-      } else showToast("\u041A\u043E\u0434 \u0433\u043E\u0442\u043E\u0432 \u2713");
-    } catch (e) {
-      console.error(e);
-      showToast("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043A\u043E\u0434. \u041F\u0440\u043E\u0432\u0435\u0440\u044C, \u0447\u0442\u043E \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D TELEGRAM_SUPABASE.sql");
-    } finally {
-      btn.disabled = false;
-      label.textContent = "\u041F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043A\u043E\u0434";
-    }
-  }
-
   // supabase/functions/_shared/pay.ts
   var PAY = {
     base: 1900,
@@ -248,6 +100,8 @@
   var EXTRA_DEFAULTS = {
     payday: { advanceDay: 23, salaryDay: 8 },
     templates: [{ id: "default", name: "\u041E\u0431\u044B\u0447\u043D\u0430\u044F", cases: 0, hours: 11, bonus: 0, holiday: false }],
+    displayName: "",
+    workdayOverrides: {},
     shiftMeta: {},
     theme: "dark",
     undo: null
@@ -304,6 +158,8 @@
       bonus: Math.max(0, num(meta.bonus)),
       note: String(meta.note || "")
     }]));
+    out.displayName = typeof out.displayName === "string" ? out.displayName.replace(/\s+/gu, " ").trim().slice(0, 80) : "";
+    out.workdayOverrides = Object.fromEntries(Object.entries(out.workdayOverrides && typeof out.workdayOverrides === "object" ? out.workdayOverrides : {}).filter(([date, value]) => isDateKey(date) && typeof value === "boolean"));
     out.theme = ["system", "light", "dark"].includes(out.theme) ? out.theme : "system";
     return out;
   }
@@ -389,6 +245,154 @@
       prev = x;
     }
     return { es, sum, best, avg, bestStreak, cases: es.reduce((a, v) => a + num(v.cases), 0) };
+  }
+
+  // src/app/dialogs.js
+  function showToast(text, ms = 2400) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => t.classList.remove("show"), ms);
+  }
+  function openModal(id) {
+    $(id).classList.remove("hidden");
+  }
+  function closeModal(id) {
+    $(id).classList.add("hidden");
+  }
+  function anyModalOpen() {
+    return !!document.querySelector(".modal:not(.hidden)");
+  }
+  function confirmAction({ title = "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435", text = "", okText = "\u0423\u0434\u0430\u043B\u0438\u0442\u044C", cancelText = "\u041E\u0442\u043C\u0435\u043D\u0430", danger = true } = {}) {
+    return new Promise((resolve) => {
+      $("confirmTitle").textContent = title;
+      $("confirmText").textContent = text;
+      const ok = $("confirmOk"), cancel = $("confirmCancel");
+      ok.querySelector("span").textContent = okText;
+      cancel.querySelector("span").textContent = cancelText;
+      ok.className = `btn btn-lg ${danger ? "btn-danger" : "btn-primary"}`;
+      const done = (v) => {
+        ok.onclick = cancel.onclick = null;
+        closeModal("confirmModal");
+        $("confirmModal").onclick = null;
+        resolve(v);
+      };
+      ok.onclick = () => done(true);
+      cancel.onclick = () => done(false);
+      $("confirmModal").onclick = (e) => {
+        if (e.target === $("confirmModal")) done(false);
+      };
+      openModal("confirmModal");
+      setTimeout(() => cancel.focus(), 50);
+    });
+  }
+  function promptNumber({ title = "\u0421\u0443\u043C\u043C\u0430", text = "", label = "\u0421\u0443\u043C\u043C\u0430, \u20BD", value = "", okText = "\u0413\u043E\u0442\u043E\u0432\u043E" } = {}) {
+    return new Promise((resolve) => {
+      $("promptTitle").textContent = title;
+      $("promptText").textContent = text;
+      $("promptLabel").textContent = label;
+      const input = $("promptInput"), ok = $("promptOk"), cancel = $("promptCancel");
+      input.value = value === null || value === void 0 ? "" : String(value);
+      ok.querySelector("span").textContent = okText;
+      const done = (v) => {
+        ok.onclick = cancel.onclick = input.onkeydown = null;
+        $("promptModal").onclick = null;
+        closeModal("promptModal");
+        resolve(v);
+      };
+      ok.onclick = () => {
+        const v = Number(String(input.value).replace(",", "."));
+        done(Number.isFinite(v) ? v : null);
+      };
+      cancel.onclick = () => done(null);
+      input.onkeydown = (e) => {
+        if (e.key === "Enter") ok.click();
+      };
+      $("promptModal").onclick = (e) => {
+        if (e.target === $("promptModal")) done(null);
+      };
+      openModal("promptModal");
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 50);
+    });
+  }
+
+  // src/app/profile.js
+  function updateProfileUI() {
+    const n = greetingName() || "\u041C\u043E\u0439 \u0440\u0430\u0441\u0447\u0451\u0442";
+    $("profileName").textContent = n;
+    $("profileAvatar").textContent = (n[0] || "\u20BD").toUpperCase();
+    const provider = currentUser?.app_metadata?.provider;
+    const via = provider === "apple" ? "Apple" : provider === "google" ? "Google" : "";
+    $("profileMeta").textContent = currentUser ? `${currentUser.email || ""}${via ? " \xB7 \u0432\u0445\u043E\u0434 \u0447\u0435\u0440\u0435\u0437 " + via : ""} \xB7 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0430` : db ? "\u0412\u043E\u0439\u0434\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442, \u0447\u0442\u043E\u0431\u044B \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435" : "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C: \u0434\u0430\u043D\u043D\u044B\u0435 \u0445\u0440\u0430\u043D\u044F\u0442\u0441\u044F \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435";
+    $("loginBtn").classList.toggle("hidden", !!currentUser);
+    $("logoutBtn").classList.toggle("hidden", !currentUser);
+    $("deleteAccountBtn").classList.toggle("hidden", !currentUser);
+  }
+  async function loadTelegramStatus() {
+    if (!db || !currentUser) return null;
+    try {
+      const { data, error } = await db.from("telegram_links").select("username,first_name,linked_at").eq("user_id", currentUser.id).maybeSingle();
+      if (error || !data) {
+        $("telegramMenuStatus").textContent = "\u0412\u0432\u043E\u0434 \u0447\u0435\u0445\u043B\u043E\u0432 \u043F\u0440\u044F\u043C\u043E \u0438\u0437 \u0447\u0430\u0442\u0430";
+        return null;
+      }
+      const who = data.username ? "@" + data.username : data.first_name || "\u0430\u043A\u043A\u0430\u0443\u043D\u0442";
+      $("telegramMenuStatus").textContent = `\u041F\u0440\u0438\u0432\u044F\u0437\u0430\u043D: ${who}`;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+  async function openTelegramModal() {
+    if (!currentUser) {
+      showToast("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0432\u043E\u0439\u0434\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442");
+      return;
+    }
+    $("telegramCode").textContent = "\u2014";
+    $("telegramStatus").classList.add("hidden");
+    openModal("telegramModal");
+    const link = await loadTelegramStatus();
+    if (link) {
+      const who = link.username ? "@" + link.username : link.first_name || "\u0430\u043A\u043A\u0430\u0443\u043D\u0442 Telegram";
+      $("telegramStatus").querySelector("span").textContent = `\u0411\u043E\u0442 \u0443\u0436\u0435 \u043F\u0440\u0438\u0432\u044F\u0437\u0430\u043D: ${who}. \u041D\u043E\u0432\u044B\u0439 \u043A\u043E\u0434 \u043D\u0443\u0436\u0435\u043D \u0442\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u0441\u043C\u0435\u043D\u044B \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430 Telegram.`;
+      $("telegramStatus").classList.remove("hidden");
+    }
+  }
+  async function generateTelegramCode() {
+    if (!db) {
+      showToast("\u041E\u0431\u043B\u0430\u043A\u043E \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u2014 \u043A\u043E\u0434 \u043F\u0440\u0438\u0432\u044F\u0437\u043A\u0438 \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043D\u0435\u043B\u044C\u0437\u044F");
+      return;
+    }
+    if (!currentUser) {
+      showToast("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0432\u043E\u0439\u0434\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442");
+      return;
+    }
+    const btn = $("telegramGenerateBtn"), label = btn.querySelector("span");
+    btn.disabled = true;
+    label.textContent = "\u0413\u0435\u043D\u0435\u0440\u0438\u0440\u0443\u044E\u2026";
+    try {
+      const { data, error } = await db.rpc("create_telegram_link_code");
+      if (error) throw error;
+      $("telegramCode").textContent = data || "\u2014";
+      if (data && navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(`/start ${data}`);
+          showToast("\u041A\u043E\u0434 \u0433\u043E\u0442\u043E\u0432 \xB7 \u043A\u043E\u043C\u0430\u043D\u0434\u0430 /start \u0441\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u0430");
+        } catch {
+          showToast("\u041A\u043E\u0434 \u0433\u043E\u0442\u043E\u0432 \u2713");
+        }
+      } else showToast("\u041A\u043E\u0434 \u0433\u043E\u0442\u043E\u0432 \u2713");
+    } catch (e) {
+      console.error(e);
+      showToast("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043A\u043E\u0434. \u041F\u0440\u043E\u0432\u0435\u0440\u044C, \u0447\u0442\u043E \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D TELEGRAM_SUPABASE.sql");
+    } finally {
+      btn.disabled = false;
+      label.textContent = "\u041F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043A\u043E\u0434";
+    }
   }
 
   // src/app/stats.js
@@ -624,7 +628,7 @@
       b.type = "button";
       b.className = "day";
       b.setAttribute("role", "gridcell");
-      if (isWork(x)) b.classList.add("work");
+      if (greetingWorkDay(x)) b.classList.add("work");
       if (s) {
         b.classList.add("saved");
         if (s.holiday) b.classList.add("holiday");
@@ -635,7 +639,7 @@
         b.setAttribute("aria-selected", "true");
       }
       b.textContent = n;
-      b.setAttribute("aria-label", `${dateText(x, { day: "numeric", month: "long" })}${s ? ", \u0441\u043C\u0435\u043D\u0430 " + money(s.total) : isWork(x) ? ", \u0440\u0430\u0431\u043E\u0447\u0438\u0439 \u0434\u0435\u043D\u044C" : ", \u0432\u044B\u0445\u043E\u0434\u043D\u043E\u0439"}`);
+      b.setAttribute("aria-label", `${dateText(x, { day: "numeric", month: "long" })}${s ? ", \u0441\u043C\u0435\u043D\u0430 " + money(s.total) : greetingWorkDay(x) ? ", \u0440\u0430\u0431\u043E\u0447\u0438\u0439 \u0434\u0435\u043D\u044C" : ", \u0432\u044B\u0445\u043E\u0434\u043D\u043E\u0439"}`);
       if (s) {
         const i = document.createElement("i");
         i.className = "tiny";
@@ -658,7 +662,8 @@
       parts.push(s.holiday ? "\u041F\u0440\u0430\u0437\u0434\u043D\u0438\u0447\u043D\u0430\u044F \u0441\u043C\u0435\u043D\u0430" : "\u0421\u043C\u0435\u043D\u0430 \u0432\u043D\u0435\u0441\u0435\u043D\u0430");
       parts.push(`${integer(s.cases)} ${plural(s.cases, "\u0447\u0435\u0445\u043E\u043B", "\u0447\u0435\u0445\u043B\u0430", "\u0447\u0435\u0445\u043B\u043E\u0432")}`);
       if (meta?.note) parts.push(meta.note);
-    } else parts.push(isWork(d) ? "\u0420\u0430\u0431\u043E\u0447\u0438\u0439 \u0434\u0435\u043D\u044C \u043F\u043E \u0433\u0440\u0430\u0444\u0438\u043A\u0443" : "\u0412\u044B\u0445\u043E\u0434\u043D\u043E\u0439 \u043F\u043E \u0433\u0440\u0430\u0444\u0438\u043A\u0443");
+    } else parts.push(greetingWorkDay(d) ? "\u0420\u0430\u0431\u043E\u0447\u0438\u0439 \u0434\u0435\u043D\u044C" : "\u0412\u044B\u0445\u043E\u0434\u043D\u043E\u0439");
+    $("calendarWorkday").value = state.extra.workdayOverrides[k] === true ? "work" : state.extra.workdayOverrides[k] === false ? "off" : "auto";
     $("selectedStatus").textContent = parts.join(" \xB7 ");
     $("selectedMoney").textContent = s ? money(s.total) : "\u2014";
     $("editSelectedBtn").querySelector("span").textContent = s ? "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u043C\u0435\u043D\u0443" : "\u0412\u043D\u0435\u0441\u0442\u0438 \u0441\u043C\u0435\u043D\u0443";
@@ -797,6 +802,14 @@
     b.classList.toggle("hidden", !u?.shift);
     if (u?.shift) $("undoDeleteMeta").textContent = `${dateText(fromKey(u.date), { day: "numeric", month: "long" })} \xB7 ${money(u.shift.total)}`;
   }
+  function saveCalendarWorkday() {
+    const value = $("calendarWorkday").value;
+    if (value === "auto") delete state.extra.workdayOverrides[state.selectedDate];
+    else state.extra.workdayOverrides[state.selectedDate] = value === "work";
+    save();
+    renderAll();
+    cloudSaveExtra();
+  }
 
   // src/app/dashboard.js
   function renderAll() {
@@ -819,6 +832,7 @@
     $("holidayInput").checked = !!today?.holiday;
   }
   function updateHome() {
+    renderGreeting();
     const { cases, holiday } = homeInputs();
     const savedShift = state.shifts[todayKey()];
     const historical = !state.homeDirty && savedShift && savedShift.cases === cases && !!savedShift.holiday === holiday;
@@ -837,8 +851,7 @@
     $("perThousand").textContent = money(piece(1e3));
     $("holidayRateLabel").textContent = money(state.settings.holidayPay);
     const now = workNow();
-    $("todayLabel").textContent = "\u0421\u0435\u0433\u043E\u0434\u043D\u044F, " + dateText(now, { day: "numeric", month: "long" });
-    const badge = $("todayBadge"), work = isWork(now);
+    const badge = $("todayBadge"), work = greetingWorkDay(now);
     badge.textContent = work ? "\u0420\u0430\u0431\u043E\u0442\u0430" : "\u0412\u044B\u0445\u043E\u0434\u043D\u043E\u0439";
     badge.classList.toggle("is-work", work);
     const saved = state.shifts[todayKey()];
@@ -858,7 +871,7 @@
   function updateNextShiftCard() {
     const card = $("nextShiftCard"), kicker = $("nextShiftKicker"), progress = $("shiftProgress");
     const now = workNow(), minutes = now.getHours() * 60 + now.getMinutes();
-    if (isWork(now) && minutes >= WORK_START_MIN && minutes < WORK_END_MIN) {
+    if (greetingWorkDay(now) && minutes >= WORK_START_MIN && minutes < WORK_END_MIN) {
       const left = WORK_END_MIN - minutes, h = Math.floor(left / 60), m = left % 60;
       card.classList.add("current-shift");
       kicker.textContent = "\u0421\u043C\u0435\u043D\u0430 \u0438\u0434\u0451\u0442";
@@ -871,7 +884,7 @@
     card.classList.remove("current-shift");
     progress.classList.add("hidden");
     kicker.textContent = "\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0430\u044F \u0441\u043C\u0435\u043D\u0430";
-    if (isWork(now) && minutes < WORK_START_MIN) {
+    if (greetingWorkDay(now) && minutes < WORK_START_MIN) {
       $("nextShiftDate").textContent = "\u0421\u0435\u0433\u043E\u0434\u043D\u044F";
       $("nextShiftMeta").textContent = "\u041D\u0430\u0447\u0430\u043B\u043E \u0432 08:00";
       return;
@@ -879,7 +892,7 @@
     const d = new Date(now);
     d.setDate(d.getDate() + 1);
     for (let i = 0; i < 366; i++) {
-      if (isWork(d)) {
+      if (greetingWorkDay(d)) {
         const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
         $("nextShiftDate").textContent = diff === 1 ? "\u0417\u0430\u0432\u0442\u0440\u0430" : dateText(d, { weekday: "long", day: "numeric", month: "long" });
         $("nextShiftMeta").textContent = diff === 1 ? "\u041D\u0430\u0447\u0430\u043B\u043E \u0432 08:00" : `\u0427\u0435\u0440\u0435\u0437 ${diff} ${plural(diff, "\u0434\u0435\u043D\u044C", "\u0434\u043D\u044F", "\u0434\u043D\u0435\u0439")} \xB7 \u0432 08:00`;
@@ -938,6 +951,7 @@
   } catch (e) {
     console.warn("Supabase init failed:", e);
   }
+  var greetingPending = !!db;
   var currentUser = null;
   var currentProfile = null;
   var authMode = "login";
@@ -1051,6 +1065,8 @@
   async function initCloudAuth() {
     if (db) loadAuthProviders();
     if (!db) {
+      greetingPending = false;
+      renderGreeting();
       showAuth(false);
       showCloudNotice();
       updateProfileUI();
@@ -1079,6 +1095,9 @@
       console.error("initCloudAuth:", e);
       showAuth(false);
       showCloudNotice();
+    } finally {
+      greetingPending = false;
+      renderGreeting();
     }
   }
   async function oauthSignIn(provider) {
@@ -1197,6 +1216,8 @@
   var afterLoginInFlight = null;
   async function afterLogin() {
     if (afterLoginInFlight) return afterLoginInFlight;
+    greetingPending = true;
+    renderGreeting();
     afterLoginInFlight = (async () => {
       const owner = localStorage.getItem("myPayDataOwner");
       if (owner && owner !== currentUser.id) {
@@ -1233,6 +1254,8 @@
       return await afterLoginInFlight;
     } finally {
       afterLoginInFlight = null;
+      greetingPending = false;
+      renderGreeting();
     }
   }
   var cloudRefreshTimer = null;
@@ -1435,9 +1458,104 @@
     document.head.appendChild(script);
   });
 
+  // src/app/greeting.js
+  function cleanDisplayName(value) {
+    if (typeof value !== "string") return "";
+    const name = value.replace(/\s+/gu, " ").trim().slice(0, 80);
+    return /^[^\s@]+@[^\s@]+$/.test(name) ? "" : name;
+  }
+  function greetingName() {
+    const meta = currentUser?.user_metadata || {};
+    return [
+      state.extra.displayName,
+      currentProfile?.name,
+      meta.display_name,
+      meta.full_name,
+      meta.name,
+      [meta.given_name || meta.first_name, meta.family_name || meta.last_name].filter(Boolean).join(" ")
+    ].map(cleanDisplayName).find(Boolean) || "";
+  }
+  function greetingWorkDay(day) {
+    const key = dateKey(day), override = state.extra.workdayOverrides[key];
+    if (typeof override === "boolean") return override;
+    return !!state.shifts[key] || isWork(day);
+  }
+  function consecutiveWorkdays(day = workNow()) {
+    let count = 0;
+    const cursor = fromKey(dateKey(day));
+    while (greetingWorkDay(cursor)) {
+      count++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return count;
+  }
+  var ordinals = ["", "\u043F\u0435\u0440\u0432\u0430\u044F", "\u0432\u0442\u043E\u0440\u0430\u044F", "\u0442\u0440\u0435\u0442\u044C\u044F", "\u0447\u0435\u0442\u0432\u0451\u0440\u0442\u0430\u044F", "\u043F\u044F\u0442\u0430\u044F", "\u0448\u0435\u0441\u0442\u0430\u044F", "\u0441\u0435\u0434\u044C\u043C\u0430\u044F", "\u0432\u043E\u0441\u044C\u043C\u0430\u044F", "\u0434\u0435\u0432\u044F\u0442\u0430\u044F", "\u0434\u0435\u0441\u044F\u0442\u0430\u044F", "\u043E\u0434\u0438\u043D\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0434\u0432\u0435\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0442\u0440\u0438\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0447\u0435\u0442\u044B\u0440\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u043F\u044F\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0448\u0435\u0441\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0441\u0435\u043C\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0432\u043E\u0441\u0435\u043C\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0434\u0435\u0432\u044F\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u0430\u044F"];
+  var tens = ["", "", "\u0434\u0432\u0430\u0434\u0446\u0430\u0442\u044C", "\u0442\u0440\u0438\u0434\u0446\u0430\u0442\u044C", "\u0441\u043E\u0440\u043E\u043A", "\u043F\u044F\u0442\u044C\u0434\u0435\u0441\u044F\u0442", "\u0448\u0435\u0441\u0442\u044C\u0434\u0435\u0441\u044F\u0442", "\u0441\u0435\u043C\u044C\u0434\u0435\u0441\u044F\u0442", "\u0432\u043E\u0441\u0435\u043C\u044C\u0434\u0435\u0441\u044F\u0442", "\u0434\u0435\u0432\u044F\u043D\u043E\u0441\u0442\u043E"];
+  var hundreds = ["", "\u0441\u0442\u043E", "\u0434\u0432\u0435\u0441\u0442\u0438", "\u0442\u0440\u0438\u0441\u0442\u0430", "\u0447\u0435\u0442\u044B\u0440\u0435\u0441\u0442\u0430", "\u043F\u044F\u0442\u044C\u0441\u043E\u0442", "\u0448\u0435\u0441\u0442\u044C\u0441\u043E\u0442", "\u0441\u0435\u043C\u044C\u0441\u043E\u0442", "\u0432\u043E\u0441\u0435\u043C\u044C\u0441\u043E\u0442", "\u0434\u0435\u0432\u044F\u0442\u044C\u0441\u043E\u0442"];
+  var cardinalUnits = ["", "\u043E\u0434\u0438\u043D", "\u0434\u0432\u0430", "\u0442\u0440\u0438", "\u0447\u0435\u0442\u044B\u0440\u0435", "\u043F\u044F\u0442\u044C", "\u0448\u0435\u0441\u0442\u044C", "\u0441\u0435\u043C\u044C", "\u0432\u043E\u0441\u0435\u043C\u044C", "\u0434\u0435\u0432\u044F\u0442\u044C", "\u0434\u0435\u0441\u044F\u0442\u044C", "\u043E\u0434\u0438\u043D\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u0434\u0432\u0435\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u0442\u0440\u0438\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u0447\u0435\u0442\u044B\u0440\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u043F\u044F\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u0448\u0435\u0441\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u0441\u0435\u043C\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u0432\u043E\u0441\u0435\u043C\u043D\u0430\u0434\u0446\u0430\u0442\u044C", "\u0434\u0435\u0432\u044F\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u044C"];
+  function cardinal(n, feminine = false) {
+    const rest = n % 100;
+    const unit = rest < 20 ? rest : rest % 10;
+    return [
+      hundreds[Math.floor(n / 100)],
+      rest >= 20 ? tens[Math.floor(rest / 10)] : "",
+      feminine && unit === 1 ? "\u043E\u0434\u043D\u0430" : feminine && unit === 2 ? "\u0434\u0432\u0435" : cardinalUnits[unit]
+    ].filter(Boolean).join(" ");
+  }
+  function compoundPrefix(n) {
+    const units = ["", "\u043E\u0434\u043D\u043E", "\u0434\u0432\u0443\u0445", "\u0442\u0440\u0451\u0445", "\u0447\u0435\u0442\u044B\u0440\u0451\u0445", "\u043F\u044F\u0442\u0438", "\u0448\u0435\u0441\u0442\u0438", "\u0441\u0435\u043C\u0438", "\u0432\u043E\u0441\u044C\u043C\u0438", "\u0434\u0435\u0432\u044F\u0442\u0438", "\u0434\u0435\u0441\u044F\u0442\u0438", "\u043E\u0434\u0438\u043D\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u0434\u0432\u0435\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u0442\u0440\u0438\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u0447\u0435\u0442\u044B\u0440\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u043F\u044F\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u0448\u0435\u0441\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u0441\u0435\u043C\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u0432\u043E\u0441\u0435\u043C\u043D\u0430\u0434\u0446\u0430\u0442\u0438", "\u0434\u0435\u0432\u044F\u0442\u043D\u0430\u0434\u0446\u0430\u0442\u0438"];
+    const ts = ["", "", "\u0434\u0432\u0430\u0434\u0446\u0430\u0442\u0438", "\u0442\u0440\u0438\u0434\u0446\u0430\u0442\u0438", "\u0441\u043E\u0440\u043E\u043A\u0430", "\u043F\u044F\u0442\u0438\u0434\u0435\u0441\u044F\u0442\u0438", "\u0448\u0435\u0441\u0442\u0438\u0434\u0435\u0441\u044F\u0442\u0438", "\u0441\u0435\u043C\u0438\u0434\u0435\u0441\u044F\u0442\u0438", "\u0432\u043E\u0441\u044C\u043C\u0438\u0434\u0435\u0441\u044F\u0442\u0438", "\u0434\u0435\u0432\u044F\u043D\u043E\u0441\u0442\u0430"];
+    const hs = ["", "\u0441\u0442\u043E", "\u0434\u0432\u0443\u0445\u0441\u043E\u0442", "\u0442\u0440\u0451\u0445\u0441\u043E\u0442", "\u0447\u0435\u0442\u044B\u0440\u0451\u0445\u0441\u043E\u0442", "\u043F\u044F\u0442\u0438\u0441\u043E\u0442", "\u0448\u0435\u0441\u0442\u0438\u0441\u043E\u0442", "\u0441\u0435\u043C\u0438\u0441\u043E\u0442", "\u0432\u043E\u0441\u044C\u043C\u0438\u0441\u043E\u0442", "\u0434\u0435\u0432\u044F\u0442\u0438\u0441\u043E\u0442"];
+    const rest = n % 100;
+    return hs[Math.floor(n / 100)] + (rest < 20 ? units[rest] : ts[Math.floor(rest / 10)] + units[rest % 10]);
+  }
+  function ordinalFeminine(n) {
+    if (n < 20) return ordinals[n];
+    for (const [scale, names, ending] of [[1e9, ["\u043C\u0438\u043B\u043B\u0438\u0430\u0440\u0434", "\u043C\u0438\u043B\u043B\u0438\u0430\u0440\u0434\u0430", "\u043C\u0438\u043B\u043B\u0438\u0430\u0440\u0434\u043E\u0432"], "\u043C\u0438\u043B\u043B\u0438\u0430\u0440\u0434\u043D\u0430\u044F"], [1e6, ["\u043C\u0438\u043B\u043B\u0438\u043E\u043D", "\u043C\u0438\u043B\u043B\u0438\u043E\u043D\u0430", "\u043C\u0438\u043B\u043B\u0438\u043E\u043D\u043E\u0432"], "\u043C\u0438\u043B\u043B\u0438\u043E\u043D\u043D\u0430\u044F"], [1e3, ["\u0442\u044B\u0441\u044F\u0447\u0430", "\u0442\u044B\u0441\u044F\u0447\u0438", "\u0442\u044B\u0441\u044F\u0447"], "\u0442\u044B\u0441\u044F\u0447\u043D\u0430\u044F"]]) {
+      if (n < scale) continue;
+      const q = Math.floor(n / scale), rest = n % scale;
+      return rest ? `${cardinal(q, scale === 1e3)} ${plural(q, ...names)} ${ordinalFeminine(rest)}` : `${q === 1 ? "" : compoundPrefix(q)}${ending}`;
+    }
+    if (n % 100 === 0) return ["", "\u0441\u043E\u0442\u0430\u044F", "\u0434\u0432\u0443\u0445\u0441\u043E\u0442\u0430\u044F", "\u0442\u0440\u0451\u0445\u0441\u043E\u0442\u0430\u044F", "\u0447\u0435\u0442\u044B\u0440\u0451\u0445\u0441\u043E\u0442\u0430\u044F", "\u043F\u044F\u0442\u0438\u0441\u043E\u0442\u0430\u044F", "\u0448\u0435\u0441\u0442\u0438\u0441\u043E\u0442\u0430\u044F", "\u0441\u0435\u043C\u0438\u0441\u043E\u0442\u0430\u044F", "\u0432\u043E\u0441\u044C\u043C\u0438\u0441\u043E\u0442\u0430\u044F", "\u0434\u0435\u0432\u044F\u0442\u0438\u0441\u043E\u0442\u0430\u044F"][n / 100];
+    if (n >= 100) return `${hundreds[Math.floor(n / 100)]} ${ordinalFeminine(n % 100)}`;
+    return n % 10 ? `${tens[Math.floor(n / 10)]} ${ordinals[n % 10]}` : ["", "", "\u0434\u0432\u0430\u0434\u0446\u0430\u0442\u0430\u044F", "\u0442\u0440\u0438\u0434\u0446\u0430\u0442\u0430\u044F", "\u0441\u043E\u0440\u043E\u043A\u043E\u0432\u0430\u044F", "\u043F\u044F\u0442\u0438\u0434\u0435\u0441\u044F\u0442\u0430\u044F", "\u0448\u0435\u0441\u0442\u0438\u0434\u0435\u0441\u044F\u0442\u0430\u044F", "\u0441\u0435\u043C\u0438\u0434\u0435\u0441\u044F\u0442\u0430\u044F", "\u0432\u043E\u0441\u044C\u043C\u0438\u0434\u0435\u0441\u044F\u0442\u0430\u044F", "\u0434\u0435\u0432\u044F\u043D\u043E\u0441\u0442\u0430\u044F"][n / 10];
+  }
+  function greetingMessage(day = workNow()) {
+    const count = consecutiveWorkdays(day);
+    return count ? `\u042D\u0442\u043E \u0442\u0432\u043E\u044F ${ordinalFeminine(count)} \u0441\u043C\u0435\u043D\u0430 ${count === 1 ? "\u{1F62D}" : count === 2 ? "\u{1F97A}" : "\u{1F480}"}` : "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u043E\u0442\u0434\u044B\u0445\u0430\u0435\u0448\u044C, \u0437\u0430\u0441\u043B\u0443\u0436\u0438\u043B \u2764\uFE0F";
+  }
+  function renderGreeting(day = workNow()) {
+    const text = (id, value) => {
+      const node = $(id);
+      if (node.textContent !== value) node.textContent = value;
+    };
+    text("todayLabel", "\u0421\u0435\u0433\u043E\u0434\u043D\u044F, " + dateText(day, { day: "numeric", month: "long" }));
+    text("greetingTitle", greetingPending ? "\u041F\u0440\u0438\u0432\u0435\u0442 \u2764\uFE0F" : `${greetingName() || "\u041F\u0440\u0438\u0432\u0435\u0442"} \u2764\uFE0F`);
+    text("greetingMessage", greetingPending ? "" : greetingMessage(day));
+    $("greetingMessage").setAttribute("aria-busy", String(greetingPending));
+  }
+  function bindGreetingClock() {
+    let timer;
+    const refresh = () => {
+      clearTimeout(timer);
+      renderGreeting();
+      const now = workNow();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(refresh, midnight - now + 50);
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refresh();
+    });
+    window.addEventListener("pageshow", refresh);
+    window.addEventListener("focus", refresh);
+    refresh();
+  }
+
   // src/app/settings.js
   function openSettings() {
     const s = state.settings;
+    $("settingDisplayName").value = state.extra.displayName;
+    $("settingDisplayName").placeholder = greetingName() || "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, \u0410\u043D\u0434\u0440\u0435\u0439";
     $("settingBase").value = s.basePay;
     $("settingHoliday").value = s.holidayPay;
     $("settingPrice").value = s.casePrice;
@@ -1456,19 +1574,22 @@
       scheduleStart: $("settingStart").value || state.settings.scheduleStart
     });
     const payday = { advanceDay: clamp(Math.round(num($("settingAdvanceDay").value, 0)), 0, 31), salaryDay: clamp(Math.round(num($("settingSalaryDay").value, 0)), 0, 31) };
-    if (JSON.stringify(payday) !== JSON.stringify(state.extra.payday)) {
-      state.extra.payday = payday;
-      cloudSaveExtra();
-    }
+    const name = cleanDisplayName($("settingDisplayName").value);
+    const extraChanged = name !== state.extra.displayName || JSON.stringify(payday) !== JSON.stringify(state.extra.payday);
+    state.extra.displayName = name;
+    state.extra.payday = payday;
     save();
-    const ok = accountId() ? await cloudSaveSettings() : true;
     renderAll();
     closeModal("settingsModal");
-    showToast(ok ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B \u2713" : "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u043D\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435, \u043D\u043E \u043D\u0435 \u0432 \u043E\u0431\u043B\u0430\u043A\u043E");
+    const [extraOk, settingsOk] = accountId() ? await Promise.all([
+      extraChanged ? cloudSaveExtra() : true,
+      cloudSaveSettings()
+    ]) : [true, true];
+    showToast(extraOk && settingsOk ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B \u2713" : "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u043D\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435, \u043D\u043E \u043D\u0435 \u0432 \u043E\u0431\u043B\u0430\u043A\u043E");
   }
 
   // src/app/config.js
-  var APP_VERSION = "1.10";
+  var APP_VERSION = "1.11";
   var CACHE_VERSION = "my-pay-v" + APP_VERSION;
 
   // src/app/backup.js
@@ -1671,6 +1792,7 @@
     $("monthTitle").onclick = goToCurrentMonth;
     $("statsPrev").onclick = () => shiftMonth(-1);
     $("statsNext").onclick = () => shiftMonth(1);
+    $("calendarWorkday").onchange = saveCalendarWorkday;
     $("editSelectedBtn").onclick = () => openShiftModal(state.selectedDate);
     ["modalCases", "modalHours", "modalBonus"].forEach((id) => $(id).addEventListener("input", updateModal));
     $("modalHoliday").addEventListener("change", updateModal);
@@ -1731,8 +1853,11 @@
       if ((state.extra.theme || "system") === "system") applyTheme();
     });
     setInterval(() => {
-      updateNextShiftCard();
       if (!state.homeDirty) updateHome();
+      else {
+        updateNextShiftCard();
+        renderGreeting();
+      }
     }, 6e4);
   }
 
@@ -1749,12 +1874,18 @@
     refreshNotificationUI();
     if ("Notification" in window && Notification.permission === "granted") scheduleShiftReminder();
     initCloudAuth();
+    bindGreetingClock();
   }
   init();
   window.MyPay = {
     version: APP_VERSION,
     state,
     DEFAULTS,
+    renderGreeting,
+    greetingWorkDay,
+    consecutiveWorkdays,
+    greetingMessage,
+    ordinalFeminine,
     workNow,
     money,
     moneyShort,

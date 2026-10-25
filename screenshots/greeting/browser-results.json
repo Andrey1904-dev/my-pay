@@ -1,0 +1,98 @@
+[
+  {
+    "engine": "chromium",
+    "width": 320,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 354.578125
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 354.390625
+    }
+  },
+  {
+    "engine": "chromium",
+    "width": 375,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 364
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 363.8125
+    }
+  },
+  {
+    "engine": "chromium",
+    "width": 390,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 365.78125
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 365.59375
+    }
+  },
+  {
+    "engine": "chromium",
+    "width": 430,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 370.53125
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 370.34375
+    }
+  },
+  {
+    "engine": "webkit",
+    "width": 320,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 354.578125
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 354.390625
+    }
+  },
+  {
+    "engine": "webkit",
+    "width": 375,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 364
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 363.8125
+    }
+  },
+  {
+    "engine": "webkit",
+    "width": 390,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 365.765625
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 365.578125
+    }
+  },
+  {
+    "engine": "webkit",
+    "width": 430,
+    "baseline": {
+      "hero": 150.703125,
+      "cases": 370.53125
+    },
+    "current": {
+      "hero": 150.515625,
+      "cases": 370.34375
+    }
+  }
+]

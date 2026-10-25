@@ -655,3 +655,11 @@ details[open] > summary::after { content: '−'; }
 body { transition: none; }
 .cases-field input::placeholder { color: var(--ink); }
 body.dark .app { background-image: radial-gradient(ellipse at 12% 10%, #ffffff02, transparent 60%); }
+
+/* Personal greeting: reuse the header and the existing shift information row. */
+#homeScreen .page-head h1 { overflow-wrap: anywhere; white-space: normal; }
+.greeting-message { min-height: 20px; margin-top: 6px; color: var(--ink-2); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+#homeScreen #nextShiftCard { margin-top: 1px; }
+#nextShiftCard .shift-copy { flex-direction: row; gap: 0 8px; }
+.calendar-workday { max-width: 100%; }
+.selected-main { min-width: 0; }

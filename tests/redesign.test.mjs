@@ -35,7 +35,11 @@ test('browser Back restores the previous section', async () => {
   const app=loadApp();
   try {
     app.MyPay.showScreen('calendarScreen');app.MyPay.showScreen('statsScreen');
-    app.window.history.back();await tick(30);
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('popstate not received')), 2000);
+      app.window.addEventListener('popstate', () => { clearTimeout(timeout); resolve(); }, { once: true });
+      app.window.history.back();
+    });
     assert.equal(app.document.querySelector('.screen.active').id,'calendarScreen');
     assert.equal(app.document.querySelector('[aria-current="page"]').dataset.screen,'calendarScreen');
   } finally {app.close();}

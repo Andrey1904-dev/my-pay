@@ -42,6 +42,14 @@ export function loadApp(opts = {}) {
   window.URL.revokeObjectURL = () => {};
   if (!window.crypto?.randomUUID) window.crypto.randomUUID = () => globalThis.crypto.randomUUID();
 
+  if (opts.now) {
+    window.__testNow = opts.now;
+    const NativeDate = window.Date;
+    window.Date = class extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : [window.__testNow])); }
+      static now() { return new NativeDate(window.__testNow).getTime(); }
+    };
+  }
   if (opts.settings) window.localStorage.setItem("myPaySettings", JSON.stringify(opts.settings));
   if (opts.shifts) window.localStorage.setItem("myPayShifts", JSON.stringify(opts.shifts));
   if (opts.extra) window.localStorage.setItem("myPayExtra", JSON.stringify(opts.extra));

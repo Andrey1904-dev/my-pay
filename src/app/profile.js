@@ -1,10 +1,11 @@
+import { greetingName } from './greeting.js';
 // Профиль и привязка Telegram.
-import { currentProfile, currentUser, db } from './cloud.js';
+import { currentUser, db } from './cloud.js';
 import { $ } from './utils.js';
 import { openModal, showToast } from './dialogs.js';
 
 export function updateProfileUI() {
-  const n = currentProfile?.name?.trim() || currentUser?.user_metadata?.full_name || currentUser?.user_metadata?.name || (currentUser ? currentUser.email : "") || "Мой расчёт";
+  const n = greetingName() || "Мой расчёт";
   $("profileName").textContent = n; $("profileAvatar").textContent = (n[0] || "₽").toUpperCase();
   const provider = currentUser?.app_metadata?.provider; const via = provider === "apple" ? "Apple" : provider === "google" ? "Google" : "";
   $("profileMeta").textContent = currentUser ? `${currentUser.email || ""}${via ? " · вход через " + via : ""} · синхронизация включена` : db ? "Войди в аккаунт, чтобы синхронизировать данные" : "Локальный режим: данные хранятся на этом устройстве";

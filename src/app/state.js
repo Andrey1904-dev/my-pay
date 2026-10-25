@@ -8,6 +8,7 @@ export const DEFAULTS = { basePay: fixedPart(), holidayPay: fixedPart(true), cas
 export const EXTRA_DEFAULTS = {
   payday: { advanceDay: 23, salaryDay: 8 },
   templates: [{ id: "default", name: "Обычная", cases: 0, hours: 11, bonus: 0, holiday: false }],
+  displayName: "", workdayOverrides: {},
   shiftMeta: {}, theme: "dark", undo: null
 };
 
@@ -54,6 +55,8 @@ export function normalizeExtra(e) {
   out.shiftMeta = Object.fromEntries(Object.entries(out.shiftMeta && typeof out.shiftMeta === "object" ? out.shiftMeta : {}).filter(([date, meta]) => isDateKey(date) && meta && typeof meta === "object").map(([date, meta]) => [date, {
     hours: Math.max(0, num(meta.hours, 11)), bonus: Math.max(0, num(meta.bonus)), note: String(meta.note || "")
   }]));
+  out.displayName = typeof out.displayName === "string" ? out.displayName.replace(/\s+/gu, ' ').trim().slice(0, 80) : '';
+  out.workdayOverrides = Object.fromEntries(Object.entries(out.workdayOverrides && typeof out.workdayOverrides === 'object' ? out.workdayOverrides : {}).filter(([date, value]) => isDateKey(date) && typeof value === 'boolean'));
   out.theme = ["system", "light", "dark"].includes(out.theme) ? out.theme : "system";
   return out;
 }

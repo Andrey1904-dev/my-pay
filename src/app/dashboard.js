@@ -1,3 +1,4 @@
+import { renderGreeting, greetingWorkDay } from './greeting.js';
 import { accountId } from './cloud.js';
 import { workNow } from './utils.js';
 // Главный экран и сводка месяца.
@@ -8,7 +9,7 @@ import { renderPaydayStrip } from './payday.js';
 import { renderTemplates } from './templates.js';
 import { $, dateText, integer, money, num, pad2, plural, todayKey } from './utils.js';
 import { WORK_END_MIN, WORK_START_MIN, save, state } from './state.js';
-import { base, isWork, makeShift, monthEntries, monthSum, piece } from './pay.js';
+import { base, makeShift, monthEntries, monthSum, piece } from './pay.js';
 import { cloudSaveShift } from './cloud.js';
 import { showToast } from './dialogs.js';
 
@@ -26,6 +27,7 @@ export function syncHomeInputsFromCloud() {
 }
 
 export function updateHome() {
+  renderGreeting();
   const { cases, holiday } = homeInputs();
   const savedShift = state.shifts[todayKey()];
   const historical = !state.homeDirty && savedShift && savedShift.cases === cases && !!savedShift.holiday === holiday;
@@ -44,8 +46,7 @@ export function updateHome() {
   $("perThousand").textContent = money(piece(1000));
   $("holidayRateLabel").textContent = money(state.settings.holidayPay);
   const now = workNow();
-  $("todayLabel").textContent = "Сегодня, " + dateText(now, { day: "numeric", month: "long" });
-  const badge = $("todayBadge"), work = isWork(now);
+  const badge = $("todayBadge"), work = greetingWorkDay(now);
   badge.textContent = work ? "Работа" : "Выходной"; badge.classList.toggle("is-work", work);
   const saved = state.shifts[todayKey()];
   $("saveNote").textContent = state.homeDirty ? "Есть несохранённые изменения" : saved ? `Смена за сегодня сохранена: ${money(saved.total)}` : "";
@@ -66,7 +67,7 @@ export function updateHomeDashboard() {
 export function updateNextShiftCard() {
   const card = $("nextShiftCard"), kicker = $("nextShiftKicker"), progress = $("shiftProgress");
   const now = workNow(), minutes = now.getHours() * 60 + now.getMinutes();
-  if (isWork(now) && minutes >= WORK_START_MIN && minutes < WORK_END_MIN) {
+  if (greetingWorkDay(now) && minutes >= WORK_START_MIN && minutes < WORK_END_MIN) {
     const left = WORK_END_MIN - minutes, h = Math.floor(left / 60), m = left % 60;
     card.classList.add("current-shift"); kicker.textContent = "Смена идёт";
     $("nextShiftDate").textContent = `До конца ${h} ч ${pad2(m)} мин`;
@@ -76,10 +77,10 @@ export function updateNextShiftCard() {
     return;
   }
   card.classList.remove("current-shift"); progress.classList.add("hidden"); kicker.textContent = "Ближайшая смена";
-  if (isWork(now) && minutes < WORK_START_MIN) { $("nextShiftDate").textContent = "Сегодня"; $("nextShiftMeta").textContent = "Начало в 08:00"; return; }
+  if (greetingWorkDay(now) && minutes < WORK_START_MIN) { $("nextShiftDate").textContent = "Сегодня"; $("nextShiftMeta").textContent = "Начало в 08:00"; return; }
   const d = new Date(now); d.setDate(d.getDate() + 1);
   for (let i = 0; i < 366; i++) {
-    if (isWork(d)) {
+    if (greetingWorkDay(d)) {
       const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
       $("nextShiftDate").textContent = diff === 1 ? "Завтра" : dateText(d, { weekday: "long", day: "numeric", month: "long" });
       $("nextShiftMeta").textContent = diff === 1 ? "Начало в 08:00" : `Через ${diff} ${plural(diff, "день", "дня", "дней")} · в 08:00`;
