@@ -2,7 +2,7 @@
 // once, then DELETE this Edge Function. Never scheduled. No real chat is used.
 import { createBotHandler } from "../telegram-mypay/bot.ts";
 import { createRemindersHandler } from "../telegram-reminders/reminders.ts";
-import { dateKeyInTz, Db, money, MAIN_KEYBOARD } from "../_shared/mypay.ts";
+import { dateKeyInTz, addDays, Db, money, MAIN_KEYBOARD } from "../_shared/mypay.ts";
 import { selectJoke } from "../_shared/telegram-jokes.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (req: Request) => Promise<Response>): void };
@@ -71,6 +71,7 @@ Deno.serve(async req => {
     assert(JSON.stringify(messages.at(-1)?.reply_markup) === JSON.stringify(MAIN_KEYBOARD), "/start shows exact persistent 2x3 keyboard");
     await send("1200");
     assert((await row())?.total_pay === 4515, "create shift and calculate 4515 RUB");
+    assert(!messages.at(-1)?.text.includes("прошлой смены") && !messages.at(-1)?.text.includes("в прошлую смену"), "first saved shift omits comparison");
     const replace = await send("500");
     assert((await row())?.cases === 500 && (await row())?.total_pay === 3290, "replace 1200 with 500 and calculate 3290 RUB");
     assert(messages.at(-1)?.text.includes(selectJoke(500)), "threshold joke matches");
@@ -124,6 +125,24 @@ Deno.serve(async req => {
     const report = await reminderResponse.json();
     assert(report.checked === 1 && report.sent === 0, "saved shift suppresses entry reminder in isolated cron scan");
     assert(messages.some(m => m.text.includes(money(3290))), "actual calculated salary appears in reply");
+    const previousDate = addDays(date, -5);
+    await db.insert("shifts", { user_id: userId, work_date: previousDate, cases: 500, is_holiday: false, base_pay: 3000, piece_pay: 1000.25, total_pay: 4000.25 });
+    await db.insert("shifts", { user_id: userId, work_date: addDays(date, 2), cases: 1000, is_holiday: true, base_pay: 4600, piece_pay: 1750, total_pay: 6350 });
+    await send("1000");
+    assert(messages.at(-1)?.text.includes(`📈 На ${money(164.75)} больше прошлой смены!`), "comparison skips gaps and future shifts, preserving historical kopecks");
+    await send("500");
+    assert(messages.at(-1)?.text.includes(`📉 На ${money(710.25)} меньше прошлой смены!`), "updated total compares to historical shift, not today's old version");
+    await db.update("shifts", `user_id=eq.${userId}&work_date=eq.${previousDate}`, { total_pay: 3290 });
+    await send("500");
+    assert(messages.at(-1)?.text.includes("🟰 Столько же, сколько в прошлую смену!"), "equal money uses equality message");
+    await db.update("shifts", `user_id=eq.${userId}&work_date=eq.${previousDate}`, { cases: 1000, base_pay: 2415, piece_pay: 2012.5, total_pay: 4427.5 });
+    const liveComparison = { ...makeUpdate("1000"), update_id: updateId++ };
+    const comparedResponse = await fetch(post(liveComparison));
+    const comparedEvent = await db.one<{ message: string }>("telegram_bot_events", `user_id=eq.${userId}&direction=eq.out&order=id.desc&select=message`);
+    assert(comparedResponse.ok && comparedEvent?.message.includes(`📉 На ${money(262.5)} меньше прошлой смены!`), "real deployed webhook logs correct comparison using raw historical legacy total");
+    const synced = await fetch(`${url}/rest/v1/shifts?user_id=eq.${userId}&work_date=eq.${date}&select=*`, { headers: { apikey: serviceKey, authorization: `Bearer ${session.access_token}` } });
+    const syncedRows = await synced.json();
+    assert(synced.ok && syncedRows[0]?.total_pay === 4165, "PWA authenticated read sees the compared Telegram total");
   } catch (e) {
     error = e instanceof Error ? e.message : "Smoke test failed";
   } finally {
