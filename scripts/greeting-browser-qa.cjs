@@ -19,7 +19,7 @@ const browsers=[];
    // Baseline production is read-only, isolated and never authenticated.
    await page.goto('https://andrey1904-dev.github.io/my-pay/');await page.waitForFunction(()=>!!window.MyPay);await page.evaluate(()=>document.fonts.ready);
    const baseline={hero:(await page.locator('#homeScreen .hero-card').boundingBox()).y,cases:(await page.locator('.cases-card').boundingBox()).y};
-   await page.goto('http://localhost:4173/');await page.waitForFunction(()=>MyPay.version==='1.11');await page.evaluate(()=>document.fonts.ready);
+   await page.goto('http://localhost:4173/');await page.waitForFunction(()=>MyPay.version==='1.12');await page.evaluate(()=>document.fonts.ready);
    await page.evaluate(()=>{MyPay.state.extra.displayName='Андрей';MyPay.renderAll();});
    assert.equal(await page.locator('#greetingTitle').innerText(),'Андрей ❤️');
    assert.equal(await page.locator('#greetingMessage').innerText(),'Это твоя первая смена 😭');
@@ -50,7 +50,7 @@ const browsers=[];
    await page.locator('[data-screen="calendarScreen"]').click();
    await page.locator('#calendarWorkday').selectOption('off');
    await page.locator('[data-screen="homeScreen"]').click();
-   assert.equal(await page.locator('#greetingMessage').innerText(),'Сегодня отдыхаешь, заслужил ❤️');
+   assert.equal(await page.locator('#greetingMessage').innerText(),'Сегодня отдыхаешь, заслуженный отдых 😴');
    await page.locator('[data-screen="calendarScreen"]').click();await page.locator('#calendarWorkday').selectOption('auto');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    await page.locator('[data-screen="homeScreen"]').click();

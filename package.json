@@ -1,6 +1,6 @@
 {
   "name": "case-place-salary",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Моя смена — единое PWA для учёта смен, заработка, Supabase и Telegram",
   "type": "module",
