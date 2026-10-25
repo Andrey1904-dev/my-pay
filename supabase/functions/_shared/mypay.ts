@@ -32,6 +32,8 @@ export interface ShiftRow {
   base_pay: number;
   piece_pay: number;
   total_pay: number;
+  updated_at?: string;
+  piece_rate?: number | null;
 }
 
 // ---------- числа и деньги ----------
@@ -250,7 +252,6 @@ export function summarizeMonth(rows: ShiftRow[], todayKey: string, s: Settings):
 // ---------- разбор ввода ----------
 
 export type ParsedInput =
-  | { kind: "add"; cases: number; date: string | null }
   | { kind: "set"; cases: number; date: string | null }
   | { kind: "command"; name: string; arg: string }
   | { kind: "unknown" };
@@ -269,23 +270,7 @@ const BUTTON_COMMANDS: Record<string, string> = {
   "праздник": "holiday",
 };
 
-/** Дата из слова: «вчера», «позавчера», «27.09», «27.09.2026». */
-function parseDateToken(token: string, today: string): string | null {
-  if (token === "вчера") return addDays(today, -1);
-  if (token === "позавчера") return addDays(today, -2);
-  const m = token.match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$/);
-  if (!m) return null;
-  const d = parseInt(m[1], 10), mo = parseInt(m[2], 10);
-  let y = m[3] ? parseInt(m[3], 10) : parseInt(today.slice(0, 4), 10);
-  if (m[3] && m[3].length === 2) y += 2000;
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-  const key = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  const check = new Date(Date.UTC(y, mo - 1, d));
-  if (check.getUTCDate() !== d) return null;
-  return key;
-}
-
-export function parseInput(textRaw: string, today: string = dateKeyInTz(new Date())): ParsedInput {
+export function parseInput(textRaw: string, _today?: string): ParsedInput {
   const text = String(textRaw || "").trim();
   if (!text) return { kind: "unknown" };
   if (text.startsWith("/")) {
@@ -298,36 +283,11 @@ export function parseInput(textRaw: string, today: string = dateKeyInTz(new Date
   const button = lower.replace(/^[^a-zа-я0-9+\-\/]+/u, "").trim();
   if (BUTTON_COMMANDS[button]) return { kind: "command", name: BUTTON_COMMANDS[button], arg: "" };
 
-  // \b в JS не понимает кириллицу, поэтому чистим по токенам: «чехлы 350», «упаковал 1200 чехлов», «350 плюс 500».
-  const NOISE = /^(чехл[а-я]*|шт[а-я]*|упаковал[а-я]*|сделал[а-я]*|итого|сегодня|за)$/;
-  const tokens = lower
-    .replace(/(\d)\s*(чехл[а-я]*|шт[а-я]*)/g, "$1 ")
-    .replace(/\s*плюс\s*/g, " + ")
-    .replace(/(\d)\s*\+\s*(\d)/g, "$1+$2")
-    .replace(/^\+\s+/, "+")
-    .split(" ")
-    .filter((w) => w && !NOISE.test(w));
-
-  // Дата смены: «вчера 900», «27.09 900», «900 за вчера».
-  let date: string | null = null;
-  const rest: string[] = [];
-  for (const t of tokens) {
-    const parsedDate: string | null = date === null ? parseDateToken(t, today) : null;
-    if (parsedDate) date = parsedDate;
-    else rest.push(t);
-  }
-
-  const cleaned = rest.join(" ").trim();
-  const add = cleaned.startsWith("+");
-  const body = add ? cleaned.slice(1).trim() : cleaned;
-  if (/^\d+(?:\s*\+\s*\d+)*$/.test(body)) {
-    const cases = body.split("+").reduce((a, p) => a + parseInt(p.trim(), 10), 0);
-    if (!Number.isFinite(cases) || cases <= 0 || cases > MAX_CASES) return { kind: "unknown" };
-    return add ? { kind: "add", cases, date } : { kind: "set", cases, date };
-  }
-  if (date) return { kind: "unknown" };
-
-  return { kind: "unknown" };
+  // Only a whole daily total. Spaces are accepted only as thousands separators.
+  if (!/^(?:\d+|\d{1,3}(?:[ \u00a0\u202f]\d{3})+)$/.test(text)) return { kind: "unknown" };
+  const cases = Number(text.replace(/[ \u00a0\u202f]/g, ""));
+  if (!Number.isSafeInteger(cases) || cases < 0 || cases > MAX_CASES) return { kind: "unknown" };
+  return { kind: "set", cases, date: null };
 }
 
 // ---------- календарь ----------
@@ -415,6 +375,10 @@ export class Db {
     return (text ? JSON.parse(text) : undefined) as T;
   }
 
+  rpc<T>(name: string, args: unknown): Promise<T> {
+    return this.request<T>("POST", `rpc/${name}`, args);
+  }
+
   select<T>(table: string, query: string): Promise<T[]> {
     return this.request<T[]>("GET", `${table}?${query}`);
   }
@@ -486,24 +450,13 @@ export class Telegram {
     }
   }
 
-  sendMessage(chatId: number, text: string, replyMarkup?: unknown) {
+  sendMessage(chatId: number, text: string) {
     return this.call("sendMessage", {
       chat_id: chatId,
       text,
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    });
-  }
-
-  editMessageText(chatId: number, messageId: number, text: string, replyMarkup?: unknown) {
-    return this.call("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      reply_markup: { remove_keyboard: true },
     });
   }
 
@@ -517,24 +470,13 @@ export class Telegram {
   }
 }
 
-export const MAIN_KEYBOARD = {
-  keyboard: [
-    [{ text: "+100" }, { text: "+500" }, { text: "+1000" }],
-    [{ text: "📦 Сегодня" }, { text: "📊 Месяц" }, { text: "🔮 Прогноз" }],
-    [{ text: "📅 Календарь" }, { text: "⚙️ Ещё" }],
-  ],
-  resize_keyboard: true,
-  is_persistent: true,
-  input_field_placeholder: "350 — чехлы · +500 — добавить",
-};
-
 export const BOT_COMMANDS = [
   { command: "today", description: "📦 Смена за сегодня" },
   { command: "month", description: "📊 Итоги месяца" },
   { command: "forecast", description: "🔮 Прогноз до конца месяца" },
   { command: "calendar", description: "📅 Календарь смен" },
-  { command: "undo", description: "↩️ Отменить последнее добавление" },
-  { command: "holiday", description: "🎉 Праздничная ставка на сегодня" },
+  { command: "undo", description: "Как исправить итог смены" },
+  { command: "holiday", description: "Где изменить праздничную ставку" },
   { command: "settings", description: "⚙️ Настройки и напоминания" },
   { command: "help", description: "❓ Как пользоваться" },
 ];

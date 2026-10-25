@@ -6,6 +6,7 @@ export function createFakeBackend({ tables = {}, telegramFail = false } = {}) {
   const db = {};
   for (const [name, rows] of Object.entries(tables)) db[name] = rows.map((r) => ({ ...r }));
   let nextId = 1000;
+  const timestamp = () => new Date(1800000000000 + nextId++).toISOString();
   const telegramCalls = [];
   const restLog = [];
 
@@ -54,6 +55,7 @@ export function createFakeBackend({ tables = {}, telegramFail = false } = {}) {
   function withDefaults(name, row) {
     const out = { ...row };
     if (out.id === undefined && !["telegram_pending_inputs", "telegram_links", "telegram_preferences", "telegram_link_codes", "settings"].includes(name)) out.id = String(nextId++);
+    if (name === "shifts" && out.updated_at === undefined) out.updated_at = timestamp();
     if (out.created_at === undefined) out.created_at = new Date(Date.now() + nextId).toISOString();
     return out;
   }
@@ -75,6 +77,7 @@ export function createFakeBackend({ tables = {}, telegramFail = false } = {}) {
           const existing = rows.find((r) => q.onConflict.every((c) => String(r[c]) === String(item[c])));
           if (existing) { Object.assign(existing, item); result.push(existing); continue; }
         }
+        if (tableName === "shifts" && rows.some(r => r.user_id === item.user_id && r.work_date === item.work_date)) return respond({ code: "23505", message: "duplicate shift" }, 409);
         if (tableName === "telegram_entries" && !(item.cases > 0)) return respond({ message: "check constraint cases > 0" }, 400);
         const row = withDefaults(tableName, item);
         rows.push(row);
@@ -84,7 +87,7 @@ export function createFakeBackend({ tables = {}, telegramFail = false } = {}) {
     }
     if (method === "PATCH") {
       const out = rows.filter((r) => matches(r, q.filters));
-      out.forEach((r) => Object.assign(r, body));
+      out.forEach((r) => Object.assign(r, body, tableName === "shifts" ? { updated_at: timestamp() } : {}));
       return respond(out);
     }
     if (method === "DELETE") {
@@ -104,6 +107,24 @@ export function createFakeBackend({ tables = {}, telegramFail = false } = {}) {
       telegramCalls.push({ method: methodName, payload: body });
       if (telegramFail) return respond({ ok: false, description: "boom" }, 500);
       return respond({ ok: true, result: { message_id: telegramCalls.length } });
+    }
+    if (url.pathname === "/rest/v1/rpc/telegram_save_daily_total") {
+      const p = body;
+      if (!table("telegram_links").some(r => r.user_id === p.p_user_id && r.chat_id === p.p_chat_id)) return respond({ message: "not linked" }, 403);
+      const ledger = table("telegram_processed_updates");
+      if (ledger.some(r => r.update_id === p.p_update_id)) return respond({ status: "duplicate" });
+      ledger.push({ update_id: p.p_update_id, user_id: p.p_user_id });
+      const current = table("shifts").find(r => r.user_id === p.p_user_id && r.work_date === p.p_date);
+      if ((current?.updated_at ?? null) !== p.p_expected) return respond({ status: "conflict" });
+      if (current?.cases === p.p_shift.cases) return respond({ status: "unchanged", shift: current });
+      if (current) Object.assign(current, p.p_shift, { updated_at: timestamp() });
+      else table("shifts").push(withDefaults("shifts", p.p_shift));
+      return respond({ status: current ? "updated" : "created", shift: current ?? table("shifts").at(-1) });
+    }
+    if (url.pathname === "/rest/v1/rpc/telegram_claim_reminder") {
+      const rows = table("telegram_reminder_deliveries");
+      if (rows.some(r => r.user_id === body.p_user_id && r.work_date === body.p_date && r.kind === body.p_kind)) return respond(false);
+      rows.push({ user_id: body.p_user_id, work_date: body.p_date, kind: body.p_kind }); return respond(true);
     }
     const m = url.pathname.match(/^\/rest\/v1\/([a-z_]+)$/);
     if (!m) return respond({ message: "not found" }, 404);

@@ -122,3 +122,52 @@ test('offline reload without CDN SDK still queues edits for the cached account',
   assert.equal(restored.MyPay.state.shifts[key()].cases, 1200);
   assert.ok(restored.MyPay.state.extra.templates.some(t => t.name === 'Без сети'));
 });
+
+test('PWA detects Telegram conflict and keeps both versions until an explicit choice', async () => {
+  const backend = createFakeSupabase({ tables:{ shifts:[{ user_id:'user-a',work_date:key(),cases:1000,is_holiday:false,base_pay:2415,piece_pay:1750,total_pay:4165,updated_at:'v1' }] } });
+  const app = await open(backend); await tick(30);
+  backend.control.failWrites = true;
+  app.input('casesInput',1200); await app.MyPay.saveHomeShift();
+  Object.assign(backend.db.shifts[0],{cases:500,piece_pay:875,total_pay:3290,updated_at:'v2'});
+  backend.control.failWrites = false;
+  await app.MyPay.flushCloudQueue();
+  assert.equal(backend.db.shifts[0].cases,500);
+  assert.equal(app.MyPay.state.shifts[key()].cases,1200);
+  assert.equal(app.MyPay.loadQueue().length,1);
+  assert.match(app.$('cloudNotice').textContent,/изменилась в Telegram/);
+  app.$('cloudNotice').querySelectorAll('.shift-conflict-actions button')[0].click(); await tick(30);
+  assert.equal(backend.db.shifts[0].cases,1200);
+  assert.equal(app.MyPay.loadQueue().length,0);
+});
+
+test('PWA conflict: accepting cloud drops only the conflicting edit', async () => {
+  const backend = createFakeSupabase(); const app = await open(backend); await tick(20);
+  backend.control.failWrites = true;
+  app.input('casesInput',900); await app.MyPay.saveHomeShift();
+  backend.db.shifts.push({user_id:'user-a',work_date:key(),cases:700,is_holiday:false,base_pay:2415,piece_pay:1225,total_pay:3640,updated_at:'telegram'});
+  backend.control.failWrites = false;
+  await app.MyPay.flushCloudQueue();
+  app.$('cloudNotice').querySelectorAll('.shift-conflict-actions button')[1].click(); await tick(30);
+  assert.equal(app.MyPay.state.shifts[key()].cases,700);
+  assert.equal(backend.db.shifts[0].cases,700);
+  assert.equal(app.MyPay.loadQueue().length,0);
+});
+
+test('Telegram writes are read by PWA; PWA writes are replaced by Telegram in the same row', async () => {
+  const { createBotHandler } = await import('../supabase/functions/telegram-mypay/bot.ts');
+  const { messageUpdate,telegramRequest } = await import('./helpers/fake-backend.mjs');
+  const backend = createFakeSupabase({tables:{telegram_links:[{user_id:'user-a',chat_id:111}],settings:[{user_id:'user-a',base_pay:2415,holiday_pay:4600,case_price:7,piece_percent:25,schedule_start:key()}]}});
+  const env={TELEGRAM_WEBHOOK_SECRET:'s3cret',TELEGRAM_BOT_TOKEN:'123:ABC',SUPABASE_URL:'https://fake.test',SUPABASE_SERVICE_ROLE_KEY:'service'};
+  const bot=createBotHandler({env:k=>env[k],fetch:backend.fetch,now:()=>new Date(`${key()}T08:00:00Z`)});
+  await bot(telegramRequest(messageUpdate('1250')));
+  const app=await open(backend); await tick(30);
+  assert.equal(app.MyPay.state.shifts[key()].cases,1250);
+  app.input('casesInput',1000); await app.MyPay.saveHomeShift();
+  assert.equal(backend.db.shifts[0].cases,1000);
+  await bot(telegramRequest(messageUpdate('500')));
+  assert.equal(backend.db.shifts.length,1);
+  assert.equal(backend.db.shifts[0].cases,500);
+  assert.equal(backend.db.shifts[0].total_pay,3290);
+  const reloaded=await open(backend,{storage:storage(app)}); await tick(30);
+  assert.equal(reloaded.MyPay.state.shifts[key()].cases,500);
+});

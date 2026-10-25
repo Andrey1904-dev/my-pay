@@ -51,3 +51,53 @@ test('PostgreSQL schemas: RLS, Telegram code RPC, and complete account deletion'
     await assert.rejects(db.query('select public.delete_own_account()'), /permission denied/);
   } finally { await db.close(); }
 });
+
+test('daily total SQL: service-only, atomic deduplication, compare-and-swap and reminder claims', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`create role authenticated; create role anon; create role service_role bypassrls;
+      create schema auth; create table auth.users(id uuid primary key);
+      create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+      insert into auth.users values ('${a}'),('${b}');`);
+    for (const file of ['SUPABASE_SCHEMA.sql','TELEGRAM_SUPABASE.sql']) await db.exec(read(file).replace('create extension if not exists pgcrypto;',''));
+    // Match production: updated_at exists but the baseline trigger is absent.
+    await db.exec('drop trigger shifts_touch_updated_at on public.shifts');
+    await db.exec(read('supabase/updates/20261025_telegram_daily_total.sql'));
+    // Reapplication does not rewrite data.
+    await db.exec(read('supabase/updates/20261025_telegram_daily_total.sql'));
+    await db.exec(`insert into public.telegram_links(user_id,chat_id) values ('${a}',111),('${b}',222);`);
+    const sh = { cases:1200,is_holiday:false,base_pay:2415,piece_pay:2100,total_pay:4515,piece_rate:1.75 };
+    const rpc = async (id, expected, shift=sh, user=a, chat=111) => (await db.query(`select public.telegram_save_daily_total($1,$2,$3,'2026-10-25',$4,$5::jsonb) as result`,[id,chat,user,expected,JSON.stringify(shift)])).rows[0].result;
+    await db.exec('set role service_role');
+    const first = await rpc(1,null);
+    assert.equal(first.status,'created');
+    assert.equal(first.shift.cases,1200);
+    const updated = await rpc(2,first.shift.updated_at,{...sh,cases:500,piece_pay:875,total_pay:3290});
+    assert.equal(updated.status,'updated');
+    assert.equal(updated.shift.cases,500);
+    const unchanged = await rpc(3,updated.shift.updated_at,{...sh,cases:500});
+    assert.equal(unchanged.status,'unchanged');
+    assert.equal(unchanged.shift.updated_at,updated.shift.updated_at);
+    assert.equal((await rpc(1,null)).status,'duplicate');
+    assert.equal((await rpc(4,first.shift.updated_at)).status,'conflict');
+    await assert.rejects(rpc(5,null,sh,b,111),/not linked/);
+    await assert.rejects(rpc(6,null,{...sh,cases:-1}),/Invalid daily total/);
+    await assert.rejects(rpc(7,null,{...sh,cases:20001}),/Invalid daily total/);
+    const reminder = () => db.query(`select public.telegram_claim_reminder('${a}','2026-10-25','enter_cases') as claimed`);
+    assert.equal((await reminder()).rows[0].claimed,true);
+    assert.equal((await reminder()).rows[0].claimed,false);
+    await db.exec('reset role');
+    assert.equal((await db.query('select cases from public.shifts')).rows[0].cases,500);
+    assert.equal((await db.query('select * from public.telegram_processed_updates where update_id in (5,6,7)')).rows.length,0,'errors roll back claims');
+    for (const role of ['authenticated','anon']) {
+      await db.exec(`set role ${role}`);
+      await assert.rejects(rpc(99,null),/permission denied/);
+      await assert.rejects(reminder(),/permission denied/);
+      await assert.rejects(db.query('select * from public.telegram_processed_updates'),/permission denied/);
+      await db.exec('reset role');
+    }
+    await db.exec(`delete from auth.users where id='${a}'`);
+    assert.equal((await db.query('select * from public.telegram_processed_updates')).rows.length,0);
+    assert.equal((await db.query('select * from public.telegram_reminder_deliveries')).rows.length,0);
+  } finally { await db.close(); }
+});

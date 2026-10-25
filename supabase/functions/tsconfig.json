@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["_shared/**/*.ts", "telegram-mypay/**/*.ts", "telegram-reminders/**/*.ts"]
+  "include": ["_shared/**/*.ts", "telegram-mypay/**/*.ts", "telegram-reminders/**/*.ts", "telegram-smoke/**/*.ts"]
 }
