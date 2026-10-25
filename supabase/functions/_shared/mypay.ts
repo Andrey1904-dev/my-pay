@@ -261,6 +261,7 @@ const BUTTON_COMMANDS: Record<string, string> = {
   "месяц": "month",
   "прогноз": "forecast",
   "календарь": "calendar",
+  "расходы": "spent",
   "отменить": "undo",
   "помощь": "help",
   "меню": "menu",
@@ -274,7 +275,7 @@ export function parseInput(textRaw: string, _today?: string): ParsedInput {
   const text = String(textRaw || "").trim();
   if (!text) return { kind: "unknown" };
   if (text.startsWith("/")) {
-    const m = text.match(/^\/([a-zA-Z_]+)(?:@\w+)?\s*(.*)$/s);
+    const m = text.match(/^\/([a-zA-Z_][a-zA-Z0-9_]*)(?:@\w+)?\s*(.*)$/s);
     if (!m) return { kind: "unknown" };
     return { kind: "command", name: m[1].toLowerCase(), arg: m[2].trim() };
   }
@@ -450,13 +451,21 @@ export class Telegram {
     }
   }
 
-  sendMessage(chatId: number, text: string) {
+  sendMessage(chatId: number, text: string, replyMarkup: unknown = MAIN_KEYBOARD) {
     return this.call("sendMessage", {
       chat_id: chatId,
       text,
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      reply_markup: { remove_keyboard: true },
+      reply_markup: replyMarkup,
+    });
+  }
+
+  editMessageText(chatId: number, messageId: number, text: string, replyMarkup?: unknown) {
+    return this.call("editMessageText", {
+      chat_id: chatId, message_id: messageId, text, parse_mode: "HTML",
+      disable_web_page_preview: true,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
   }
 
@@ -470,11 +479,26 @@ export class Telegram {
   }
 }
 
+// The only persistent keyboard. Contextual inline controls never replace it.
+export const MAIN_KEYBOARD = {
+  keyboard: [
+    [{ text: "📦 Сегодня" }, { text: "📊 Месяц" }, { text: "🔮 Прогноз" }],
+    [{ text: "📅 Календарь" }, { text: "💸 Расходы" }, { text: "⚙️ Ещё" }],
+  ],
+  resize_keyboard: true,
+  one_time_keyboard: false,
+  is_persistent: true,
+};
+
 export const BOT_COMMANDS = [
   { command: "today", description: "📦 Смена за сегодня" },
   { command: "month", description: "📊 Итоги месяца" },
   { command: "forecast", description: "🔮 Прогноз до конца месяца" },
   { command: "calendar", description: "📅 Календарь смен" },
+  { command: "spent", description: "💸 Расходы за месяц" },
+  { command: "expense", description: "Добавить расход: /expense 350 обед" },
+  { command: "income", description: "Добавить доход: /income 1000 подарок" },
+  { command: "delete_expense", description: "Удалить операцию по её ID" },
   { command: "undo", description: "Как исправить итог смены" },
   { command: "holiday", description: "Где изменить праздничную ставку" },
   { command: "settings", description: "⚙️ Настройки и напоминания" },

@@ -2,11 +2,14 @@
 // Вся логика вынесена в createBotHandler, чтобы её можно было тестировать без Deno:
 // окружение, fetch и «сейчас» передаются снаружи.
 //
+import { manageFinance, payloadCategories, monthTransactions, sumAmount, type ExtraPayload } from "../_shared/telegram-finance.ts";
 import { selectJoke } from "../_shared/telegram-jokes.ts";
 
 import {
   APP_URL,
   BOT_COMMANDS,
+  bar,
+  shiftMonthKey,
   Db,
   DEFAULT_SETTINGS,
   Telegram,
@@ -65,6 +68,7 @@ interface PrefRow {
 
 interface Card {
   text: string;
+  markup?: unknown;
 }
 
 const REMINDER_HOURS = [19, 20, 21, 22];
@@ -75,10 +79,12 @@ export const HELP_TEXT = [
   "Это итог за сегодня по Екатеринбургу. Новое число заменяет прежнее, а не прибавляется.",
   "Проверь большие числа перед отправкой: значения выше 20 000 не сохраняются.", "",
   "/today — сегодня · /month — месяц · /forecast — прогноз",
-  "/calendar — календарь · /last — последняя смена",
+  "/calendar — календарь · /spent — расходы · /last — последняя смена",
+  "/expense 350 обед — расход · /income 1000 подарок — доход",
+  "/delete_expense ID — удалить операцию (ID указан в расходах)",
   "/settings — настройки · /notify_on и /notify_off — напоминания",
   "/unlink — отвязать аккаунт · /help — справка", "",
-  `Календарь, расходы, праздничные смены и настройки: ${APP_URL}`,
+  `Основные разделы — на клавиатуре внизу. Праздничные смены и настройки: ${APP_URL}`,
 ].join("\n");
 
 const LINK_HINT = [
@@ -178,7 +184,7 @@ class BotContext {
 
     switch (parsed.kind) {
       case "command":
-        await this.handleCommand(link, parsed.name, settings);
+        await this.handleCommand(link, parsed.name, settings, parsed.arg, updateId);
         return;
       case "set":
         await this.handleCases(link, parsed.cases, settings, updateId);
@@ -237,14 +243,16 @@ class BotContext {
         "",
         "Теперь просто пиши итог за смену — например <code>1250</code>. Следующее число заменит предыдущее.",
         "",
-        "/help — справка. Все настройки и расходы доступны в приложении.",
+        "Разделы доступны на клавиатуре внизу. /help — справка.",
       ].join("\n"),
         );
   }
 
-  async handleCommand(link: LinkRow, name: string, settings: Settings) {
+  async handleCommand(link: LinkRow, name: string, settings: Settings, arg = "", updateId = 0) {
     const chatId = link.chat_id;
     const today = this.todayKey();
+    const requestedMonth = /^cal_([0-9]{4})_(0[1-9]|1[0-2])$/.exec(name);
+    if (requestedMonth) { arg = `${requestedMonth[1]}-${requestedMonth[2]}`; name = "calendar"; }
     switch (name) {
       case "help":
         await this.reply(link.user_id, chatId, HELP_TEXT);
@@ -264,8 +272,24 @@ class BotContext {
       case "forecast":
         await this.sendCard(link, await this.forecastCard(link, settings));
         return;
-      case "calendar":
-        await this.sendCard(link, await this.calendarCard(link, settings, monthKeyOf(today)));
+      case "calendar": {
+        const month = arg || monthKeyOf(today);
+        if (!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(month) || month < "1900-01" || month > "2100-12") {
+          await this.reply(link.user_id, chatId, "Укажи месяц: /calendar 2026-10. Или нажми «📅 Календарь» для текущего месяца.");
+          return;
+        }
+        await this.sendCard(link, await this.calendarCard(link, settings, month));
+        return;
+      }
+      case "spent":
+      case "expenses":
+      case "finance":
+        await this.sendCard(link, await this.spentCard(link, settings));
+        return;
+      case "expense":
+      case "income":
+      case "delete_expense":
+        await this.handleFinance(link, name, arg, updateId);
         return;
       case "last": {
         const last = await this.db.one<ShiftRow>("shifts", `user_id=eq.${link.user_id}&order=work_date.desc&select=*`);
@@ -336,12 +360,38 @@ class BotContext {
     await this.reply(link.user_id, link.chat_id, `✅ ${status}\n\n💰 Заработано: ${money(result.shift.total_pay)}\n\n😂 ${escapeHtml(selectJoke(cases))}`);
   }
 
-  // Old buttons are inert, including pending add/replace and quick-add buttons.
+  // Restore only read-only navigation. Legacy quick-add and shift mutations stay inert.
   async handleCallback(update: TelegramUpdate) {
     const cq = update.callback_query!;
     if (cq.message?.chat.type !== "private") return;
-    await this.tg.answerCallbackQuery(cq.id, "Кнопки больше не используются. Отправь итог за сегодня числом.");
-    await this.tg.call("editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
+    const chatId = cq.message.chat.id;
+    const messageId = cq.message.message_id;
+    const link = await this.db.one<LinkRow>("telegram_links", `chat_id=eq.${chatId}&select=user_id,chat_id,username,first_name`);
+    if (!link) { await this.tg.answerCallbackQuery(cq.id, "Сначала привяжи аккаунт через /start"); return; }
+    const data = cq.data || "";
+    const settings = await this.loadSettings(link.user_id);
+    let card: Card | null = null;
+    if (/^cal:[0-9]{4}-(0[1-9]|1[0-2])$/.test(data)) {
+      const month = data.slice(4);
+      if (month >= "1900-01" && month <= "2100-12") card = await this.calendarCard(link, settings, month);
+    } else if (data.startsWith("v:")) {
+      switch (data.slice(2)) {
+        case "today": card = await this.todayCard(link, settings); break;
+        case "month": card = await this.monthCard(link, settings); break;
+        case "forecast": card = await this.forecastCard(link, settings); break;
+        case "calendar": card = await this.calendarCard(link, settings, monthKeyOf(this.todayKey())); break;
+        case "spent": card = await this.spentCard(link, settings); break;
+        case "settings": card = await this.menuCard(link, settings); break;
+        case "help": card = { text: HELP_TEXT }; break;
+      }
+    }
+    if (card) {
+      await this.tg.answerCallbackQuery(cq.id);
+      await this.tg.editMessageText(chatId, messageId, card.text, card.markup ?? { inline_keyboard: [] });
+      return;
+    }
+    await this.tg.answerCallbackQuery(cq.id, "Отправь итог за сегодня числом. Разделы — на нижней клавиатуре.");
+    await this.tg.call("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } });
   }
 
   // ---------- карточки ----------
@@ -364,6 +414,7 @@ class BotContext {
     const lines = [
       head,
       [scheduleLine, shift.is_holiday ? "🎉 Праздничная ставка" : ""].filter(Boolean).join(" · "),
+      "✅ Смена внесена",
       "",
       `Упаковано: <b>${integer(shift.cases)}</b> ${plural(shift.cases, "чехол", "чехла", "чехлов")}${deltaText}`,
       motivation(shift.cases),
@@ -451,9 +502,61 @@ class BotContext {
       rows.length ? `🧾 ${rows.length} ${plural(rows.length, "смена", "смены", "смен")} · ${integer(cases)} ${plural(cases, "чехол", "чехла", "чехлов")} · <b>${money(total)}</b>` : "Смен в этом месяце пока нет.",
     ];
     if (planned && monthKey >= monthKeyOf(today)) lines.push(`⏳ Впереди по графику: ${planned} ${plural(planned, "смена", "смены", "смен")}`);
+    const prev = shiftMonthKey(monthKey, -1), next = shiftMonthKey(monthKey, 1);
+    lines.push("", `◀️ /cal_${prev.replace("-", "_")} · /calendar · /cal_${next.replace("-", "_")} ▶️`);
     return {
       text: lines.join("\n"),
+      markup: { inline_keyboard: [[
+        { text: "◀️", callback_data: `cal:${prev}` },
+        { text: "Текущий месяц", callback_data: "v:calendar" },
+        { text: "▶️", callback_data: `cal:${next}` },
+      ]] },
     };
+  }
+
+  async spentCard(link: LinkRow, settings: Settings): Promise<Card> {
+    const today = this.todayKey();
+    const monthPrefix = monthKeyOf(today);
+    const payload = await this.loadPayload(link.user_id);
+    const categories = payloadCategories(payload);
+    const expenses = monthTransactions(payload, monthPrefix, "expense");
+    const income = monthTransactions(payload, monthPrefix, "income");
+    const rows = await this.loadMonth(link.user_id, today);
+    const earned = summarizeMonth(rows, today, settings).total;
+    const spent = sumAmount(expenses);
+    const { daysInMonth } = monthRange(today);
+    const remainingDays = Math.max(1, daysInMonth - Number(today.slice(8, 10)) + 1);
+    const free = earned - spent;
+    const lines = [
+      `💸 <b>Расходы · ${monthNameRu(today)}</b>`,
+      "",
+      `Потрачено: <b>${money(spent)}</b>${earned > 0 ? ` из ${money(earned)} заработка` : ""}${income.length ? ` · доходы ${money(sumAmount(income))}` : ""}`,
+      free >= 0 ? `Свободно: <b>${money(free)}</b> · ≈ ${money(free / remainingDays)} в день до конца месяца` : `⚠️ Перерасход: <b>−${money(-free)}</b>`,
+    ];
+    if (expenses.length) {
+      const byCat = new Map<string, number>();
+      for (const t of expenses) byCat.set(t.category || "Другое", (byCat.get(t.category || "Другое") || 0) + Math.max(0, Number(t.amount) || 0));
+      const top = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7);
+      lines.push("");
+      for (const [name, sum] of top) {
+        const cat = categories.find((c) => c.name === name);
+        const emoji = cat?.emoji || "🏷️";
+        if (cat && cat.limit > 0) {
+          const pct = Math.round(sum / cat.limit * 100);
+          lines.push(`${escapeHtml(emoji)} ${escapeHtml(name)} — <b>${money(sum)}</b> из ${money(cat.limit)}${pct >= 100 ? " ⚠️" : ""}`);
+          lines.push(`${bar(sum / cat.limit)} ${pct}%`);
+        } else {
+          lines.push(`${escapeHtml(emoji)} ${escapeHtml(name)} — <b>${money(sum)}</b>`);
+        }
+      }
+      const last = [...expenses].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 3);
+      lines.push("", "Последние:");
+      for (const t of last) lines.push(`• ${formatDateRu(t.date, { day: "numeric", month: "short" })} · ${escapeHtml(t.category || "Другое")}${t.note ? ` · ${escapeHtml(t.note)}` : ""} — ${money(t.amount)} · ID <code>${escapeHtml(t.id)}</code>`);
+    } else {
+      lines.push("", "Расходов в этом месяце ещё нет.");
+    }
+    lines.push("", "Добавить: <code>/expense 350 обед</code> · доход: <code>/income 1000 подарок</code>\nУдалить: <code>/delete_expense ID</code>");
+    return { text: lines.join("\n") };
   }
 
   async menuCard(link: LinkRow, settings: Settings): Promise<Card> {
@@ -467,11 +570,23 @@ class BotContext {
       "",
       pref.enabled ? `🔔 Напоминания включены: вечером в ${pref.reminder_hour}:00 перед рабочим днём и в 19:00, если смена не внесена.` : "🔕 Напоминания выключены.",
       "",
-      "Ставки и график меняются в приложении: Ещё → Настройки расчёта.",
+      "/notify_on · /notify_off — включить или выключить напоминания.",
+      "/help — справка · /last — последняя смена · /unlink — отвязать Telegram.",
+      "Ставки, график и праздничные смены меняются в приложении.",
+      APP_URL,
     ];
     return {
       text: lines.join("\n"),
     };
+  }
+
+  async handleFinance(link: LinkRow, kind: string, arg: string, updateId: number) {
+    const text = await manageFinance(this.db, link.user_id, kind, arg, updateId, this.now());
+    if (text) await this.reply(link.user_id, link.chat_id, text);
+  }
+
+  async loadPayload(userId: string): Promise<ExtraPayload> {
+    return (await this.db.one<{ payload: ExtraPayload }>("user_app_data", `user_id=eq.${userId}&select=payload`))?.payload ?? {};
   }
 
   // ---------- данные ----------
@@ -506,6 +621,9 @@ class BotContext {
   /** Карточка новым сообщением; `note` — короткая строка над карточкой (результат действия). */
   async sendCard(link: LinkRow, card: Card, note?: string) {
     const text = note ? `${note}\n\n${card.text}` : card.text;
+    // A sendMessage can carry only one kind of reply_markup. Keep the persistent
+    // keyboard and use short clickable calendar commands in this single reply.
+    // Legacy inline calendar messages remain editable through handleCallback.
     await this.reply(link.user_id, link.chat_id, text);
   }
 

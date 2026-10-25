@@ -2,7 +2,7 @@
 // once, then DELETE this Edge Function. Never scheduled. No real chat is used.
 import { createBotHandler } from "../telegram-mypay/bot.ts";
 import { createRemindersHandler } from "../telegram-reminders/reminders.ts";
-import { dateKeyInTz, Db, money } from "../_shared/mypay.ts";
+import { dateKeyInTz, Db, money, MAIN_KEYBOARD } from "../_shared/mypay.ts";
 import { selectJoke } from "../_shared/telegram-jokes.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (req: Request) => Promise<Response>): void };
@@ -40,12 +40,14 @@ Deno.serve(async req => {
     const chatId = 8_000_000_000_000_000 + Math.floor(Math.random() * 1_000_000);
     await db.insert("settings", { user_id: userId, base_pay: 2415, holiday_pay: 4600, case_price: 7, piece_percent: 25, schedule_start: dateKeyInTz(new Date()) });
     await db.insert("telegram_links", { user_id: userId, chat_id: chatId });
-    const messages: { text: string; reply_markup?: { remove_keyboard?: boolean } }[] = [];
+    const messages: { text: string; reply_markup?: unknown }[] = [];
+    const edits: { text?: string; reply_markup?: { inline_keyboard?: { callback_data?: string }[][] } }[] = [];
     const interceptedFetch: typeof fetch = async (input, init) => {
       const target = new URL(String(input));
       if (target.hostname === "api.telegram.org") {
         const payload = JSON.parse(String(init?.body));
         if (target.pathname.endsWith("/sendMessage")) messages.push(payload);
+        if (target.pathname.endsWith("/editMessageText") || target.pathname.endsWith("/editMessageReplyMarkup")) edits.push(payload);
         return Response.json({ ok: true, result: { message_id: 1 } });
       }
       // Reminder scan is restricted to this test account before any DB access.
@@ -66,7 +68,7 @@ Deno.serve(async req => {
     const send = async (text: string) => { const update = { ...makeUpdate(text), update_id: updateId++ }; await bot(post(update)); return update; };
     const row = () => db.one<{ cases: number; total_pay: number; updated_at: string }>("shifts", `user_id=eq.${userId}&work_date=eq.${date}&select=*`);
     await send("/start");
-    assert(messages.at(-1)?.reply_markup?.remove_keyboard, "/start removes keyboard");
+    assert(JSON.stringify(messages.at(-1)?.reply_markup) === JSON.stringify(MAIN_KEYBOARD), "/start shows exact persistent 2x3 keyboard");
     await send("1200");
     assert((await row())?.total_pay === 4515, "create shift and calculate 4515 RUB");
     const replace = await send("500");
@@ -93,7 +95,28 @@ Deno.serve(async req => {
     assert(pwaRead.ok && pwaRows.length === 1 && pwaRows[0].cases === 525, "authenticated PWA read sees deployed Telegram total through RLS");
     const count = await db.select("shifts", `user_id=eq.${userId}&select=*`);
     assert(count.length === 1, "one shared Supabase row, no duplicate shifts");
-    assert(messages.every(m => m.reply_markup?.remove_keyboard), "all captured replies remove keyboard without buttons");
+    assert(messages.every(m => JSON.stringify(m.reply_markup) === JSON.stringify(MAIN_KEYBOARD)), "saved totals keep the six-button keyboard without inline actions");
+    for (const [label, needle] of [["📦 Сегодня", "Сегодня"], ["📊 Месяц", "Заработано"], ["🔮 Прогноз", "Уже заработано"], ["📅 Календарь", "<pre>"], ["💸 Расходы", "Расходы ·"], ["⚙️ Ещё", "Настройки"]]) {
+      const before = messages.length;
+      await send(label);
+      assert(messages.length === before + 1 && messages.at(-1)!.text.includes(needle) && JSON.stringify(messages.at(-1)!.reply_markup) === JSON.stringify(MAIN_KEYBOARD), `section ${label} opens once with main keyboard`);
+    }
+    await send("📅 Календарь");
+    assert(messages.at(-1)?.text.includes("/cal_"), "calendar has month navigation without replacing persistent keyboard");
+    const previousMonth = new Date(`${date.slice(0, 7)}-01T00:00:00Z`); previousMonth.setUTCMonth(previousMonth.getUTCMonth() - 1);
+    const month = previousMonth.toISOString().slice(0, 7);
+    await bot(post({ update_id: updateId++, callback_query: { id: "smoke-calendar", from: { id: chatId }, data: `cal:${month}`, message: { message_id: 1, chat: { id: chatId, type: "private" } } } }));
+    assert(edits.at(-1)?.text?.includes("<pre>"), "calendar callback renders existing grid");
+    const expense = await send("/expense 350 обед");
+    const finance = () => db.one<{ payload: { transactions: { id: string; amount: number }[] } }>("user_app_data", `user_id=eq.${userId}&select=payload`);
+    assert((await finance())?.payload.transactions[0]?.amount === 350, "explicit expense command saves test ledger");
+    const beforeReplay = messages.length;
+    await bot(post(expense));
+    assert(messages.length === beforeReplay && (await finance())?.payload.transactions.length === 1, "expense update replay is silent and idempotent");
+    await send("💸 Расходы");
+    assert(messages.at(-1)?.text.includes("350"), "expense view reads shared payload");
+    await send(`/delete_expense tg_update_${expense.update_id}`);
+    assert((await finance())?.payload.transactions.length === 0, "explicit expense deletion affects test account only");
     await db.insert("telegram_preferences", { user_id: userId, chat_id: chatId, enabled: true, reminder_hour: 21 });
     const reminder = createRemindersHandler({ env, fetch: interceptedFetch, now: () => new Date(`${date}T14:05:00Z`) });
     const remind = () => new Request(`${url}/functions/v1/telegram-reminders`, { method: "POST", headers: { authorization: `Bearer ${serviceKey}` } });

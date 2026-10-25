@@ -1451,6 +1451,24 @@
     saveQueue(q);
     if (!navigator.onLine) showToast("\u041E\u0444\u043B\u0430\u0439\u043D: \u0441\u043E\u0445\u0440\u0430\u043D\u044E \u0432 \u043E\u0431\u043B\u0430\u043A\u043E \u043F\u0440\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0438");
   }
+  async function saveExtraSnapshot(userId, extra) {
+    const keys = ["transactions", "categories", "accounts", "telegramFinanceUpdates"];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const latest = await db.from(CLOUD_EXTRA_TABLE).select("payload,updated_at").eq("user_id", userId).maybeSingle();
+      if (latest.error) return latest;
+      const payload = { ...extra };
+      for (const key of keys) if (Object.hasOwn(latest.data?.payload || {}, key)) payload[key] = latest.data.payload[key];
+      const updated_at = new Date(Math.max(Date.now(), (Date.parse(latest.data?.updated_at || "") || 0) + 1)).toISOString();
+      const result = latest.data ? await db.from(CLOUD_EXTRA_TABLE).update({ payload, updated_at }).eq("user_id", userId).eq("updated_at", latest.data.updated_at).select("*") : await db.from(CLOUD_EXTRA_TABLE).insert({ user_id: userId, payload, updated_at }).select("*");
+      if (result.error?.code === "23505" || !result.error && !result.data?.length) continue;
+      if (!result.error && currentUser?.id === userId) {
+        for (const key of keys) if (Object.hasOwn(payload, key)) state.extra[key] = structuredCloneSafe(payload[key]);
+        save();
+      }
+      return result;
+    }
+    return { error: { message: "\u0414\u0430\u043D\u043D\u044B\u0435 \u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F \u043D\u0430 \u0434\u0440\u0443\u0433\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u043C \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044E \u043F\u043E\u0437\u0436\u0435." } };
+  }
   var queueFlushInFlight = null;
   async function flushCloudQueue() {
     if (queueFlushInFlight) return queueFlushInFlight;
@@ -1496,7 +1514,7 @@
               saveQueue(loadQueue().map((x) => x.userId === userId && x.date === op.date && x.id !== op.id && (x.expected ?? null) === expected ? { ...x, expected: nextVersion } : x));
             }
           } else if (op.type === "saveExtra") {
-            result = await db.from(CLOUD_EXTRA_TABLE).upsert({ user_id: userId, payload: op.extra, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "user_id" });
+            result = await saveExtraSnapshot(userId, op.extra);
           } else if (op.type === "saveSettings") {
             result = await db.from("settings").upsert({ ...op.settings, user_id: userId }, { onConflict: "user_id" });
           } else throw new Error("\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u044F \u043E\u0447\u0435\u0440\u0435\u0434\u0438");
@@ -1661,7 +1679,7 @@
   }
 
   // src/app/config.js
-  var APP_VERSION = "1.13";
+  var APP_VERSION = "1.14";
   var CACHE_VERSION = "my-pay-v" + APP_VERSION;
 
   // src/app/backup.js

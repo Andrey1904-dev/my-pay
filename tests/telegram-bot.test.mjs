@@ -5,7 +5,7 @@ import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  parseInput, isWorkDay, summarizeMonth, dateKeyInTz, minutesInTz, money, plural, motivation,
+  MAIN_KEYBOARD, parseInput, isWorkDay, summarizeMonth, dateKeyInTz, minutesInTz, money, plural, motivation,
   shiftTimeText, totalPay, buildShift, normalizeSettings, DEFAULT_SETTINGS, addDays, daysBetween,
   correctLegacyShift, piecePay, bar, calendarGrid, shiftMonthKey,
 } from "../supabase/functions/_shared/mypay.ts";
@@ -209,7 +209,7 @@ describe("привязка аккаунта", () => {
     assert.equal(backend.db.telegram_preferences[0].enabled, true);
     const msg = backend.sent().at(-1);
     assert.match(msg.text, /Готово, Андрей/);
-    assert.deepEqual(msg.reply_markup, { remove_keyboard: true });
+    assert.deepEqual(msg.reply_markup, MAIN_KEYBOARD);
   });
 
   test("просроченный или чужой код отклоняется", async () => {
@@ -229,12 +229,12 @@ describe("привязка аккаунта", () => {
     assert.equal(backend.db.telegram_links[0].user_id, OTHER);
   });
 
-  test("/unlink удаляет связь и снимает клавиатуру", async () => {
+  test("/unlink удаляет связь и сохраняет основную клавиатуру", async () => {
     const backend = linkedBackend({ telegram_preferences: [{ user_id: USER, chat_id: CHAT, enabled: true, reminder_hour: 21 }] });
     await send(makeBot(backend), "/unlink");
     assert.equal(backend.db.telegram_links.length, 0);
     assert.equal(backend.db.telegram_preferences.length, 0);
-    assert.deepEqual(backend.sent().at(-1).reply_markup, { remove_keyboard: true });
+    assert.deepEqual(backend.sent().at(-1).reply_markup, MAIN_KEYBOARD);
   });
 });
 
@@ -304,7 +304,7 @@ describe("отчёты", () => {
     await send(bot, "/help");
     assert.equal(backend.lastText(), HELP_TEXT);
     await send(bot, "/menu");
-    assert.deepEqual(backend.sent().at(-1).reply_markup, { remove_keyboard: true });
+    assert.deepEqual(backend.sent().at(-1).reply_markup, MAIN_KEYBOARD);
     await send(bot, "/wat");
     assert.match(backend.lastText(), /Не знаю команду \/wat/);
   });
@@ -403,7 +403,7 @@ describe("напоминания", () => {
 });
 
 
-describe('итог за смену без кнопок', () => {
+describe('итог за смену без inline-действий', () => {
   test('новая смена, замена 1200 на 500 и повтор того же числа', async () => {
     const b = linkedBackend(); const bot = makeBot(b);
     await send(bot, '1200');
@@ -421,7 +421,7 @@ describe('итог за смену без кнопок', () => {
     assert.match(b.lastText(), /✅ Данные уже актуальны!/);
     assert.equal(b.sent().length, 3);
     for (const msg of b.sent()) {
-      assert.deepEqual(msg.reply_markup, { remove_keyboard: true });
+      assert.deepEqual(msg.reply_markup, MAIN_KEYBOARD);
       assert.doesNotMatch(msg.text, /Упаковано:|ставка|Темп:/);
       assert.equal(msg.text.split('\n\n').length, 3);
     }
@@ -495,13 +495,13 @@ describe('итог за смену без кнопок', () => {
     }
   });
 
-  test('старые callback, undo и holiday не меняют данные; все команды без клавиатур', async () => {
+  test('старые callback, undo и holiday не меняют данные; все команды с одной основной клавиатурой', async () => {
     const b = linkedBackend(); const bot = makeBot(b); await send(bot,'500');
     const saved = structuredClone(b.db.shifts);
     for (const data of ['q:500','add','set','holiday','undo','n:toggle','h:next']) await bot(telegramRequest(callbackUpdate(data)));
     for (const cmd of ['/start','/help','/menu','/today','/month','/forecast','/calendar','/settings','/last','/undo','/holiday','/notify_off','/notify_on']) await send(bot,cmd);
     assert.deepEqual(b.db.shifts,saved);
-    for (const msg of b.sent()) assert.deepEqual(msg.reply_markup,{ remove_keyboard:true });
+    for (const msg of b.sent()) assert.deepEqual(msg.reply_markup,MAIN_KEYBOARD);
     assert.ok(b.telegramCalls.some(c=>c.method==='setMyCommands'));
   });
 
@@ -512,10 +512,112 @@ describe('итог за смену без кнопок', () => {
     const req = () => new Request('https://x/reminders',{method:'POST',headers:{authorization:`Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}`}});
     await h(req()); await h(req());
     assert.equal(b.sent().length,1);
-    assert.deepEqual(b.sent()[0].reply_markup,{remove_keyboard:true});
+    assert.deepEqual(b.sent()[0].reply_markup,MAIN_KEYBOARD);
     assert.match(b.lastText(),/Смена закончилась/);
     const saved = linkedBackend({ telegram_preferences:[{user_id:USER,chat_id:CHAT,enabled:true,reminder_hour:21}], shifts:[buildShift(USER,'2026-09-29',0,false,normalizeSettings(settingsRow()))] });
     await createRemindersHandler({env:k=>ENV[k],fetch:saved.fetch,now:()=>now})(req());
     assert.equal(saved.sent().length,0);
+  });
+});
+
+describe('основная клавиатура и восстановленные разделы', () => {
+  test('строго 2×3 кнопки, правильный порядок и настройки Telegram', () => {
+    assert.deepEqual(MAIN_KEYBOARD, {
+      keyboard:[[{text:'📦 Сегодня'},{text:'📊 Месяц'},{text:'🔮 Прогноз'}],[{text:'📅 Календарь'},{text:'💸 Расходы'},{text:'⚙️ Ещё'}]],
+      resize_keyboard:true,one_time_keyboard:false,is_persistent:true,
+    });
+    for (const [text,name] of [['📦 Сегодня','today'],['📊 Месяц','month'],['🔮 Прогноз','forecast'],['📅 Календарь','calendar'],['💸 Расходы','spent'],['⚙️ Ещё','settings']]) assert.deepEqual(parseInput(text),{kind:'command',name,arg:''});
+    assert.equal(parseInput('500').kind,'set');
+  });
+
+  test('все шесть кнопок открывают свой раздел одним сообщением и не меняют смену/финансы', async () => {
+    const b=linkedBackend({user_app_data:[{user_id:USER,payload:{transactions:[{id:'old',type:'expense',date:TODAY,amount:350,category:'Еда',note:'Обед'}],custom:{keep:true}},updated_at:'2026-09-28T00:00:00Z'}]});
+    const bot=makeBot(b); await send(bot,'1200');
+    const shifts=structuredClone(b.db.shifts),finance=structuredClone(b.db.user_app_data);
+    for (const [text,pattern] of [['📦 Сегодня',/Сегодня · Пн, 28 сентября/],['📊 Месяц',/Средняя смена:/],['🔮 Прогноз',/Уже заработано:[\s\S]*итог составит/],['📅 Календарь',/<pre>/],['💸 Расходы',/Потрачено:[\s\S]*350/],['⚙️ Ещё',/Настройки[\s\S]*\/help/]]) {
+      const before=b.sent().length;
+      await send(bot,text);
+      assert.equal(b.sent().length,before+1,text);
+      assert.match(b.lastText(),pattern);
+      assert.deepEqual(b.sent().at(-1).reply_markup,MAIN_KEYBOARD);
+    }
+    assert.deepEqual(b.db.shifts,shifts);
+    assert.deepEqual(b.db.user_app_data,finance);
+  });
+
+  test('/start и первое сохранение восстанавливают клавиатуру без лишних сообщений', async () => {
+    for (const text of ['/start','1250']) {
+      const b=linkedBackend(); await send(makeBot(b),text);
+      assert.equal(b.sent().length,1);
+      assert.deepEqual(b.sent()[0].reply_markup,MAIN_KEYBOARD);
+      assert.equal(b.sent()[0].reply_markup.inline_keyboard,undefined);
+      assert.equal(b.sent()[0].reply_markup.remove_keyboard,undefined);
+    }
+  });
+
+  test('календарь перелистывает существующую сетку, редактируя исходное сообщение', async () => {
+    const b=linkedBackend();const bot=makeBot(b);
+    await send(bot,'📅 Календарь');
+    assert.match(b.lastText(),/\/cal_2026_08 · \/calendar · \/cal_2026_10/);
+    await send(bot,'/cal_2026_08'); assert.match(b.lastText(),/Август 2026/);
+    await send(bot,'/cal_2026_10'); assert.match(b.lastText(),/Октябрь 2026/);
+    const sends=b.sent().length;
+    await bot(telegramRequest(callbackUpdate('cal:2026-08',{messageId:77})));
+    const edit=b.telegramCalls.filter(c=>c.method==='editMessageText').at(-1).payload;
+    assert.equal(edit.message_id,77);assert.match(edit.text,/Август 2026/);
+    assert.equal(edit.reply_markup.inline_keyboard[0][2].callback_data,'cal:2026-09');
+    await bot(telegramRequest(callbackUpdate('v:calendar',{messageId:77})));
+    assert.match(b.lastText(),/Сентябрь 2026/);
+    assert.equal(b.sent().length,sends);
+    for(const invalid of ['cal:2026-99','cal:0000-00','cal:9999-12','q:500']) await bot(telegramRequest(callbackUpdate(invalid)));
+    assert.equal(b.db.shifts?.length??0,0);
+  });
+
+  test('расходы восстановлены из прежнего payload; явные команды не конфликтуют с количеством', async () => {
+    const payload={transactions:[{id:'old',type:'expense',date:TODAY,amount:100,category:'Еда',note:'Завтрак'}],categories:[{id:'food',name:'Еда',emoji:'🍔',limit:1000}],accounts:[{id:'cash',name:'Наличные',type:'cash',balance:500}],goals:[{id:'keep'}],custom:{untouched:true}};
+    const b=linkedBackend({user_app_data:[{user_id:USER,payload,updated_at:'2026-09-28T00:00:00Z'}]});const bot=makeBot(b);
+    const update=messageUpdate('/expense 350 обед'); update.update_id=123456;
+    await bot(telegramRequest(update));
+    assert.match(b.lastText(),/Записал расход/);
+    assert.equal(b.db.user_app_data[0].payload.transactions.length,2);
+    assert.equal(b.db.shifts?.length??0,0);
+    const sends=b.sent().length;
+    await bot(telegramRequest(update));assert.equal(b.sent().length,sends);
+    await send(bot,'500');assert.equal(b.db.shifts[0].cases,500);
+    await send(bot,'💸 Расходы');assert.match(b.lastText(),/450/);
+    await send(bot,'/delete_expense tg_update_123456');
+    assert.equal(b.db.user_app_data[0].payload.transactions.length,1);
+    await bot(telegramRequest(update));
+    assert.equal(b.db.user_app_data[0].payload.transactions.length,1,'replay after deletion cannot recreate expense');
+    assert.deepEqual(b.db.user_app_data[0].payload.accounts,payload.accounts);
+    assert.deepEqual(b.db.user_app_data[0].payload.goals,payload.goals);
+    assert.deepEqual(b.db.user_app_data[0].payload.custom,payload.custom);
+    await send(bot,'/income 1000 подарок');
+    assert.equal(b.db.user_app_data[0].payload.transactions.at(-1).type,'income');
+    for(const alias of ['/spent','/expenses','/finance']) { await send(bot,alias);assert.match(b.lastText(),/Расходы ·/); }
+  });
+
+  test('финансовый конфликт и ошибка сохранения не перезаписывают данные и не дают успех', async () => {
+    for(const fail of [false,true]) {
+      const b=linkedBackend({user_app_data:[{user_id:USER,payload:{transactions:[],custom:'keep'},updated_at:'2026-09-28T00:00:00Z'}]});
+      const bot=createBotHandler({env:k=>ENV[k],now:()=>NOW,logError:()=>{},fetch:(url,init)=>{
+        if(String(url).includes('/rest/v1/user_app_data')&&init?.method==='PATCH') {
+          if(fail)return Promise.resolve(new Response('error',{status:500}));
+          b.db.user_app_data[0].updated_at='2026-09-28T12:00:00Z';
+        }
+        return b.fetch(url,init);
+      }});
+      await send(bot,'/expense 350 обед');
+      assert.equal(b.db.user_app_data[0].payload.transactions.length,0);
+      assert.doesNotMatch(b.lastText(),/Записал расход/);
+      assert.match(b.lastText(),fail?/Не получилось/:/Ничего не перезаписано/);
+    }
+  });
+
+  test('расходы чужого аккаунта нельзя просмотреть или удалить; HTML экранируется', async () => {
+    const b=linkedBackend({user_app_data:[{user_id:'other',payload:{transactions:[{id:'secret',type:'expense',date:TODAY,amount:999,note:'secret'}]}},{user_id:USER,payload:{transactions:[{id:'own',type:'expense',date:TODAY,amount:10,category:'<b>еда</b>',note:'<i>заметка</i>'}]}}]});const bot=makeBot(b);
+    await send(bot,'💸 Расходы');assert.doesNotMatch(b.lastText(),/secret/);assert.match(b.lastText(),/&lt;b&gt;/);
+    await send(bot,'/delete_expense secret');assert.match(b.lastText(),/не найдена/);
+    assert.equal(b.db.user_app_data[0].payload.transactions.length,1);
   });
 });
