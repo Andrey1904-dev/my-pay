@@ -10,8 +10,16 @@ declare const Deno: { env: { get(key: string): string | undefined }; serve(handl
 Deno.serve(async req => {
   const env = (key: string) => Deno.env.get(key);
   const serviceKey = env("SUPABASE_SERVICE_ROLE_KEY")!;
-  if (req.method !== "POST" || req.headers.get("authorization") !== `Bearer ${serviceKey}`) return Response.json({ ok: false }, { status: 401 });
   const url = env("SUPABASE_URL")!;
+  const authorization = req.headers.get("authorization") || "";
+  if (req.method !== "POST" || !authorization.startsWith("Bearer ")) return Response.json({ ok: false }, { status: 401 });
+  // A rotated service key and the runtime-injected key need not be byte-identical.
+  // Validate the caller with PostgREST against a private, service-only table.
+  // limit=0 returns no account data. anon/authenticated have no SELECT grant.
+  const access = await fetch(`${url}/rest/v1/telegram_processed_updates?select=update_id&limit=0`, {
+    headers: { apikey: authorization.slice(7), authorization },
+  });
+  if (!access.ok) return Response.json({ ok: false }, { status: 401 });
   const db = new Db(url, serviceKey, fetch);
   let userId: string | undefined;
   const checks: string[] = [];
