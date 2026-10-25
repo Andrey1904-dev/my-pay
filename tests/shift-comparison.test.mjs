@@ -44,7 +44,7 @@ for(const [pay,expected] of [[3000,'📈 На 1 165 ₽ больше прошл�
     const text=await send('1000');
     assert.ok(text.includes(expected),text);
     assert.equal(text.split('\n\n').length,4);
-    assert.ok(text.endsWith(`😂 ${selectJoke(1000)}`));
+    assert.ok(text.endsWith(`«${selectJoke(1000)}»`));
     assert.doesNotMatch(text,/Упаковано:|На 0 ₽|меньше.*−|меньше.*-/);
     assert.equal(backend.sent().length,1);
     assert.deepEqual(backend.sent()[0].reply_markup,MAIN_KEYBOARD);
@@ -65,7 +65,7 @@ test('обновление 1200→500 сравнивается с предыду
   assert.equal(backend.db.shifts.find(s=>s.work_date===today).cases,500);
   assert.equal(backend.db.shifts.length,2);
   const unchanged=structuredClone(backend.db.shifts);
-  assert.match(await send('500'),/Данные уже актуальны![\s\S]*На 710 ₽ меньше/);
+  assert.match(await send('500'),/Информация обновлена![\s\S]*На 710 ₽ меньше/);
   assert.deepEqual(backend.db.shifts,unchanged);
 });
 

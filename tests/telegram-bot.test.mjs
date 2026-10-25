@@ -418,7 +418,7 @@ describe('итог за смену без inline-действий', () => {
     const old = structuredClone(b.db.shifts);
     await send(bot, '500');
     assert.deepEqual(b.db.shifts, old);
-    assert.match(b.lastText(), /✅ Данные уже актуальны!/);
+    assert.match(b.lastText(), /✅ Информация обновлена!/);
     assert.equal(b.sent().length, 3);
     for (const msg of b.sent()) {
       assert.deepEqual(msg.reply_markup, MAIN_KEYBOARD);

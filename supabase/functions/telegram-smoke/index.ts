@@ -3,7 +3,7 @@
 import { createBotHandler } from "../telegram-mypay/bot.ts";
 import { createRemindersHandler } from "../telegram-reminders/reminders.ts";
 import { dateKeyInTz, addDays, Db, money, MAIN_KEYBOARD } from "../_shared/mypay.ts";
-import { selectJoke } from "../_shared/telegram-jokes.ts";
+import { selectJoke, THRESHOLD_JOKES, BELOW_500_JOKE, ABOVE_4000_JOKE, validateJokeRegistry } from "../_shared/telegram-jokes.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (req: Request) => Promise<Response>): void };
 
@@ -32,6 +32,14 @@ Deno.serve(async req => {
   let error: string | undefined;
   let cleaned = false;
   try {
+    validateJokeRegistry();
+    assert(Object.keys(THRESHOLD_JOKES).length === 141 && new Set([...Object.values(THRESHOLD_JOKES), BELOW_500_JOKE, ABOVE_4000_JOKE]).size === 143, "143 unique reactions in deployed verification bundle");
+    // Read-only Telegram health checks. Never alter the webhook or send to a real chat.
+    const token = env("TELEGRAM_BOT_TOKEN")!;
+    const me = await (await fetch(`https://api.telegram.org/bot${token}/getMe`)).json();
+    assert(me.ok && me.result?.is_bot, "Telegram Bot API getMe succeeds");
+    const webhook = await (await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`)).json();
+    assert(webhook.ok && webhook.result?.url === `${url}/functions/v1/telegram-mypay`, "Telegram webhook still targets production function");
     const password = crypto.randomUUID();
     const created = await admin("users", "POST", { email: `mypay-smoke-${crypto.randomUUID()}@example.invalid`, password, email_confirm: true });
     userId = created.id;
@@ -78,7 +86,7 @@ Deno.serve(async req => {
     assert(!messages.at(-1)?.text.includes("Упаковано:"), "no quantity line");
     const savedVersion = (await row())?.updated_at;
     await send("500");
-    assert((await row())?.updated_at === savedVersion && messages.at(-1)?.text.includes("Данные уже актуальны"), "same total does not update shift");
+    assert((await row())?.updated_at === savedVersion && messages.at(-1)?.text.includes("Информация обновлена"), "same total does not update shift");
     await send("1250");
     await bot(post(replace));
     assert((await row())?.cases === 1250, "delayed duplicate cannot revert newer total");
@@ -143,6 +151,15 @@ Deno.serve(async req => {
     const synced = await fetch(`${url}/rest/v1/shifts?user_id=eq.${userId}&work_date=eq.${date}&select=*`, { headers: { apikey: serviceKey, authorization: `Bearer ${session.access_token}` } });
     const syncedRows = await synced.json();
     assert(synced.ok && syncedRows[0]?.total_pay === 4165, "PWA authenticated read sees the compared Telegram total");
+    // Exercise every required boundary through the actual deployed webhook.
+    // Each write is scoped to our disposable account and impossible Telegram chat.
+    for (const count of [499,500,524,525,599,600,825,999,1000,1250,1399,1999,2000,2999,3000,3999,4000,4001]) {
+      const liveBoundary = { ...makeUpdate(String(count)), update_id: updateId++ };
+      const liveResponse = await fetch(post(liveBoundary));
+      const saved = await row();
+      const event = await db.one<{ message: string }>("telegram_bot_events", `user_id=eq.${userId}&direction=eq.out&order=id.desc&select=message`);
+      assert(liveResponse.ok && saved?.cases === count && saved.total_pay === Math.round((2415 + count * 1.75) * 100) / 100 && event?.message.endsWith(`«${selectJoke(count)}»`), `live boundary ${count}: exact approved text, quotes, threshold and pay`);
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : "Smoke test failed";
   } finally {
