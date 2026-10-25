@@ -105,7 +105,11 @@ Deno.serve(async req => {
     error = e instanceof Error ? e.message : "Smoke test failed";
   } finally {
     if (userId) {
-      try { await admin(`users/${userId}`, "DELETE"); cleaned = true; }
+      try {
+        // Event rows use ON DELETE SET NULL, so remove test logs before the account.
+        await db.remove("telegram_bot_events", `user_id=eq.${userId}`);
+        await admin(`users/${userId}`, "DELETE"); cleaned = true;
+      }
       catch { error = `${error || ""} Test account cleanup failed`; }
     }
   }
