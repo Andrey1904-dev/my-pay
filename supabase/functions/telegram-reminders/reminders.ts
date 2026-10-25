@@ -1,7 +1,7 @@
 // Напоминания в Telegram. Функция вызывается по расписанию раз в час и для каждого
 // пользователя с включёнными напоминаниями (telegram_preferences.enabled) решает, что отправить:
 //  • в reminder_hour (по умолчанию 21:00 Екатеринбурга) — «завтра рабочая смена», если по графику 2/2 завтра работа;
-//  • в 19:00 — «внеси чехлы» с кнопками +500/+1000/+1500, если сегодня рабочий день по графику, а смена ещё не внесена;
+//  • в 19:00 — «внеси чехлы» обычным числом, если сегодня рабочий день по графику, а смена ещё не внесена;
 //  • в reminder_hour последнего дня месяца — итоги месяца.
 // Защита: заголовок Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY> (его передаёт pg_net из cron-задачи).
 
@@ -47,7 +47,6 @@ export type ReminderKind = "tomorrow" | "enter_cases" | "month_digest";
 export interface Reminder {
   kind: ReminderKind;
   text: string;
-  markup?: unknown;
 }
 
 export interface ReminderReport {
@@ -58,13 +57,6 @@ export interface ReminderReport {
   failed: number;
   messages: { chat_id: number; kind: ReminderKind; text: string }[];
 }
-
-const ENTER_MARKUP = {
-  inline_keyboard: [
-    [{ text: "+500", callback_data: "q:500" }, { text: "+1000", callback_data: "q:1000" }, { text: "+1500", callback_data: "q:1500" }],
-    [{ text: "📦 Открыть карточку дня", callback_data: "v:today" }],
-  ],
-};
 
 export function createRemindersHandler(deps: ReminderDeps) {
   const now = deps.now || (() => new Date());
@@ -101,7 +93,9 @@ export async function runReminders(db: Db, tg: Telegram, now: Date): Promise<Rem
     const summary = summarizeMonth(rows, today, settings);
     const shiftSavedToday = rows.some((r) => r.work_date === today);
     for (const message of pickReminders(pref, settings, today, hour, shiftSavedToday, summary)) {
-      const sent = await tg.sendMessage(pref.chat_id, message.text, message.markup);
+      const claimed = await db.rpc<boolean>("telegram_claim_reminder", { p_user_id: pref.user_id, p_date: today, p_kind: message.kind });
+      if (!claimed) continue;
+      const sent = await tg.sendMessage(pref.chat_id, message.text);
       if (!sent) { report.failed++; continue; }
       await db.insert("telegram_bot_events", { user_id: pref.user_id, chat_id: pref.chat_id, direction: "out", message: message.text }).catch(() => undefined);
       report.sent++;
@@ -126,10 +120,9 @@ export function pickReminders(
     out.push({
       kind: "enter_cases",
       text: [
-        "📦 <b>Смена закончилась</b> — сколько чехлов сегодня?",
-        `Напиши число, и я посчитаю заработок за ${formatDateRu(today, { day: "numeric", month: "long" })}. Или нажми кнопку ниже.`,
+        "⏰ Смена закончилась!",
+        "Напиши, сколько чехлов упаковала сегодня. Посчитаю зарплату и оценю твои подвиги 😂",
       ].join("\n"),
-      markup: ENTER_MARKUP,
     });
   }
   if (hour === pref.reminder_hour) {
@@ -142,7 +135,7 @@ export function pickReminders(
       out.push({ kind: "tomorrow", text: lines.join("\n") });
     }
     if (today === monthRange(today).to && summary && summary.shifts > 0) {
-      out.push({ kind: "month_digest", text: digestText(summary, today), markup: { inline_keyboard: [[{ text: "📅 Календарь", callback_data: `cal:${today.slice(0, 7)}` }, { text: "📊 Месяц", callback_data: "v:month" }]] } });
+      out.push({ kind: "month_digest", text: digestText(summary, today) });
     }
   }
   return out;
@@ -175,13 +168,13 @@ export function digestText(s: MonthSummary, today: string): string {
 async function loadSettings(db: Db, userId: string): Promise<Settings> {
   const row = await db
     .one<Partial<Settings>>("settings", `user_id=eq.${userId}&select=base_pay,holiday_pay,case_price,piece_percent,schedule_start`)
-    .catch(() => null);
+;
   return normalizeSettings(row ?? DEFAULT_SETTINGS);
 }
 
 async function loadMonth(db: Db, userId: string, key: string): Promise<ShiftRow[]> {
   const { from, to } = monthRange(key);
-  return db.select<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`).then(rows => rows.map(correctLegacyShift)).catch(() => []);
+  return db.select<ShiftRow>("shifts", `user_id=eq.${userId}&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc&select=*`).then(rows => rows.map(correctLegacyShift));
 }
 
 function json(body: unknown, status = 200): Response {

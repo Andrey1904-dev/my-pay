@@ -663,3 +663,7 @@ body.dark .app { background-image: radial-gradient(ellipse at 12% 10%, #ffffff02
 #nextShiftCard .shift-copy { flex-direction: row; gap: 0 8px; }
 .calendar-workday { max-width: 100%; }
 .selected-main { min-width: 0; }
+
+/* Explicit resolution of a cloud/Telegram shift conflict. */
+.shift-conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.shift-conflict-actions button { border: 1px solid currentColor; border-radius: 10px; padding: 8px 12px; color: inherit; background: transparent; cursor: pointer; font: inherit; }

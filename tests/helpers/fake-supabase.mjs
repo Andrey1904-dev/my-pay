@@ -20,6 +20,8 @@ export function createFakeSupabase({ userId = 'user-a', tables = {}, failWrites 
         maybeSingle() { single = true; return chain; },
         single() { single = true; return chain; },
         upsert(value, { onConflict } = {}) { method = 'POST'; body = value; if (onConflict) query.set('on_conflict', onConflict); return chain; },
+        insert(value) { method = 'POST'; body = value; return chain; },
+        update(value) { method = 'PATCH'; body = value; return chain; },
         delete() { method = 'DELETE'; return chain; },
         async then(resolve, reject) {
           try {
