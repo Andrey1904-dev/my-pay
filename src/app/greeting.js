@@ -64,7 +64,7 @@ export function ordinalFeminine(n) {
 
 export function greetingMessage(day = workNow()) {
   const count = consecutiveWorkdays(day);
-  return count ? `Это твоя ${ordinalFeminine(count)} смена ${count === 1 ? '😭' : count === 2 ? '🥺' : '💀'}` : 'Сегодня отдыхаешь, заслужил ❤️';
+  return count ? `Это твоя ${ordinalFeminine(count)} смена ${count === 1 ? '😭' : count === 2 ? '🥺' : '💀'}` : 'Сегодня отдыхаешь, заслуженный отдых 😴';
 }
 
 export function renderGreeting(day = workNow()) {

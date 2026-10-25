@@ -1522,7 +1522,7 @@
   }
   function greetingMessage(day = workNow()) {
     const count = consecutiveWorkdays(day);
-    return count ? `\u042D\u0442\u043E \u0442\u0432\u043E\u044F ${ordinalFeminine(count)} \u0441\u043C\u0435\u043D\u0430 ${count === 1 ? "\u{1F62D}" : count === 2 ? "\u{1F97A}" : "\u{1F480}"}` : "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u043E\u0442\u0434\u044B\u0445\u0430\u0435\u0448\u044C, \u0437\u0430\u0441\u043B\u0443\u0436\u0438\u043B \u2764\uFE0F";
+    return count ? `\u042D\u0442\u043E \u0442\u0432\u043E\u044F ${ordinalFeminine(count)} \u0441\u043C\u0435\u043D\u0430 ${count === 1 ? "\u{1F62D}" : count === 2 ? "\u{1F97A}" : "\u{1F480}"}` : "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u043E\u0442\u0434\u044B\u0445\u0430\u0435\u0448\u044C, \u0437\u0430\u0441\u043B\u0443\u0436\u0435\u043D\u043D\u044B\u0439 \u043E\u0442\u0434\u044B\u0445 \u{1F634}";
   }
   function renderGreeting(day = workNow()) {
     const text = (id, value) => {
@@ -1589,7 +1589,7 @@
   }
 
   // src/app/config.js
-  var APP_VERSION = "1.11";
+  var APP_VERSION = "1.12";
   var CACHE_VERSION = "my-pay-v" + APP_VERSION;
 
   // src/app/backup.js

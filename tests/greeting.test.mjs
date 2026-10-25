@@ -15,7 +15,7 @@ for (const [name, start, overrides, text] of [
   ['second consecutive scheduled day', '2026-10-25', {}, 'Это твоя вторая смена 🥺'],
   ['third consecutive day', '2026-10-25', { '2026-10-24': true }, 'Это твоя третья смена 💀'],
   ['fourth consecutive day', '2026-10-25', { '2026-10-24': true, '2026-10-23': true, '2026-10-22': false }, 'Это твоя четвёртая смена 💀'],
-  ['day off', '2026-10-24', {}, 'Сегодня отдыхаешь, заслужил ❤️'],
+  ['day off', '2026-10-24', {}, 'Сегодня отдыхаешь, заслуженный отдых 😴'],
 ]) {
   test(name, () => {
     const app=open({settings:{scheduleStart:start},extra:{workdayOverrides:overrides}});
@@ -45,7 +45,7 @@ test('saved zero-case shifts count; off-day deletion removes only that factual d
   try {
     assert.equal(app.text('greetingMessage'),'Это твоя третья смена 💀');
     await app.MyPay.deleteShift(day,{confirmFirst:false});
-    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслужил ❤️');
+    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслуженный отдых 😴');
     await app.MyPay.undoLastDelete();assert.equal(app.text('greetingMessage'),'Это твоя третья смена 💀');
     app.MyPay.state.settings.scheduleStart=day;
     await app.MyPay.deleteShift(day,{confirmFirst:false});
@@ -57,10 +57,10 @@ test('manual calendar overrides break/extend a run without changing earnings and
   try {
     const original=JSON.stringify(app.MyPay.state.shifts);
     app.MyPay.selectCalendarDate(day);app.input('calendarWorkday','off');
-    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслужил ❤️');
+    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслуженный отдых 😴');
     assert.equal(JSON.stringify(app.MyPay.state.shifts),original);
     const reload=open({extra:JSON.parse(app.window.localStorage.myPayExtra),shifts:{[day]:shift}});
-    try {assert.equal(reload.text('greetingMessage'),'Сегодня отдыхаешь, заслужил ❤️');} finally {reload.close();}
+    try {assert.equal(reload.text('greetingMessage'),'Сегодня отдыхаешь, заслуженный отдых 😴');} finally {reload.close();}
     app.input('calendarWorkday','auto');assert.equal(app.text('greetingMessage'),'Это твоя первая смена 😭');
     app.MyPay.selectCalendarDate('2026-10-25');app.input('calendarWorkday','work');
     assert.equal(app.text('greetingMessage'),'Это твоя вторая смена 🥺');
@@ -119,7 +119,7 @@ test('cloud restore does not flash cached wrong name or ordinal while loading', 
     backend.db.user_app_data[0].payload.workdayOverrides[day]=false;
     app.window.dispatchEvent(new app.window.Event('online'));
     await until(()=>app.text('greetingTitle')==='Обновлённое имя ❤️');
-    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслужил ❤️');
+    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслуженный отдых 😴');
   } finally {release();app.close();}
 });
 test('name and overrides use durable extra queue and restore after reconnect', async () => {
@@ -133,7 +133,7 @@ test('name and overrides use durable extra queue and restore after reconnect', a
     backend.control.failWrites=false;const restored=open({supabase:backend.sdk,storage});
     try {
       await until(()=>restored.MyPay.loadQueue().length===0 && restored.text('greetingTitle')==='Без сети ❤️');
-      assert.equal(restored.text('greetingMessage'),'Сегодня отдыхаешь, заслужил ❤️');
+      assert.equal(restored.text('greetingMessage'),'Сегодня отдыхаешь, заслуженный отдых 😴');
       assert.equal(backend.db.user_app_data[0].payload.displayName,'Без сети');
     } finally {restored.close();}
   } finally {app.close();}
@@ -151,7 +151,7 @@ test('Yekaterinburg midnight updates even with an unsaved draft; foreground refr
     assert.equal(app.text('greetingMessage'),'Это твоя вторая смена 🥺');assert.match(app.text('todayLabel'),/27 октября/);
     assert.equal(app.MyPay.homeDirty,true);assert.equal(app.$('casesInput').value,'123');
     app.window.__testNow='2026-10-27T19:01:00Z';app.document.dispatchEvent(new app.window.Event('visibilitychange'));
-    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслужил ❤️');
+    assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслуженный отдых 😴');
     app.window.setTimeout=original;
   } finally {app.close();}
 });
@@ -160,6 +160,6 @@ test('JSON restore updates greeting and preserves name/override fields', async (
   try {
     const backup=app.MyPay.buildBackup();backup.extra.displayName='Из копии';backup.extra.workdayOverrides={[day]:false};
     await app.MyPay.restoreBackup(app.MyPay.parseBackup(JSON.stringify(backup)));
-    assert.equal(app.text('greetingTitle'),'Из копии ❤️');assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслужил ❤️');
+    assert.equal(app.text('greetingTitle'),'Из копии ❤️');assert.equal(app.text('greetingMessage'),'Сегодня отдыхаешь, заслуженный отдых 😴');
   } finally {app.close();}
 });
